@@ -1,0 +1,118 @@
+import { Model, DataTypes, Sequelize, QueryTypes } from 'sequelize';
+import { formatApplicationNumber } from '../utils/applicationRef';
+
+export const APPLICATION_STATUSES = [
+  'draft',
+  'submitted',
+  'under_review',
+  'approved',
+  'rejected',
+  'offer_generated',
+  'deposit_paid',
+  'visa_approved',
+  'enrolled',
+] as const;
+
+export default (sequelize: Sequelize) => {
+  class Application extends Model {
+    public id!: string;
+    public studentId!: number;
+    public agentId?: number | null;
+    public courseId?: number | null;
+    public universityName?: string | null;
+    public programName?: string | null;
+    public notes?: string | null;
+    public country?: string | null;
+    /** Unique display reference, e.g. APP-10241 (assigned by DB sequence on create) */
+    public applicationNumber!: string;
+    /** Agent portal: optional projected commission for UI tables */
+    public commissionAmount?: unknown;
+    public commissionSlab?: string | null;
+    /** Multi-step wizard / UI-only payload (steps 1–4, draft fields) */
+    public metadata?: Record<string, unknown> | null;
+    public status!: (typeof APPLICATION_STATUSES)[number];
+    public readonly createdAt!: Date;
+    public readonly updatedAt!: Date;
+
+    static associate(models: any) {
+      Application.belongsTo(models.StudentProfile, { foreignKey: 'studentId', as: 'studentProfile' });
+      Application.belongsTo(models.AgentProfile, { foreignKey: 'agentId', as: 'agentProfile' });
+      Application.belongsTo(models.Course, { foreignKey: 'courseId', as: 'course' });
+      Application.hasMany(models.Document, { foreignKey: 'applicationId', as: 'documents', onDelete: 'CASCADE' });
+      Application.hasOne(models.OfferLetter, { foreignKey: 'applicationId', as: 'offerLetter', onDelete: 'CASCADE' });
+      Application.hasMany(models.Payment, { foreignKey: 'applicationId', as: 'payments', onDelete: 'SET NULL' });
+    }
+  }
+
+  Application.init(
+    {
+      id: {
+        type: DataTypes.UUID,
+        defaultValue: DataTypes.UUIDV4,
+        primaryKey: true,
+      },
+      studentId: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        references: { model: 'student_profiles', key: 'id' },
+        onDelete: 'CASCADE',
+      },
+      agentId: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: { model: 'agent_profiles', key: 'id' },
+        onDelete: 'SET NULL',
+      },
+      courseId: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: { model: 'courses', key: 'id' },
+        onDelete: 'SET NULL',
+      },
+      universityName: { type: DataTypes.STRING, allowNull: true },
+      programName: { type: DataTypes.STRING, allowNull: true },
+      notes: { type: DataTypes.TEXT, allowNull: true },
+      country: { type: DataTypes.STRING, allowNull: true },
+      applicationNumber: {
+        type: DataTypes.STRING(32),
+        allowNull: false,
+        unique: true,
+      },
+      commissionAmount: {
+        type: DataTypes.DECIMAL(12, 2),
+        allowNull: true,
+      },
+      commissionSlab: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+      },
+      metadata: { type: DataTypes.JSONB, allowNull: true },
+      status: {
+        type: DataTypes.ENUM(...APPLICATION_STATUSES),
+        allowNull: false,
+        defaultValue: 'draft',
+      },
+    },
+    {
+      sequelize,
+      modelName: 'Application',
+      tableName: 'applications',
+      timestamps: true,
+      hooks: {
+        beforeCreate: async (instance: Application) => {
+          const rows = (await sequelize.query(`SELECT nextval('application_number_seq') AS n`, {
+            type: QueryTypes.SELECT,
+          })) as { n: string | number }[];
+          const raw = rows[0]?.n;
+          if (raw === null || raw === undefined) {
+            throw new Error('Failed to allocate application_number_seq');
+          }
+          const num = typeof raw === 'string' ? parseInt(raw, 10) : Number(raw);
+          instance.setDataValue('applicationNumber', formatApplicationNumber(num));
+        },
+      },
+    },
+  );
+
+  return Application;
+};

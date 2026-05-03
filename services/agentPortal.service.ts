@@ -1,0 +1,994 @@
+import fs from 'fs';
+import path from 'path';
+import { randomUUID } from 'crypto';
+import { fn, Op, QueryTypes, Sequelize } from 'sequelize';
+import { db } from '../config/database';
+import AppError from '../utils/errorHandler';
+import { APPLICATION_STATUSES } from '../models/Application.model';
+import { DOCUMENT_STATUSES } from '../models/Document.model';
+import { OFFER_LETTER_STATUSES } from '../models/OfferLetter.model';
+import { normalizeApplicationReference } from '../utils/applicationRef';
+import { normalizeOfferReference } from '../utils/offerRef';
+import { isUuid } from '../utils/isUuid';
+
+const CHECKLIST_TYPES: { key: string; label: string }[] = [
+  { key: 'passport_id', label: 'Passport / ID' },
+  { key: 'academic_transcripts', label: 'Academic transcripts' },
+  { key: 'statement_of_purpose', label: 'Statement of purpose' },
+  { key: 'income_tax_return', label: 'Income tax return (ITR)' },
+  { key: 'bank_statements', label: 'Bank statements (3–6 months)' },
+  { key: 'financial_sponsor_letter', label: 'Other financial / sponsor letter' },
+];
+
+/**
+ * `$studentProfile.*$` in WHERE does not reliably JOIN `student_profiles` (COUNT/subqueries → PG error
+ * "missing FROM-clause entry for table studentProfile"). Use EXISTS instead.
+ * @param applicationTableAlias Sequelize SQL alias for `applications` in this query (root vs nested include).
+ */
+const linkedStudentMatchesAgentExists = (agentProfileId: number, applicationTableAlias: string) => {
+  const aid = Number(agentProfileId);
+  if (!Number.isFinite(aid)) {
+    throw new AppError('Invalid agent scope', 400);
+  }
+  return Sequelize.literal(
+    `(EXISTS (SELECT 1 FROM student_profiles AS sp WHERE sp.id = ${applicationTableAlias}."student_id" AND sp.agent_profile_id = ${aid}))`,
+  );
+};
+
+/** Root query on Application — alias is typically "Application". */
+const applicationScopeForAgent = (agentProfileId: number) => ({
+  [Op.or]: [{ agentId: Number(agentProfileId) }, linkedStudentMatchesAgentExists(agentProfileId, '"Application"')],
+});
+
+/** Application included as association `as: 'application'` — alias is "application". */
+const applicationScopeOnIncludedApplication = (agentProfileId: number) => ({
+  [Op.or]: [{ agentId: Number(agentProfileId) }, linkedStudentMatchesAgentExists(agentProfileId, '"application"')],
+});
+
+const applicationWhereForAgent = (agentProfileId: number, idOrRef: string) => {
+  const t = idOrRef.trim();
+  const idOrRefClause = isUuid(t)
+    ? { id: t }
+    : (() => {
+        const ref = normalizeApplicationReference(t);
+        if (!ref) {
+          throw new AppError('Invalid application id or reference (use UUID or APP-12345)', 400);
+        }
+        return { applicationNumber: ref };
+      })();
+  return {
+    [Op.and]: [idOrRefClause, applicationScopeForAgent(agentProfileId)],
+  };
+};
+
+const applicationIncludeForScope = {
+  model: db.StudentProfile,
+  as: 'studentProfile',
+  required: false,
+};
+
+export const requireAgentProfile = async (userId: string) => {
+  const profile = await db.AgentProfile.findOne({ where: { userId } });
+  if (!profile) {
+    throw new AppError('Agent profile not found', 404);
+  }
+  return profile;
+};
+
+const offerLetterWhereClause = (param: string): { id?: number; referenceCode?: string } => {
+  const t = param.trim();
+  if (/^\d+$/.test(t)) {
+    return { id: parseInt(t, 10) };
+  }
+  const ref = normalizeOfferReference(t);
+  if (ref) {
+    return { referenceCode: ref };
+  }
+  throw new AppError('Invalid offer letter id (use numeric id or OFR-123)', 400);
+};
+
+export const getApplicationForAgent = async (agentProfileId: number, idOrRef: string) => {
+  const app = await db.Application.findOne({
+    where: applicationWhereForAgent(agentProfileId, idOrRef),
+    include: [
+      {
+        model: db.StudentProfile,
+        as: 'studentProfile',
+        required: false,
+        include: [{ model: db.User, as: 'user', attributes: ['id', 'name', 'email', 'phone'] }],
+      },
+      {
+        model: db.Course,
+        as: 'course',
+        required: false,
+        include: [{ model: db.University, as: 'university', required: false }],
+      },
+    ],
+  });
+  if (!app) {
+    throw new AppError('Application not found', 404);
+  }
+  return app;
+};
+
+export const listAgentApplications = async (
+  agentProfileId: number,
+  query: {
+    search?: string;
+    status?: string;
+    country?: string;
+    page?: string | number;
+    limit?: string | number;
+    applicationNumber?: string;
+    id?: string;
+  },
+) => {
+  const page = Math.max(1, Number(query.page) || 1);
+  const limit = Math.min(100, Math.max(1, Number(query.limit) || 20));
+  const offset = (page - 1) * limit;
+
+  const andParts: object[] = [applicationScopeForAgent(agentProfileId)];
+
+  if (query.status) {
+    if (!(APPLICATION_STATUSES as readonly string[]).includes(query.status)) {
+      throw new AppError('Invalid status filter', 400);
+    }
+    andParts.push({ status: query.status });
+  }
+  if (query.country && query.country.trim()) {
+    andParts.push({ country: { [Op.iLike]: `%${query.country.trim()}%` } });
+  }
+  if (query.id && isUuid(query.id)) {
+    andParts.push({ id: query.id });
+  }
+  if (query.applicationNumber && query.applicationNumber.trim()) {
+    const ref = normalizeApplicationReference(query.applicationNumber.trim());
+    if (!ref) {
+      throw new AppError('Invalid applicationNumber (expected APP-12345)', 400);
+    }
+    andParts.push({ applicationNumber: ref });
+  }
+  if (query.search && query.search.trim()) {
+    const q = `%${query.search.trim()}%`;
+    andParts.push({
+      [Op.or]: [
+        { universityName: { [Op.iLike]: q } },
+        { programName: { [Op.iLike]: q } },
+        { notes: { [Op.iLike]: q } },
+        { country: { [Op.iLike]: q } },
+        { applicationNumber: { [Op.iLike]: q } },
+      ],
+    });
+  }
+
+  const where = { [Op.and]: andParts };
+
+  const { rows, count } = await db.Application.findAndCountAll({
+    where,
+    order: [['updatedAt', 'DESC']],
+    limit,
+    offset,
+    distinct: true,
+    include: [
+      {
+        model: db.StudentProfile,
+        as: 'studentProfile',
+        required: false,
+        include: [{ model: db.User, as: 'user', attributes: ['id', 'name', 'email', 'phone'] }],
+      },
+      {
+        model: db.Course,
+        as: 'course',
+        required: false,
+        include: [{ model: db.University, as: 'university', required: false }],
+      },
+    ],
+  });
+
+  return { data: rows, page, limit, total: count };
+};
+
+export const createAgentApplication = async (
+  agentProfileId: number,
+  body: {
+    studentProfileId: number;
+    universityName?: string | null;
+    programName?: string | null;
+    country?: string | null;
+    courseId?: number | null;
+    notes?: string | null;
+    commissionAmount?: number | string | null;
+    commissionSlab?: string | null;
+    metadata?: Record<string, unknown> | null;
+  },
+) => {
+  const sp = await db.StudentProfile.findByPk(body.studentProfileId);
+  if (!sp) {
+    throw new AppError('Student profile not found', 404);
+  }
+  return db.Application.create({
+    studentId: body.studentProfileId,
+    agentId: agentProfileId,
+    courseId: body.courseId ?? null,
+    universityName: body.universityName?.trim() || null,
+    programName: body.programName?.trim() || null,
+    notes: body.notes?.trim() || null,
+    country: body.country?.trim() || null,
+    commissionAmount: body.commissionAmount ?? null,
+    commissionSlab: body.commissionSlab?.trim() || null,
+    metadata: body.metadata ?? null,
+    status: 'draft',
+  });
+};
+
+export const updateAgentApplication = async (
+  agentProfileId: number,
+  idOrRef: string,
+  body: Record<string, unknown>,
+) => {
+  const app = await db.Application.findOne({
+    where: applicationWhereForAgent(agentProfileId, idOrRef),
+    include: [applicationIncludeForScope],
+  });
+  if (!app) {
+    throw new AppError('Application not found', 404);
+  }
+  if (app.status !== 'draft') {
+    throw new AppError('Only draft applications can be edited', 400);
+  }
+
+  if (body.universityName !== undefined) {
+    app.universityName =
+      body.universityName === null || body.universityName === ''
+        ? null
+        : String(body.universityName).trim();
+  }
+  if (body.programName !== undefined) {
+    app.programName =
+      body.programName === null || body.programName === '' ? null : String(body.programName).trim();
+  }
+  if (body.notes !== undefined) {
+    app.notes = body.notes === null || body.notes === '' ? null : String(body.notes).trim();
+  }
+  if (body.country !== undefined) {
+    app.country = body.country === null || body.country === '' ? null : String(body.country).trim();
+  }
+  if (body.commissionSlab !== undefined) {
+    app.commissionSlab =
+      body.commissionSlab === null || body.commissionSlab === ''
+        ? null
+        : String(body.commissionSlab).trim();
+  }
+  if (body.commissionAmount !== undefined) {
+    app.commissionAmount =
+      body.commissionAmount === null || body.commissionAmount === '' ? null : body.commissionAmount;
+  }
+  if (body.metadata !== undefined) {
+    if (body.metadata !== null && typeof body.metadata !== 'object') {
+      throw new AppError('metadata must be an object', 400);
+    }
+    app.metadata = body.metadata as Record<string, unknown> | null;
+  }
+  if (body.courseId !== undefined) {
+    if (body.courseId === null || body.courseId === '') {
+      app.courseId = null;
+    } else {
+      const n = Number(body.courseId);
+      if (Number.isNaN(n)) {
+        throw new AppError('Invalid courseId', 400);
+      }
+      app.courseId = n;
+    }
+  }
+
+  await app.save();
+  return getApplicationForAgent(agentProfileId, app.id);
+};
+
+export const submitAgentApplication = async (agentProfileId: number, idOrRef: string) => {
+  const app = await db.Application.findOne({
+    where: applicationWhereForAgent(agentProfileId, idOrRef),
+    include: [applicationIncludeForScope],
+  });
+  if (!app) {
+    throw new AppError('Application not found', 404);
+  }
+  if (app.status !== 'draft') {
+    throw new AppError('Application is not a draft', 400);
+  }
+  const uni = app.universityName?.trim();
+  const prog = app.programName?.trim();
+  if (!uni || !prog) {
+    throw new AppError('University and program are required to submit', 400);
+  }
+  app.status = 'submitted';
+  await app.save();
+  return getApplicationForAgent(agentProfileId, app.id);
+};
+
+export const deleteAgentApplication = async (agentProfileId: number, idOrRef: string) => {
+  const app = await db.Application.findOne({
+    where: applicationWhereForAgent(agentProfileId, idOrRef),
+    include: [applicationIncludeForScope],
+  });
+  if (!app) {
+    throw new AppError('Application not found', 404);
+  }
+  if (app.status !== 'draft') {
+    throw new AppError('Only draft applications can be deleted', 400);
+  }
+  await app.destroy();
+};
+
+export const listAgentDocuments = async (
+  agentProfileId: number,
+  query: { applicationId?: string },
+) => {
+  const whereDoc: Record<string, unknown> = {};
+  if (query.applicationId?.trim()) {
+    const app = await db.Application.findOne({
+      where: applicationWhereForAgent(agentProfileId, query.applicationId.trim()),
+      include: [applicationIncludeForScope],
+    });
+    if (!app) {
+      throw new AppError('Application not found', 404);
+    }
+    whereDoc.applicationId = app.id;
+  }
+
+  return db.Document.findAll({
+    where: whereDoc,
+    include: [
+      {
+        model: db.Application,
+        as: 'application',
+        required: true,
+        where: applicationScopeOnIncludedApplication(agentProfileId),
+        attributes: ['id', 'applicationNumber'],
+        include: [applicationIncludeForScope],
+      },
+      {
+        model: db.StudentProfile,
+        as: 'studentProfile',
+        include: [{ model: db.User, as: 'user', attributes: ['name', 'email'] }],
+      },
+    ],
+    order: [['createdAt', 'DESC']],
+  });
+};
+
+export const createAgentDocument = async (
+  agentProfileId: number,
+  file: Express.Multer.File,
+  opts: { applicationId?: string | null; documentType?: string },
+) => {
+  if (!file) {
+    throw new AppError('File is required', 400);
+  }
+  if (!opts.applicationId?.trim()) {
+    throw new AppError('applicationId is required', 400);
+  }
+  const appRow = await db.Application.findOne({
+    where: applicationWhereForAgent(agentProfileId, opts.applicationId.trim()),
+    include: [applicationIncludeForScope],
+  });
+  if (!appRow) {
+    throw new AppError('Application not found', 404);
+  }
+
+  const fileUrl = file.path.replace(/\\/g, '/');
+  return db.Document.create({
+    studentProfileId: appRow.studentId,
+    applicationId: appRow.id,
+    fileUrl,
+    originalFileName: file.originalname,
+    type: (opts.documentType || 'general').slice(0, 64),
+    fileSize: file.size,
+    status: 'pending',
+  });
+};
+
+export const patchAgentDocument = async (
+  agentProfileId: number,
+  documentId: string,
+  body: { status?: (typeof DOCUMENT_STATUSES)[number] },
+) => {
+  if (!isUuid(documentId)) {
+    throw new AppError('Invalid document id', 400);
+  }
+  const doc = await db.Document.findOne({
+    where: { id: documentId },
+    include: [
+      {
+        model: db.Application,
+        as: 'application',
+        required: true,
+        where: applicationScopeOnIncludedApplication(agentProfileId),
+        include: [applicationIncludeForScope],
+      },
+    ],
+  });
+  if (!doc) {
+    throw new AppError('Document not found', 404);
+  }
+  if (body.status) {
+    if (!(DOCUMENT_STATUSES as readonly string[]).includes(body.status)) {
+      throw new AppError('Invalid status', 400);
+    }
+    doc.status = body.status;
+  }
+  await doc.save();
+  return doc;
+};
+
+export const deleteAgentDocument = async (agentProfileId: number, documentId: string) => {
+  if (!isUuid(documentId)) {
+    throw new AppError('Invalid document id', 400);
+  }
+  const doc = await db.Document.findOne({
+    where: { id: documentId },
+    include: [
+      {
+        model: db.Application,
+        as: 'application',
+        required: true,
+        where: applicationScopeOnIncludedApplication(agentProfileId),
+        include: [applicationIncludeForScope],
+      },
+    ],
+  });
+  if (!doc) {
+    throw new AppError('Document not found', 404);
+  }
+
+  try {
+    if (doc.fileUrl && !doc.fileUrl.startsWith('http')) {
+      const abs = path.isAbsolute(doc.fileUrl) ? doc.fileUrl : path.join(process.cwd(), doc.fileUrl);
+      if (fs.existsSync(abs)) {
+        fs.unlinkSync(abs);
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+
+  await doc.destroy();
+};
+
+export const runDocumentVerificationDemo = async (
+  agentProfileId: number,
+  applicationIdOrRef: string,
+) => {
+  const app = await getApplicationForAgent(agentProfileId, applicationIdOrRef);
+  const docs = await db.Document.findAll({ where: { applicationId: app.id } });
+  const byType = new Map(docs.map(d => [d.type.toLowerCase(), d]));
+
+  const checklist = CHECKLIST_TYPES.map(({ key, label }) => {
+    const d = byType.get(key.toLowerCase());
+    return {
+      key,
+      label,
+      status: d ? d.status : 'pending',
+      documentId: d?.id ?? null,
+    };
+  });
+
+  return {
+    applicationId: app.id,
+    applicationNumber: app.applicationNumber,
+    checklist,
+  };
+};
+
+export const getOfferLetterForAgent = async (agentProfileId: number, param: string) => {
+  const clause = offerLetterWhereClause(param);
+  const letter = await db.OfferLetter.findOne({
+    where: clause,
+    include: [
+      {
+        model: db.Application,
+        as: 'application',
+        required: true,
+        where: applicationScopeOnIncludedApplication(agentProfileId),
+        include: [
+          {
+            model: db.StudentProfile,
+            as: 'studentProfile',
+            required: false,
+            include: [{ model: db.User, as: 'user', attributes: ['name', 'email'] }],
+          },
+        ],
+      },
+    ],
+  });
+  if (!letter) {
+    throw new AppError('Offer letter not found', 404);
+  }
+  return letter;
+};
+
+export const listOfferLetters = async (agentProfileId: number) => {
+  return db.OfferLetter.findAll({
+    include: [
+      {
+        model: db.Application,
+        as: 'application',
+        required: true,
+        where: applicationScopeOnIncludedApplication(agentProfileId),
+        include: [
+          {
+            model: db.StudentProfile,
+            as: 'studentProfile',
+            include: [{ model: db.User, as: 'user', attributes: ['name', 'email'] }],
+          },
+        ],
+      },
+    ],
+    order: [['createdAt', 'DESC']],
+  });
+};
+
+export const createOfferLetter = async (
+  agentProfileId: number,
+  body: {
+    applicationId: string;
+    fileUrl?: string | null;
+    expiresAt?: string | null;
+    notes?: string | null;
+    universityName?: string | null;
+    programName?: string | null;
+  },
+) => {
+  const app = await getApplicationForAgent(agentProfileId, body.applicationId);
+  const existing = await db.OfferLetter.findOne({ where: { applicationId: app.id } });
+  if (existing) {
+    throw new AppError('An offer letter already exists for this application', 409);
+  }
+  const student = await db.StudentProfile.findByPk(app.studentId, {
+    include: [{ model: db.User, as: 'user', attributes: ['name'] }],
+  });
+  const user = (student as any)?.user;
+
+  return db.OfferLetter.create({
+    applicationId: app.id,
+    fileUrl: body.fileUrl?.trim() || null,
+    uploadedAt: new Date(),
+    status: body.fileUrl?.trim() ? 'active' : 'pending',
+    universityName: body.universityName?.trim() || app.universityName,
+    programName: body.programName?.trim() || app.programName,
+    studentDisplayName: user?.name || null,
+    expiresAt: body.expiresAt ? new Date(body.expiresAt) : null,
+    notes: body.notes?.trim() || null,
+  });
+};
+
+export const patchOfferLetter = async (
+  agentProfileId: number,
+  param: string,
+  body: Partial<{
+    fileUrl: string | null;
+    signedFileUrl: string | null;
+    status: (typeof OFFER_LETTER_STATUSES)[number];
+    expiresAt: string | null;
+    notes: string | null;
+  }>,
+) => {
+  const letter = await getOfferLetterForAgent(agentProfileId, param);
+  if (body.fileUrl !== undefined) {
+    letter.fileUrl = body.fileUrl === null || body.fileUrl === '' ? null : String(body.fileUrl).trim();
+  }
+  if (body.signedFileUrl !== undefined) {
+    letter.signedFileUrl =
+      body.signedFileUrl === null || body.signedFileUrl === ''
+        ? null
+        : String(body.signedFileUrl).trim();
+  }
+  if (body.status !== undefined) {
+    if (!(OFFER_LETTER_STATUSES as readonly string[]).includes(body.status)) {
+      throw new AppError('Invalid offer letter status', 400);
+    }
+    letter.status = body.status;
+  }
+  if (body.expiresAt !== undefined) {
+    letter.expiresAt = body.expiresAt ? new Date(body.expiresAt) : null;
+  }
+  if (body.notes !== undefined) {
+    letter.notes = body.notes === null || body.notes === '' ? null : String(body.notes).trim();
+  }
+  await letter.save();
+  return letter;
+};
+
+export const uploadSignedOfferFile = async (
+  agentProfileId: number,
+  param: string,
+  file: Express.Multer.File,
+) => {
+  if (!file) {
+    throw new AppError('File is required', 400);
+  }
+  const letter = await getOfferLetterForAgent(agentProfileId, param);
+  const url = file.path.replace(/\\/g, '/');
+  letter.signedFileUrl = url;
+  letter.status = 'signed';
+  await letter.save();
+  return letter;
+};
+
+export const uploadOfferLetterFile = async (
+  agentProfileId: number,
+  param: string,
+  file: Express.Multer.File,
+) => {
+  if (!file) {
+    throw new AppError('File is required', 400);
+  }
+  const letter = await getOfferLetterForAgent(agentProfileId, param);
+  const url = file.path.replace(/\\/g, '/');
+  letter.fileUrl = url;
+  letter.status = 'active';
+  await letter.save();
+  return letter;
+};
+
+export const sendOfferLetter = async (agentProfileId: number, param: string) => {
+  const letter = await getOfferLetterForAgent(agentProfileId, param);
+  letter.status = 'sent';
+  await letter.save();
+  return letter;
+};
+
+export const getAgentCommission = async (agentProfileId: number) => {
+  const apps = await db.Application.findAll({
+    where: applicationScopeForAgent(agentProfileId),
+    attributes: ['id', 'applicationNumber', 'status', 'commissionAmount', 'commissionSlab', 'universityName'],
+    include: [
+      {
+        model: db.StudentProfile,
+        as: 'studentProfile',
+        required: false,
+        include: [{ model: db.User, as: 'user', attributes: ['name'] }],
+      },
+      {
+        model: db.Course,
+        as: 'course',
+        required: false,
+        include: [{ model: db.University, as: 'university', attributes: ['name'] }],
+      },
+    ],
+    order: [['updatedAt', 'DESC']],
+  });
+
+  let earned = 0;
+  let projected = 0;
+  const earnedStatuses = ['enrolled', 'deposit_paid', 'visa_approved'];
+
+  for (const a of apps) {
+    const amt = parseFloat(String((a as any).commissionAmount ?? 0));
+    if (Number.isNaN(amt)) {
+      continue;
+    }
+    if (earnedStatuses.includes(a.status)) {
+      earned += amt;
+    } else {
+      projected += amt;
+    }
+  }
+
+  const sampleRate = apps.length ? projected / apps.length : 0;
+
+  return {
+    summary: {
+      earnedThisCycle: earned,
+      projectedTotal: projected,
+      defaultEnrolledRateSample: sampleRate,
+    },
+    rows: apps.map(a => ({
+      applicationId: a.id,
+      applicationNumber: a.applicationNumber,
+      studentName: (a as any).studentProfile?.user?.name ?? null,
+      university: (a as any).course?.university?.name ?? a.universityName ?? null,
+      status: a.status,
+      slabSource: a.commissionSlab ?? 'Default rate card',
+      amount: a.commissionAmount ?? null,
+    })),
+  };
+};
+
+export const createDepositPayLink = async (
+  agentProfileId: number,
+  body: { applicationId: string; amount: number | string; currency?: string; studentEmail?: string | null },
+) => {
+  const app = await getApplicationForAgent(agentProfileId, body.applicationId);
+  const sp = await db.StudentProfile.findByPk(app.studentId, {
+    include: [{ model: db.User, as: 'user' }],
+  });
+  if (!sp) {
+    throw new AppError('Student profile missing', 404);
+  }
+  const user = (sp as any).user;
+  const base =
+    process.env.BACKEND_URL ||
+    process.env.APP_URL ||
+    `http://localhost:${process.env.PORT || '3000'}`;
+  const token = randomUUID();
+  const payLink = `${String(base).replace(/\/$/, '')}/pay/deposit/${token}`;
+
+  return db.Payment.create({
+    userId: user.id,
+    applicationId: app.id,
+    agentProfileId,
+    amount: body.amount,
+    type: 'deposit',
+    currency: body.currency || 'USD',
+    studentEmail: body.studentEmail?.trim() || user.email || null,
+    status: 'pending',
+    payLink,
+  });
+};
+
+export const listDeadlines = async (query: { search?: string }) => {
+  const q = query.search?.trim().toLowerCase();
+  const rows = await db.Deadline.findAll({
+    include: [
+      { model: db.University, as: 'university', attributes: ['id', 'name', 'country'] },
+      { model: db.Course, as: 'course', attributes: ['id', 'courseName', 'degree'] },
+    ],
+    order: [['deadlineDate', 'ASC']],
+    limit: 500,
+  });
+
+  if (!q) {
+    return rows;
+  }
+
+  return rows.filter(r => {
+    const uni = (r as any).university?.name?.toLowerCase() || '';
+    const intake = String((r as any).intakeLabel || '').toLowerCase();
+    const cn = (r as any).course?.courseName?.toLowerCase() || '';
+    return uni.includes(q) || intake.includes(q) || cn.includes(q);
+  });
+};
+
+export const discoveryUniversities = async (q?: string) => {
+  const where =
+    q && q.trim()
+      ? {
+          name: { [Op.iLike]: `%${q.trim()}%` },
+        }
+      : {};
+  return db.University.findAll({ where, limit: 100, order: [['name', 'ASC']] });
+};
+
+export const discoveryCourses = async (q?: string) => {
+  const where =
+    q && q.trim()
+      ? {
+          courseName: { [Op.iLike]: `%${q.trim()}%` },
+        }
+      : {};
+  return db.Course.findAll({
+    where,
+    limit: 100,
+    include: [{ model: db.University, as: 'university', attributes: ['id', 'name', 'country'] }],
+    order: [['courseName', 'ASC']],
+  });
+};
+
+export const agentGlobalSearch = async (agentProfileId: number, q: string) => {
+  if (!q.trim()) {
+    return { applications: [], documents: [], courses: [] };
+  }
+  const qq = `%${q.trim()}%`;
+
+  const applications = await db.Application.findAll({
+    where: {
+      [Op.and]: [
+        applicationScopeForAgent(agentProfileId),
+        {
+          [Op.or]: [
+            { universityName: { [Op.iLike]: qq } },
+            { programName: { [Op.iLike]: qq } },
+            { applicationNumber: { [Op.iLike]: qq } },
+          ],
+        },
+      ],
+    },
+    limit: 15,
+    attributes: ['id', 'applicationNumber', 'universityName', 'programName', 'status'],
+  });
+
+  const documents = await db.Document.findAll({
+    where: { originalFileName: { [Op.iLike]: qq } },
+    include: [
+      {
+        model: db.Application,
+        as: 'application',
+        required: true,
+        where: applicationScopeOnIncludedApplication(agentProfileId),
+        attributes: ['id', 'applicationNumber'],
+        include: [applicationIncludeForScope],
+      },
+    ],
+    limit: 15,
+    attributes: ['id', 'originalFileName', 'applicationId'],
+  });
+
+  const courses = await db.Course.findAll({
+    where: { courseName: { [Op.iLike]: qq } },
+    limit: 10,
+    include: [{ model: db.University, as: 'university', attributes: ['name'] }],
+  });
+
+  return { applications, documents, courses };
+};
+
+export const getAgentDashboard = async (agentProfileId: number) => {
+  const statusRows = await db.Application.findAll({
+    attributes: ['status', [fn('COUNT', '*'), 'count']],
+    where: applicationScopeForAgent(agentProfileId),
+    group: ['Application.status'],
+    subQuery: false,
+    raw: true,
+  });
+
+  const recentApplications = await db.Application.findAll({
+    where: applicationScopeForAgent(agentProfileId),
+    order: [['updatedAt', 'DESC']],
+    limit: 8,
+    attributes: ['id', 'applicationNumber', 'status', 'updatedAt', 'universityName', 'programName'],
+    include: [
+      {
+        model: db.StudentProfile,
+        as: 'studentProfile',
+        required: false,
+        include: [{ model: db.User, as: 'user', attributes: ['name'] }],
+      },
+    ],
+  });
+
+  return { statusCounts: statusRows, recentApplications };
+};
+
+export const getAgentPortalProfile = async (userId: string) => {
+  const user = await db.User.findByPk(userId);
+  if (!user) {
+    throw new AppError('User not found', 404);
+  }
+  const profile = await requireAgentProfile(userId);
+  return {
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      role: user.role,
+    },
+    agency: {
+      id: profile.id,
+      agencyName: profile.agencyName,
+      primaryMarket: profile.primaryMarket,
+      logoUrl: profile.logoUrl,
+    },
+  };
+};
+
+export const patchAgentPortalProfile = async (userId: string, body: Record<string, unknown>) => {
+  const user = await db.User.findByPk(userId);
+  const profile = await requireAgentProfile(userId);
+  if (!user) {
+    throw new AppError('User not found', 404);
+  }
+
+  const fullName = (body.fullName as string) || (body.name as string);
+  if (fullName !== undefined && fullName !== null && String(fullName).trim() !== '') {
+    user.name = String(fullName).trim();
+  }
+  if (typeof body.agencyName === 'string' && body.agencyName.trim()) {
+    profile.agencyName = body.agencyName.trim();
+  }
+  if (body.primaryMarket !== undefined) {
+    profile.primaryMarket =
+      body.primaryMarket === null || body.primaryMarket === ''
+        ? null
+        : String(body.primaryMarket).trim();
+  }
+  if (body.logoUrl !== undefined) {
+    profile.logoUrl =
+      body.logoUrl === null || body.logoUrl === '' ? null : String(body.logoUrl).trim();
+  }
+
+  await user.save();
+  await profile.save();
+  return getAgentPortalProfile(userId);
+};
+
+export const listAgentStudents = async (agentProfileId: number, query: { search?: string }) => {
+  const sub = await db.sequelize.query<{ student_id: number }>(
+    `
+    SELECT DISTINCT sp.id AS student_id
+    FROM student_profiles sp
+    LEFT JOIN applications a ON a.student_id = sp.id
+    WHERE sp.agent_profile_id = :aid OR a.agent_id = :aid
+    `,
+    { replacements: { aid: agentProfileId }, type: QueryTypes.SELECT },
+  );
+  const ids = sub.map(r => r.student_id);
+
+  if (!ids.length) {
+    return [];
+  }
+
+  const profiles = await db.StudentProfile.findAll({
+    where: { id: { [Op.in]: ids } },
+    include: [{ model: db.User, as: 'user', attributes: ['id', 'name', 'email', 'phone'] }],
+    order: [['id', 'DESC']],
+    limit: 200,
+  });
+
+  const q = query.search?.trim().toLowerCase();
+  if (!q) {
+    return profiles;
+  }
+
+  return profiles.filter(p => {
+    const u = (p as any).user;
+    return (
+      u &&
+      ((u.name && String(u.name).toLowerCase().includes(q)) ||
+        (u.email && String(u.email).toLowerCase().includes(q)))
+    );
+  });
+};
+
+function csvEscape(s: string | null | undefined): string {
+  if (s == null) {
+    return '';
+  }
+  const t = String(s);
+  if (/[",\n]/.test(t)) {
+    return `"${t.replace(/"/g, '""')}"`;
+  }
+  return t;
+}
+
+export const buildApplicationsCsv = async (
+  agentProfileId: number,
+  query: Parameters<typeof listAgentApplications>[1],
+) => {
+  const { data } = await listAgentApplications(agentProfileId, {
+    ...query,
+    page: 1,
+    limit: 10000,
+  });
+
+  const headers = [
+    'applicationNumber',
+    'studentName',
+    'studentEmail',
+    'programName',
+    'universityName',
+    'country',
+    'status',
+    'updatedAt',
+  ];
+  const lines = [headers.join(',')];
+
+  for (const a of data) {
+    const u = (a as any).studentProfile?.user;
+    lines.push(
+      [
+        csvEscape(a.applicationNumber),
+        csvEscape(u?.name),
+        csvEscape(u?.email),
+        csvEscape(a.programName),
+        csvEscape(a.universityName),
+        csvEscape(a.country),
+        csvEscape(a.status),
+        a.updatedAt ? new Date(a.updatedAt).toISOString() : '',
+      ].join(','),
+    );
+  }
+
+  return lines.join('\n');
+};
