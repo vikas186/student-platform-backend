@@ -1,10 +1,12 @@
 import AppError from '../utils/errorHandler';
+import type { UserRole } from '../models/User.model';
 import {
   generateToken,
   generateOpaqueRefreshToken,
   refreshTtlMs,
 } from './token.service';
 import { db } from '../config/database';
+import { getPermissionMatrixSliceForRole } from './rolePermissions.service';
 
 type SignupStudentBody = {
   fullName: string;
@@ -123,7 +125,9 @@ const createAuthSession = async (user: InstanceType<typeof db.User>) => {
     userId: user.id,
   });
 
-  return { token, refreshToken, user: user.toSafeObject() };
+  const safe = user.toSafeObject() as Record<string, unknown>;
+  const permissions = await getPermissionMatrixSliceForRole(user.role as UserRole);
+  return { token, refreshToken, user: { ...safe, permissions } };
 };
 
 const loginService = async (email: any, password: any) => {
@@ -233,7 +237,9 @@ const refreshSessionService = async (refreshToken: string) => {
     refreshExpiresAt: newRefreshExpiresAt,
   });
 
-  return { token: newAccess, refreshToken: newRefresh, user: user.toSafeObject() };
+  const safe = user.toSafeObject() as Record<string, unknown>;
+  const permissions = await getPermissionMatrixSliceForRole(user.role as UserRole);
+  return { token: newAccess, refreshToken: newRefresh, user: { ...safe, permissions } };
 };
 
 const logoutUserService = async (userId: any, token: any) => {

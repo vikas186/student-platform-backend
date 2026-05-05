@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { jwtAuthMiddleware } from '../middleware/jwtAuth';
+import { requirePermission } from '../middleware/requirePermission';
 import { agentDocumentUpload } from '../middleware/multer';
 import validateMiddleware from '../middleware/validate';
 import {
@@ -42,6 +43,9 @@ import {
   deleteUniversity,
   globalSearch,
   getRolesMetadata,
+  getPermissionsMatrix,
+  putPermissionsMatrix,
+  resetPermissionsMatrix,
   patchAgentSubscription,
 } from '../controller/adminController';
 import {
@@ -68,6 +72,7 @@ import {
   patchSubscriptionPlanJoiSchema,
   patchUniversityJoiSchema,
   patchUserRoleJoiSchema,
+  putPermissionsMatrixJoiSchema,
 } from '../validations/admin.validation';
 
 const adminRouter = Router();
@@ -75,53 +80,113 @@ const adminRouter = Router();
 adminRouter.use(jwtAuthMiddleware(['admin']));
 
 adminRouter
-  .get('/dashboard', getDashboard)
-  .get('/roles', getRolesMetadata)
-  .get('/application-status-options', getApplicationStatusOptions)
-  .get('/search', validateMiddleware(globalSearchQueryJoiSchema), globalSearch)
-  .get('/universities', listUniversitiesAdmin)
-  .get('/courses', validateMiddleware(listCoursesQueryJoiSchema), listCoursesAdmin)
-  .get('/users', validateMiddleware(listUsersQueryJoiSchema), listUsers)
-  .post('/users', validateMiddleware(createAdminUserJoiSchema), createUser)
-  .patch('/users/:userId/role', validateMiddleware(patchUserRoleJoiSchema), patchUserRole)
-  .delete('/users/:userId', deleteUser)
-  .get('/applications', validateMiddleware(listApplicationsQueryJoiSchema), listApplications)
-  .get('/applications/:applicationId', getApplication)
+  .get('/dashboard', requirePermission('applications', 'view'), getDashboard)
+  .get('/roles', requirePermission('roles_permissions', 'view'), getRolesMetadata)
+  .get('/permissions', requirePermission('roles_permissions', 'view'), getPermissionsMatrix)
+  .put(
+    '/permissions',
+    requirePermission('roles_permissions', 'edit'),
+    validateMiddleware(putPermissionsMatrixJoiSchema),
+    putPermissionsMatrix,
+  )
+  .post('/permissions/reset', requirePermission('roles_permissions', 'edit'), resetPermissionsMatrix)
+  .get('/application-status-options', requirePermission('applications', 'view'), getApplicationStatusOptions)
+  .get('/search', requirePermission('applications', 'view'), validateMiddleware(globalSearchQueryJoiSchema), globalSearch)
+  .get('/universities', requirePermission('deadlines', 'view'), listUniversitiesAdmin)
+  .get('/courses', requirePermission('deadlines', 'view'), validateMiddleware(listCoursesQueryJoiSchema), listCoursesAdmin)
+  .get('/users', requirePermission('users', 'view'), validateMiddleware(listUsersQueryJoiSchema), listUsers)
+  .post('/users', requirePermission('users', 'create'), validateMiddleware(createAdminUserJoiSchema), createUser)
+  .patch('/users/:userId/role', requirePermission('users', 'edit'), validateMiddleware(patchUserRoleJoiSchema), patchUserRole)
+  .delete('/users/:userId', requirePermission('users', 'delete'), deleteUser)
+  .get(
+    '/applications',
+    requirePermission('applications', 'view'),
+    validateMiddleware(listApplicationsQueryJoiSchema),
+    listApplications,
+  )
+  .get('/applications/:applicationId', requirePermission('applications', 'view'), getApplication)
   .patch(
     '/applications/:applicationId/status',
+    requirePermission('applications', 'approve'),
     validateMiddleware(patchApplicationStatusJoiSchema),
     patchApplicationStatus,
   )
   .patch(
     '/applications/:applicationId/status-ui',
+    requirePermission('applications', 'approve'),
     validateMiddleware(patchApplicationStatusUiJoiSchema),
     patchApplicationStatusUi,
   )
-  .delete('/applications/:applicationId', deleteApplication)
-  .get('/deadlines', validateMiddleware(listDeadlinesQueryJoiSchema), listDeadlines)
-  .post('/deadlines', validateMiddleware(createDeadlineJoiSchema), createDeadline)
-  .post('/deadlines/intake-row', validateMiddleware(intakeRowJoiSchema), createIntakeRow)
-  .patch('/deadlines/:deadlineId', validateMiddleware(patchDeadlineJoiSchema), patchDeadline)
-  .delete('/deadlines/:deadlineId', deleteDeadline)
-  .get('/offer-letters', listOfferLetters)
-  .post('/offer-letters/upload-match', agentDocumentUpload.single('file'), uploadOfferLetterByMatch)
-  .post('/offer-letters', validateMiddleware(createOfferLetterAdminJoiSchema), createOfferLetter)
-  .post('/offer-letters/:offerLetterId/file', agentDocumentUpload.single('file'), uploadOfferLetterFile)
-  .delete('/offer-letters/:offerLetterId', deleteOfferLetter)
-  .get('/agents', validateMiddleware(listAgentsQueryJoiSchema), listAgents)
-  .patch('/agents/:agentProfileId/subscription', validateMiddleware(patchAgentSubscriptionJoiSchema), patchAgentSubscription)
-  .get('/payments', validateMiddleware(listPaymentsQueryJoiSchema), listPayments)
-  .get('/commissions', listCommissions)
-  .post('/commissions', validateMiddleware(createCommissionJoiSchema), createCommission)
-  .post('/commission-slabs/rich', validateMiddleware(commissionSlabRichJoiSchema), createCommissionRich)
-  .patch('/commissions/:commissionId', validateMiddleware(patchCommissionJoiSchema), patchCommission)
-  .delete('/commissions/:commissionId', deleteCommission)
-  .get('/subscription-plans', listSubscriptionPlans)
-  .post('/subscription-plans', validateMiddleware(createSubscriptionPlanJoiSchema), createSubscriptionPlan)
-  .patch('/subscription-plans/:planId', validateMiddleware(patchSubscriptionPlanJoiSchema), patchSubscriptionPlan)
-  .delete('/subscription-plans/:planId', deleteSubscriptionPlan)
-  .post('/universities', validateMiddleware(createUniversityJoiSchema), createUniversity)
-  .patch('/universities/:universityId', validateMiddleware(patchUniversityJoiSchema), patchUniversity)
-  .delete('/universities/:universityId', deleteUniversity);
+  .delete('/applications/:applicationId', requirePermission('applications', 'edit'), deleteApplication)
+  .get('/deadlines', requirePermission('deadlines', 'view'), validateMiddleware(listDeadlinesQueryJoiSchema), listDeadlines)
+  .post('/deadlines', requirePermission('deadlines', 'create'), validateMiddleware(createDeadlineJoiSchema), createDeadline)
+  .post('/deadlines/intake-row', requirePermission('deadlines', 'create'), validateMiddleware(intakeRowJoiSchema), createIntakeRow)
+  .patch('/deadlines/:deadlineId', requirePermission('deadlines', 'edit'), validateMiddleware(patchDeadlineJoiSchema), patchDeadline)
+  .delete('/deadlines/:deadlineId', requirePermission('deadlines', 'delete'), deleteDeadline)
+  .get('/offer-letters', requirePermission('applications', 'view'), listOfferLetters)
+  .post(
+    '/offer-letters/upload-match',
+    requirePermission('applications', 'edit'),
+    agentDocumentUpload.single('file'),
+    uploadOfferLetterByMatch,
+  )
+  .post(
+    '/offer-letters',
+    requirePermission('applications', 'edit'),
+    validateMiddleware(createOfferLetterAdminJoiSchema),
+    createOfferLetter,
+  )
+  .post(
+    '/offer-letters/:offerLetterId/file',
+    requirePermission('applications', 'edit'),
+    agentDocumentUpload.single('file'),
+    uploadOfferLetterFile,
+  )
+  .delete('/offer-letters/:offerLetterId', requirePermission('applications', 'edit'), deleteOfferLetter)
+  .get('/agents', requirePermission('agent_ranking', 'view'), validateMiddleware(listAgentsQueryJoiSchema), listAgents)
+  .patch(
+    '/agents/:agentProfileId/subscription',
+    requirePermission('subscriptions', 'edit'),
+    validateMiddleware(patchAgentSubscriptionJoiSchema),
+    patchAgentSubscription,
+  )
+  .get('/payments', requirePermission('payments', 'view'), validateMiddleware(listPaymentsQueryJoiSchema), listPayments)
+  .get('/commissions', requirePermission('commission_slabs', 'view'), listCommissions)
+  .post('/commissions', requirePermission('commission_slabs', 'create'), validateMiddleware(createCommissionJoiSchema), createCommission)
+  .post(
+    '/commission-slabs/rich',
+    requirePermission('commission_slabs', 'create'),
+    validateMiddleware(commissionSlabRichJoiSchema),
+    createCommissionRich,
+  )
+  .patch(
+    '/commissions/:commissionId',
+    requirePermission('commission_slabs', 'edit'),
+    validateMiddleware(patchCommissionJoiSchema),
+    patchCommission,
+  )
+  .delete('/commissions/:commissionId', requirePermission('commission_slabs', 'delete'), deleteCommission)
+  .get('/subscription-plans', requirePermission('subscriptions', 'view'), listSubscriptionPlans)
+  .post(
+    '/subscription-plans',
+    requirePermission('subscriptions', 'create'),
+    validateMiddleware(createSubscriptionPlanJoiSchema),
+    createSubscriptionPlan,
+  )
+  .patch(
+    '/subscription-plans/:planId',
+    requirePermission('subscriptions', 'edit'),
+    validateMiddleware(patchSubscriptionPlanJoiSchema),
+    patchSubscriptionPlan,
+  )
+  .delete('/subscription-plans/:planId', requirePermission('subscriptions', 'delete'), deleteSubscriptionPlan)
+  .post('/universities', requirePermission('deadlines', 'create'), validateMiddleware(createUniversityJoiSchema), createUniversity)
+  .patch(
+    '/universities/:universityId',
+    requirePermission('deadlines', 'edit'),
+    validateMiddleware(patchUniversityJoiSchema),
+    patchUniversity,
+  )
+  .delete('/universities/:universityId', requirePermission('deadlines', 'delete'), deleteUniversity);
 
 export default adminRouter;

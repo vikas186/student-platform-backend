@@ -180,6 +180,8 @@ void (async () => {
     await sequelize.sync({ alter: true });
     await ensureApplicationNumberSequence();
     await ensureOfferLetterReferenceSequence();
+    const { ensureAdminHasAllCatalogPermissions } = await import('../services/rolePermissions.service');
+    await ensureAdminHasAllCatalogPermissions();
     console.log('Database & tables synced successfully.');
   } catch (error: any) {
     console.error('Error syncing database:', error?.message || error);

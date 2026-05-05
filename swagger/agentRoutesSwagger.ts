@@ -73,6 +73,20 @@
 /**
  * @swagger
  * /api/v1/agent/students:
+ *   post:
+ *     tags: [Agent]
+ *     summary: Create a student account linked to this agent
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { $ref: '#/components/schemas/AgentNewStudentInput' }
+ *     responses:
+ *       201:
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/AgentCreateStudentResponse' }
  *   get:
  *     tags: [Agent]
  *     summary: Students linked via applications or profile.agent_profile_id
@@ -122,7 +136,7 @@
  *             schema: { $ref: '#/components/schemas/AgentApplicationsPagedResponse' }
  *   post:
  *     tags: [Agent]
- *     summary: Create draft application for a student
+ *     summary: Create draft application (existing student **or** inline new student)
  *     security: [{ bearerAuth: [] }]
  *     requestBody:
  *       required: true
@@ -131,7 +145,7 @@
  *           schema: { $ref: '#/components/schemas/AgentCreateApplicationBody' }
  *     responses:
  *       201:
- *         description: Created (includes applicationNumber)
+ *         description: Created — response **data** is the application record (plus **temporaryPassword** when a new student was created without a password)
  */
 
 /**
@@ -232,7 +246,9 @@
  *   post:
  *     tags: [Agent]
  *     summary: Upload document (multipart)
- *     description: Fields — **file** (required), **applicationId** (required), **documentType** (optional)
+ *     description: |
+ *       **file** (required). Provide **either** applicationId / application_id / applicationNumber (UUID or APP-xxxxx), **or** studentProfileId / student_profile_id (upload attaches to that student's latest application in your portfolio).
+ *       Optional documentType / document_type. Same keys may be sent as query params.
  *     security: [{ bearerAuth: [] }]
  *     requestBody:
  *       required: true
@@ -240,13 +256,19 @@
  *         multipart/form-data:
  *           schema:
  *             type: object
- *             required: [file, applicationId]
+ *             required: [file]
  *             properties:
  *               file:
  *                 type: string
  *                 format: binary
  *               applicationId:
  *                 type: string
+ *                 description: UUID or APP-xxxxx
+ *               applicationNumber:
+ *                 type: string
+ *               studentProfileId:
+ *                 type: integer
+ *                 description: Alternative — latest application for this student
  *               documentType:
  *                 type: string
  *                 example: passport_id
@@ -419,7 +441,10 @@
  * /api/v1/agent/commission:
  *   get:
  *     tags: [Agent]
- *     summary: Commission summary + rows
+ *     summary: Commission summary + rows + calculator (pipeline universities with admin slab %)
+ *     description: |
+ *       **data.calculator.universities** lists **all** admin **Commission** slabs (so every partner rate appears), merged with pipeline-only universities; **inPipeline** marks universities on this agent's applications.
+ *       Frontend formula: `estimatedCommission = annualTuition * (commissionPercent / 100)` when percent is set.
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200:

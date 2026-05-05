@@ -17,10 +17,27 @@ const listApplicationsQueryJoiSchema = {
   }),
 };
 
+const agentNewStudentBodyKeys = {
+  email: Joi.string().email().required(),
+  password: Joi.string().min(8).max(128).optional().allow('', null),
+  fullName: Joi.string().trim().max(200).required(),
+  phone: Joi.string().trim().max(64).optional().allow('', null),
+  targetCountries: Joi.array().items(Joi.string().trim()).max(50).optional(),
+  countryOfResidence: Joi.string().trim().max(120).optional().allow('', null),
+  dateOfBirth: Joi.string().trim().max(32).optional().allow('', null),
+  nationality: Joi.string().trim().max(120).optional().allow('', null),
+};
+
+/** POST /agent/students — create a student user linked to this agent */
+const createAgentStudentBodyJoiSchema = {
+  body: Joi.object().keys(agentNewStudentBodyKeys).required(),
+};
+
 const createApplicationBodyJoiSchema = {
   body: Joi.object()
     .keys({
-      studentProfileId: Joi.number().integer().positive().required(),
+      studentProfileId: Joi.number().integer().positive(),
+      student: Joi.object().keys(agentNewStudentBodyKeys),
       universityName: Joi.string().trim().max(300).allow('', null),
       programName: Joi.string().trim().max(300).allow('', null),
       country: Joi.string().trim().max(120).allow('', null),
@@ -30,6 +47,7 @@ const createApplicationBodyJoiSchema = {
       commissionSlab: Joi.string().trim().max(255).allow('', null),
       metadata: Joi.object().unknown(true).allow(null),
     })
+    .xor('studentProfileId', 'student')
     .required(),
 };
 
@@ -145,6 +163,7 @@ const listStudentsQueryJoiSchema = {
 export {
   listApplicationsQueryJoiSchema,
   createApplicationBodyJoiSchema,
+  createAgentStudentBodyJoiSchema,
   patchApplicationBodyJoiSchema,
   listDocumentsQueryJoiSchema,
   patchDocumentBodyJoiSchema,

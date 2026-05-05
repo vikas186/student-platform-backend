@@ -60,7 +60,14 @@ export default (sequelize: Sequelize) => {
       tableName: 'offer_letters',
       timestamps: true,
       hooks: {
-        beforeCreate: async (instance: OfferLetter) => {
+        // Must run before validation: Sequelize validates (notNull) before `beforeCreate`.
+        beforeValidate: async (instance: OfferLetter) => {
+          if (!instance.isNewRecord) {
+            return;
+          }
+          if (instance.getDataValue('referenceCode')) {
+            return;
+          }
           const rows = (await sequelize.query(`SELECT nextval('offer_letter_ref_seq') AS n`, {
             type: QueryTypes.SELECT,
           })) as { n: string | number }[];

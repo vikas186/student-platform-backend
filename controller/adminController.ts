@@ -2,6 +2,8 @@ import { Request, Response } from 'express';
 import { catchAsyncError } from '../middleware/catchAsyncError';
 import constant from '../constant';
 import * as adminPortal from '../services/adminPortal.service';
+import * as rolePermissions from '../services/rolePermissions.service';
+import { pickOptionalTrimmedString } from '../utils/requestFields';
 
 export const getDashboard = catchAsyncError(async (_req: Request, res: Response) => {
   const data = await adminPortal.getDashboardForAdmin();
@@ -126,10 +128,22 @@ export const createIntakeRow = catchAsyncError(async (req: Request, res: Respons
 
 export const uploadOfferLetterByMatch = catchAsyncError(async (req: Request, res: Response) => {
   const file = req.file as Express.Multer.File | undefined;
+  const body = req.body as Record<string, unknown>;
+  const applicationId =
+    pickOptionalTrimmedString(body, ['applicationId', 'application_id', 'applicationNumber']) ?? undefined;
+  const studentEmail = pickOptionalTrimmedString(body, ['studentEmail', 'student_email', 'email']) ?? undefined;
+  const studentName =
+    pickOptionalTrimmedString(body, ['studentName', 'student_name', 'fullName', 'name']) ?? '';
+  const program =
+    pickOptionalTrimmedString(body, ['program', 'programName', 'course', 'courseName', 'degree']) ?? '';
+  const university =
+    pickOptionalTrimmedString(body, ['university', 'universityName', 'uni', 'school', 'institution']) ?? '';
   const letter = await adminPortal.uploadOfferLetterByMatchForAdmin(file as Express.Multer.File, {
-    studentName: String(req.body.studentName ?? ''),
-    program: String(req.body.program ?? ''),
-    university: String(req.body.university ?? ''),
+    studentName,
+    program,
+    university,
+    applicationId,
+    studentEmail,
   });
   res.status(constant.msgCode.successCode).json({
     success: true,
@@ -241,11 +255,16 @@ export const deleteOfferLetter = catchAsyncError(async (req: Request, res: Respo
 });
 
 export const listAgents = catchAsyncError(async (req: Request, res: Response) => {
-  const rows = await adminPortal.listAgentsForAdmin(req.query as any);
+  const result = await adminPortal.listAgentsForAdmin(req.query as any);
   res.status(constant.msgCode.successCode).json({
     success: true,
     message: 'Agents fetched',
-    data: rows,
+    data: result.agents,
+    meta: {
+      page: result.page,
+      limit: result.limit,
+      total: result.total,
+    },
   });
 });
 
@@ -366,6 +385,33 @@ export const getRolesMetadata = catchAsyncError(async (_req: Request, res: Respo
   const data = adminPortal.getRolesMetadataForAdmin();
   res.status(constant.msgCode.successCode).json({
     success: true,
+    data,
+  });
+});
+
+export const getPermissionsMatrix = catchAsyncError(async (_req: Request, res: Response) => {
+  const data = await rolePermissions.getPermissionMatrixForAdmin();
+  res.status(constant.msgCode.successCode).json({
+    success: true,
+    message: 'Permission matrix',
+    data,
+  });
+});
+
+export const putPermissionsMatrix = catchAsyncError(async (req: Request, res: Response) => {
+  const data = await rolePermissions.replacePermissionMatrixForAdmin(req.body.matrix);
+  res.status(constant.msgCode.successCode).json({
+    success: true,
+    message: 'Permissions updated',
+    data,
+  });
+});
+
+export const resetPermissionsMatrix = catchAsyncError(async (_req: Request, res: Response) => {
+  const data = await rolePermissions.resetPermissionMatrixToDefaults();
+  res.status(constant.msgCode.successCode).json({
+    success: true,
+    message: 'Permissions reset to defaults',
     data,
   });
 });

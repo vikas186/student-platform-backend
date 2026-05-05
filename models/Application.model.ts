@@ -44,6 +44,9 @@ export default (sequelize: Sequelize) => {
     }
   }
 
+  /** Sequelize may run validation twice per save; allocate from the sequence only once. */
+  const applicationNumberAllocatedForInstance = new WeakSet<Application>();
+
   Application.init(
     {
       id: {
@@ -99,7 +102,18 @@ export default (sequelize: Sequelize) => {
       tableName: 'applications',
       timestamps: true,
       hooks: {
-        beforeCreate: async (instance: Application) => {
+        // Must run before Sequelize allowNull validation for applicationNumber.
+        // New rows always get the next value from application_number_seq so numbers stay unique
+        // (caller-supplied values are ignored — avoids duplicates from crafted payloads).
+        beforeValidate: async (instance: Application) => {
+          if (!instance.isNewRecord) {
+            return;
+          }
+          if (applicationNumberAllocatedForInstance.has(instance)) {
+            return;
+          }
+          applicationNumberAllocatedForInstance.add(instance);
+
           const rows = (await sequelize.query(`SELECT nextval('application_number_seq') AS n`, {
             type: QueryTypes.SELECT,
           })) as { n: string | number }[];
@@ -109,6 +123,11 @@ export default (sequelize: Sequelize) => {
           }
           const num = typeof raw === 'string' ? parseInt(raw, 10) : Number(raw);
           instance.setDataValue('applicationNumber', formatApplicationNumber(num));
+        },
+        beforeUpdate: (instance: Application) => {
+          if (instance.changed('applicationNumber')) {
+            instance.setDataValue('applicationNumber', instance.previous('applicationNumber'));
+          }
         },
       },
     },

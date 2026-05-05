@@ -80,4 +80,28 @@ const agentDocumentUpload = multer({
   },
 });
 
-export { upload, studentDocumentUpload, agentDocumentUpload };
+/** Student signed offer letter — same limits as agent offers (PDF/images, 5 MB). */
+const studentOfferSignedStorage: StorageEngine = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    const uploadPath = 'uploads/student-offer-signed/';
+    fs.mkdirSync(uploadPath, { recursive: true });
+    cb(null, uploadPath);
+  },
+  filename: (_req, file, cb) => {
+    const uniqueName = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}${path.extname(file.originalname)}`;
+    cb(null, uniqueName);
+  },
+});
+
+const studentOfferSignedUpload = multer({
+  storage: studentOfferSignedStorage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (!/\.(pdf|jpg|jpeg|png)$/i.test(file.originalname)) {
+      return cb(new multer.MulterError('LIMIT_UNEXPECTED_FILE', 'Only PDF, JPG, or PNG files are allowed.'));
+    }
+    cb(null, true);
+  },
+});
+
+export { upload, studentDocumentUpload, agentDocumentUpload, studentOfferSignedUpload };

@@ -157,7 +157,11 @@ export const openapiSchemas = {
       programName: { type: 'string', nullable: true },
       notes: { type: 'string', nullable: true },
       country: { type: 'string', nullable: true },
-      applicationNumber: { type: 'string', example: 'APP-10241' },
+      applicationNumber: {
+        type: 'string',
+        example: 'APP-10241',
+        description: 'Globally unique reference (PostgreSQL sequence + unique index)',
+      },
       status: { type: 'string', example: 'draft' },
       createdAt: { type: 'string', format: 'date-time' },
       updatedAt: { type: 'string', format: 'date-time' },
@@ -231,11 +235,48 @@ export const openapiSchemas = {
     },
   },
 
+  AgentNewStudentInput: {
+    type: 'object',
+    required: ['email', 'fullName'],
+    properties: {
+      email: { type: 'string', format: 'email' },
+      password: {
+        type: 'string',
+        minLength: 8,
+        description: 'Optional; if omitted a temporary password is generated and returned once',
+      },
+      fullName: { type: 'string', example: 'Jane Student' },
+      phone: { type: 'string', nullable: true },
+      targetCountries: { type: 'array', items: { type: 'string' } },
+      countryOfResidence: { type: 'string', nullable: true },
+      dateOfBirth: { type: 'string', nullable: true },
+      nationality: { type: 'string', nullable: true },
+    },
+  },
+
+  AgentCreateStudentResponse: {
+    type: 'object',
+    properties: {
+      success: { type: 'boolean', example: true },
+      message: { type: 'string' },
+      data: {
+        type: 'object',
+        properties: {
+          studentProfileId: { type: 'integer' },
+          user: { $ref: '#/components/schemas/UserPublic' },
+          temporaryPassword: { type: 'string', description: 'Present only when password was auto-generated' },
+        },
+      },
+    },
+  },
+
   AgentCreateApplicationBody: {
     type: 'object',
-    required: ['studentProfileId'],
+    description:
+      'Send **either** `studentProfileId` (existing student in your portfolio) **or** `student` (inline new student). Not both.',
     properties: {
       studentProfileId: { type: 'integer', minimum: 1, example: 1 },
+      student: { $ref: '#/components/schemas/AgentNewStudentInput' },
       universityName: { type: 'string', nullable: true },
       programName: { type: 'string', nullable: true },
       country: { type: 'string', nullable: true },
@@ -394,6 +435,36 @@ export const openapiSchemas = {
               earnedThisCycle: { type: 'number' },
               projectedTotal: { type: 'number' },
               defaultEnrolledRateSample: { type: 'number' },
+            },
+          },
+          calculator: {
+            type: 'object',
+            description: 'Pipeline universities × admin commission slabs (GET /admin/commissions)',
+            properties: {
+              hint: { type: 'string' },
+              universities: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    universityId: { type: 'integer', nullable: true },
+                    universityName: { type: 'string' },
+                    commissionPercent: {
+                      type: 'number',
+                      nullable: true,
+                      description: 'Admin-configured partner %; null if no slab or unknown university',
+                    },
+                    commissionId: { type: 'integer', nullable: true },
+                    slabLabel: { type: 'string', nullable: true },
+                    slabDetails: { type: 'string', nullable: true },
+                    parsedSlab: { type: 'object', additionalProperties: true, nullable: true },
+                    inPipeline: {
+                      type: 'boolean',
+                      description: 'True if this university appears on at least one of the agent applications',
+                    },
+                  },
+                },
+              },
             },
           },
           rows: { type: 'array', items: { type: 'object' } },

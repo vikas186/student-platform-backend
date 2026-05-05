@@ -12,6 +12,7 @@ import {
   forgotPassword,
 } from '../controller/authController';
 import { jwtAuthMiddleware } from '../middleware/jwtAuth';
+import { requirePermission } from '../middleware/requirePermission';
 import validateMiddleware from '../middleware/validate';
 import {
   adminSignupJoiSchema,
@@ -31,7 +32,7 @@ authRouter
   .post('/logout', jwtAuthMiddleware(['all']), logoutUser)
   .post('/logout-all-devices', jwtAuthMiddleware(['all']), logoutAllDevices)
   .patch('/change-password', jwtAuthMiddleware(['all']), changePassword)
-  .delete('/users/:userId', jwtAuthMiddleware(['admin']), deleteUser)
+  .delete('/users/:userId', jwtAuthMiddleware(['admin']), requirePermission('users', 'delete'), deleteUser)
   .post('/forgot-password', forgotPassword);
 
 export default authRouter;

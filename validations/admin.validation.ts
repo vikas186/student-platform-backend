@@ -59,10 +59,12 @@ const patchApplicationStatusJoiSchema = {
   }),
 };
 
+/** Deadlines list is sliced in memory after loading up to 2000 rows — allow larger page sizes than default admin pagination. */
 const listDeadlinesQueryJoiSchema = {
   query: Joi.object({
     search: Joi.string().trim().max(200).optional().allow(''),
-    ...paginationQuery,
+    page: Joi.number().integer().min(1).optional(),
+    limit: Joi.number().integer().min(1).max(500).optional(),
   }),
 };
 
@@ -97,10 +99,19 @@ const createOfferLetterAdminJoiSchema = {
   }),
 };
 
+/** Body is validated strictly in rolePermissions.service (matrix shape per catalog). */
+const putPermissionsMatrixJoiSchema = {
+  body: Joi.object({
+    matrix: Joi.object().required(),
+  }).required(),
+};
+
 const listAgentsQueryJoiSchema = {
   query: Joi.object({
     search: Joi.string().trim().max(200).optional().allow(''),
-    sort: Joi.string().valid('conversion', 'name').optional(),
+    sort: Joi.string().valid('conversion', 'name', 'students', 'tier').optional(),
+    page: Joi.number().integer().min(1).optional(),
+    limit: Joi.number().integer().min(1).max(200).optional(),
   }),
 };
 
@@ -204,6 +215,7 @@ const patchAgentSubscriptionJoiSchema = {
 };
 
 export {
+  putPermissionsMatrixJoiSchema,
   listUsersQueryJoiSchema,
   createAdminUserJoiSchema,
   patchUserRoleJoiSchema,

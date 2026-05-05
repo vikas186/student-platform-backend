@@ -5,7 +5,20 @@ import { db } from '../config/database';
 import AppError from '../utils/errorHandler';
 import { APPLICATION_STATUSES } from '../models/Application.model';
 import { normalizeApplicationReference } from '../utils/applicationRef';
+import { normalizeOfferReference } from '../utils/offerRef';
 import { isUuid } from '../utils/isUuid';
+
+const offerLetterWhereClause = (param: string): { id?: number; referenceCode?: string } => {
+  const t = param.trim();
+  if (/^\d+$/.test(t)) {
+    return { id: parseInt(t, 10) };
+  }
+  const ref = normalizeOfferReference(t);
+  if (ref) {
+    return { referenceCode: ref };
+  }
+  throw new AppError('Invalid offer letter id (use numeric id or OFR-123)', 400);
+};
 
 const applicationLookupWhere = (
   studentProfileId: number,
@@ -251,18 +264,29 @@ export const listStudentDocuments = async (studentProfileId: number) => {
 export const createStudentDocument = async (
   studentProfileId: number,
   file: Express.Multer.File,
-  opts: { applicationId?: string | null; documentType?: string },
+  opts: { applicationRef?: string | null; documentType?: string; standalone?: boolean },
 ) => {
   if (!file) throw new AppError('File is required', 400);
 
   let applicationId: string | null = null;
-  if (opts.applicationId && String(opts.applicationId).trim()) {
-    const raw = String(opts.applicationId).trim();
+  if (opts.applicationRef && String(opts.applicationRef).trim()) {
+    const raw = String(opts.applicationRef).trim();
     const app = await db.Application.findOne({
       where: applicationLookupWhere(studentProfileId, raw),
     });
     if (!app) throw new AppError('Application not found', 404);
     applicationId = app.id;
+  } else if (!opts.standalone) {
+    // No explicit application: attach to this student's most recently updated application so
+    // uploads from the generic "documents" screen still show under an application when any exist.
+    const latest = await db.Application.findOne({
+      where: { studentId: studentProfileId },
+      attributes: ['id'],
+      order: [['updatedAt', 'DESC']],
+    });
+    if (latest) {
+      applicationId = latest.id;
+    }
   }
 
   const fileUrl = file.path.replace(/\\/g, '/');
@@ -275,6 +299,154 @@ export const createStudentDocument = async (
     fileSize: file.size,
     status: 'pending',
   });
+};
+
+/** Offer letters visible to the student (same application scope as the rest of the portal). */
+export const listStudentOfferLetters = async (studentProfileId: number) => {
+  return db.OfferLetter.findAll({
+    include: [
+      {
+        model: db.Application,
+        as: 'application',
+        required: true,
+        where: { studentId: studentProfileId },
+        attributes: ['id', 'applicationNumber', 'status', 'universityName', 'programName'],
+      },
+    ],
+    order: [['updatedAt', 'DESC']],
+    attributes: [
+      'id',
+      'referenceCode',
+      'applicationId',
+      'fileUrl',
+      'signedFileUrl',
+      'uploadedAt',
+      'status',
+      'universityName',
+      'programName',
+      'studentDisplayName',
+      'expiresAt',
+      'createdAt',
+      'updatedAt',
+    ],
+  });
+};
+
+export const getStudentOfferLetterForApplication = async (
+  studentProfileId: number,
+  applicationIdOrRef: string,
+) => {
+  const app = await getStudentApplication(studentProfileId, applicationIdOrRef);
+  const letter = await db.OfferLetter.findOne({
+    where: { applicationId: app.id },
+    include: [
+      {
+        model: db.Application,
+        as: 'application',
+        required: true,
+        where: { studentId: studentProfileId },
+        attributes: ['id', 'applicationNumber', 'status', 'universityName', 'programName'],
+      },
+    ],
+    attributes: [
+      'id',
+      'referenceCode',
+      'applicationId',
+      'fileUrl',
+      'signedFileUrl',
+      'uploadedAt',
+      'status',
+      'universityName',
+      'programName',
+      'studentDisplayName',
+      'expiresAt',
+      'createdAt',
+      'updatedAt',
+    ],
+  });
+  if (!letter) {
+    throw new AppError('Offer letter not found for this application', 404);
+  }
+  return letter;
+};
+
+export const getStudentOfferLetterByIdOrRef = async (studentProfileId: number, param: string) => {
+  const clause = offerLetterWhereClause(param);
+  const letter = await db.OfferLetter.findOne({
+    where: clause,
+    include: [
+      {
+        model: db.Application,
+        as: 'application',
+        required: true,
+        where: { studentId: studentProfileId },
+        attributes: ['id', 'applicationNumber', 'status', 'universityName', 'programName'],
+      },
+    ],
+    attributes: [
+      'id',
+      'referenceCode',
+      'applicationId',
+      'fileUrl',
+      'signedFileUrl',
+      'uploadedAt',
+      'status',
+      'universityName',
+      'programName',
+      'studentDisplayName',
+      'expiresAt',
+      'createdAt',
+      'updatedAt',
+    ],
+  });
+  if (!letter) {
+    throw new AppError('Offer letter not found', 404);
+  }
+  return letter;
+};
+
+const assertOfficialOfferPresent = (letter: { fileUrl?: string | null }) => {
+  if (!letter.fileUrl?.trim()) {
+    throw new AppError(
+      'The official offer letter is not available yet. Wait until it is uploaded, then submit your signed copy.',
+      400,
+    );
+  }
+};
+
+/** Student uploads signed offer PDF; same row is visible to admin/agent lists (`signedFileUrl`, status `signed`). */
+export const uploadStudentSignedOfferLetterByIdOrRef = async (
+  studentProfileId: number,
+  offerLetterParam: string,
+  file: Express.Multer.File,
+) => {
+  if (!file) {
+    throw new AppError('File is required', 400);
+  }
+  const letter = await getStudentOfferLetterByIdOrRef(studentProfileId, offerLetterParam);
+  assertOfficialOfferPresent(letter);
+  const url = file.path.replace(/\\/g, '/');
+  letter.signedFileUrl = url;
+  letter.status = 'signed';
+  await letter.save();
+  return letter;
+};
+
+export const uploadStudentSignedOfferLetterForApplication = async (
+  studentProfileId: number,
+  applicationIdOrRef: string,
+  file: Express.Multer.File,
+) => {
+  if (!file) {
+    throw new AppError('File is required', 400);
+  }
+  const letter = await getStudentOfferLetterForApplication(studentProfileId, applicationIdOrRef);
+  assertOfficialOfferPresent(letter);
+  const url = file.path.replace(/\\/g, '/');
+  letter.signedFileUrl = url;
+  letter.status = 'signed';
+  await letter.save();
+  return letter;
 };
 
 export const deleteStudentDocument = async (studentProfileId: number, documentId: string) => {
