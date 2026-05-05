@@ -5,6 +5,7 @@ import { db } from '../config/database';
 import * as studentPortal from '../services/studentPortal.service';
 import AppError from '../utils/errorHandler';
 import { isUuid } from '../utils/isUuid';
+import { pickOptionalTrimmedString } from '../utils/requestFields';
 
 const getStudentProfileIdFromReq = async (req: Request): Promise<number> => {
   const user: any = req.user;
@@ -109,10 +110,24 @@ export const listDocuments = catchAsyncError(async (req: Request, res: Response)
 export const uploadDocument = catchAsyncError(async (req: Request, res: Response) => {
   const file = req.file;
   if (!file) throw new AppError('File is required (field name: file)', 400);
+  // Always tie the row to the authenticated student's profile (never trust body.studentProfileId).
   const pid = await getStudentProfileIdFromReq(req);
-  const applicationId = typeof req.body.applicationId === 'string' ? req.body.applicationId : undefined;
-  const documentType = typeof req.body.documentType === 'string' ? req.body.documentType : undefined;
-  const doc = await studentPortal.createStudentDocument(pid, file, { applicationId, documentType });
+  const body = req.body as Record<string, unknown>;
+  const query = req.query as Record<string, unknown>;
+  const applicationRef =
+    pickOptionalTrimmedString(body, ['applicationId', 'application_id', 'applicationNumber']) ??
+    pickOptionalTrimmedString(query, ['applicationId', 'application_id', 'applicationNumber']);
+  const documentType =
+    pickOptionalTrimmedString(body, ['documentType', 'document_type']) ?? undefined;
+  const standaloneRaw =
+    pickOptionalTrimmedString(body, ['standalone']) ??
+    pickOptionalTrimmedString(query, ['standalone']);
+  const standalone = standaloneRaw === 'true' || standaloneRaw === '1';
+  const doc = await studentPortal.createStudentDocument(pid, file, {
+    applicationRef,
+    documentType,
+    standalone,
+  });
   res.status(201).json({
     success: true,
     message: 'Document uploaded',
@@ -128,5 +143,63 @@ export const deleteDocument = catchAsyncError(async (req: Request, res: Response
   res.status(constant.msgCode.successCode).json({
     success: constant.msgType.successStatus,
     message: 'Document deleted',
+  });
+});
+
+export const listOfferLetters = catchAsyncError(async (req: Request, res: Response) => {
+  const pid = await getStudentProfileIdFromReq(req);
+  const rows = await studentPortal.listStudentOfferLetters(pid);
+  res.status(constant.msgCode.successCode).json({
+    success: constant.msgType.successStatus,
+    message: 'Offer letters fetched',
+    data: rows,
+  });
+});
+
+export const getOfferLetterForApplication = catchAsyncError(async (req: Request, res: Response) => {
+  const { applicationId } = req.params;
+  const pid = await getStudentProfileIdFromReq(req);
+  const letter = await studentPortal.getStudentOfferLetterForApplication(pid, applicationId);
+  res.status(constant.msgCode.successCode).json({
+    success: constant.msgType.successStatus,
+    message: 'Offer letter fetched',
+    data: letter,
+  });
+});
+
+export const getOfferLetterByIdOrRef = catchAsyncError(async (req: Request, res: Response) => {
+  const { offerLetterId } = req.params;
+  const pid = await getStudentProfileIdFromReq(req);
+  const letter = await studentPortal.getStudentOfferLetterByIdOrRef(pid, offerLetterId);
+  res.status(constant.msgCode.successCode).json({
+    success: constant.msgType.successStatus,
+    message: 'Offer letter fetched',
+    data: letter,
+  });
+});
+
+export const uploadSignedOfferLetterForApplication = catchAsyncError(async (req: Request, res: Response) => {
+  const file = req.file;
+  if (!file) throw new AppError('File is required (field name: file)', 400);
+  const { applicationId } = req.params;
+  const pid = await getStudentProfileIdFromReq(req);
+  const letter = await studentPortal.uploadStudentSignedOfferLetterForApplication(pid, applicationId, file);
+  res.status(constant.msgCode.successCode).json({
+    success: constant.msgType.successStatus,
+    message: 'Signed offer letter uploaded',
+    data: letter,
+  });
+});
+
+export const uploadSignedOfferLetterByIdOrRef = catchAsyncError(async (req: Request, res: Response) => {
+  const file = req.file;
+  if (!file) throw new AppError('File is required (field name: file)', 400);
+  const { offerLetterId } = req.params;
+  const pid = await getStudentProfileIdFromReq(req);
+  const letter = await studentPortal.uploadStudentSignedOfferLetterByIdOrRef(pid, offerLetterId, file);
+  res.status(constant.msgCode.successCode).json({
+    success: constant.msgType.successStatus,
+    message: 'Signed offer letter uploaded',
+    data: letter,
   });
 });

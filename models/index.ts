@@ -19,6 +19,7 @@ import ChatMessageModel from './ChatMessage.model';
 import TokenModel from './Token.model';
 import ErrorLogModel from './ErrorLog.model';
 import PasswordResetTokenModel from './PasswordResetToken.model';
+import RolePermissionModel from './RolePermission.model';
 
 interface Db {
   User: ReturnType<typeof UserModel>;
@@ -40,6 +41,7 @@ interface Db {
   Token: ReturnType<typeof TokenModel>;
   ErrorLogs: ReturnType<typeof ErrorLogModel>;
   PasswordResetToken: ReturnType<typeof PasswordResetTokenModel>;
+  RolePermission: ReturnType<typeof RolePermissionModel>;
   sequelize: Sequelize;
   Sequelize: typeof Sequelize;
   [key: string]: any;
@@ -65,6 +67,7 @@ const db: Db = {
   Token: TokenModel(sequelize),
   ErrorLogs: ErrorLogModel(sequelize),
   PasswordResetToken: PasswordResetTokenModel(sequelize),
+  RolePermission: RolePermissionModel(sequelize),
   sequelize,
   Sequelize,
 };

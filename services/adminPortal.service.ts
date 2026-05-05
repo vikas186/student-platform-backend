@@ -1,5 +1,5 @@
 import path from 'path';
-import { Op, Sequelize, fn } from 'sequelize';
+import { Op, QueryTypes, Sequelize, fn } from 'sequelize';
 import { db } from '../config/database';
 import AppError from '../utils/errorHandler';
 import { APPLICATION_STATUSES } from '../models/Application.model';
@@ -254,62 +254,199 @@ export const createIntakeRowForAdmin = async (body: {
   });
 };
 
+const normalizeMatchStr = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ');
+
+const compactAlnum = (s: string) => normalizeMatchStr(s).replace(/[^a-z0-9]/g, '');
+
+/** Common degree / program shorthands → phrases that may appear in course names. */
+const PROGRAM_QUERY_SYNONYMS: Record<string, string[]> = {
+  msc: ['master of science', 'master', 'm.sc', 'postgraduate taught', 'pgt'],
+  'm.sc': ['master of science', 'msc'],
+  meng: ['master of engineering', 'm.eng'],
+  mres: ['master of research'],
+  ma: ['master of arts'],
+  mba: ['master of business'],
+  bsc: ['bachelor of science', 'bachelor', 'undergraduate'],
+  ba: ['bachelor of arts'],
+  phd: ['doctor of philosophy', 'doctorate', 'dphil'],
+  ug: ['undergraduate', 'bachelor'],
+  pg: ['postgraduate', 'graduate'],
+};
+
+const synonymPhrasesForProgramQuery = (q: string): string[] => {
+  const key = normalizeMatchStr(q).replace(/\s+/g, '');
+  return PROGRAM_QUERY_SYNONYMS[key] ?? [];
+};
+
+/**
+ * Lenient match for typed hints: substrings, compact form (no spaces/punctuation),
+ * word prefixes, and a small synonym list for degrees (e.g. "msc" vs "Master of Science …").
+ */
+const fieldLooselyMatches = (query: string, ...rawValues: (string | null | undefined)[]): boolean => {
+  const q = normalizeMatchStr(query);
+  if (!q) {
+    return true;
+  }
+  const values = rawValues.map(v => (v ? normalizeMatchStr(String(v)) : '')).filter(Boolean);
+  for (const field of values) {
+    if (field.includes(q) || q.includes(field)) {
+      return true;
+    }
+    const qC = compactAlnum(q);
+    const fC = compactAlnum(field);
+    if (qC.length >= 2 && fC.includes(qC)) {
+      return true;
+    }
+    if (fC.length >= 4 && qC.length >= 2 && qC.includes(fC)) {
+      return true;
+    }
+    const words = field.split(' ').filter(w => w.length > 0);
+    for (const w of words) {
+      if (w.startsWith(q) || (q.length <= w.length && w.startsWith(q))) {
+        return true;
+      }
+      if (q.length >= 2 && q.length <= 6 && w.includes(q)) {
+        return true;
+      }
+    }
+    for (const syn of synonymPhrasesForProgramQuery(q)) {
+      const s = normalizeMatchStr(syn);
+      if (field.includes(s) || s.includes(field)) {
+        return true;
+      }
+    }
+  }
+  return false;
+};
+
 export const findApplicationForOfferMatch = async (opts: {
   studentName: string;
   program: string;
   university: string;
+  studentEmail?: string;
 }) => {
   const sn = opts.studentName.trim();
   const prog = opts.program.trim();
   const uni = opts.university.trim();
-  if (!sn || !prog || !uni) {
-    throw new AppError('studentName, program, and university are required', 400);
-  }
-  const qStudent = `%${sn}%`;
-  const qProg = `%${prog}%`;
-  const qUni = `%${uni}%`;
+  const emailRaw = opts.studentEmail?.trim().toLowerCase() || '';
 
-  const app = await db.Application.findOne({
-    where: {
-      [Op.and]: [
-        { programName: { [Op.iLike]: qProg } },
-        { universityName: { [Op.iLike]: qUni } },
-      ],
-    },
+  if (!emailRaw && (!sn || !prog || !uni)) {
+    throw new AppError(
+      'Provide studentName, program, and university — or add studentEmail (or applicationId / APP-xxxxx) to narrow the match.',
+      400,
+    );
+  }
+  if (emailRaw && !sn && !prog && !uni) {
+    // single-app-by-email resolution below
+  } else if (!emailRaw && (!prog || !uni)) {
+    throw new AppError('program and university are required when studentEmail is not used', 400);
+  }
+
+  const candidates = await db.Application.findAll({
     include: [
       {
         model: db.StudentProfile,
         as: 'studentProfile',
         required: true,
-        include: [
-          {
-            model: db.User,
-            as: 'user',
-            required: true,
-            where: { name: { [Op.iLike]: qStudent } },
-          },
-        ],
+        include: [{ model: db.User, as: 'user', required: true }],
+      },
+      {
+        model: db.Course,
+        as: 'course',
+        required: false,
+        include: [{ model: db.University, as: 'university', required: false }],
       },
     ],
     order: [['updatedAt', 'DESC']],
+    limit: 2000,
   });
-  if (!app) {
-    throw new AppError(
-      'No matching application — ensure student name, program, and university match an existing application, or pass applicationId instead.',
-      404,
-    );
+
+  const getUser = (app: any) => app.studentProfile?.user as { name?: string; email?: string } | undefined;
+
+  if (emailRaw) {
+    const byEmail = candidates.filter(a => getUser(a)?.email?.toLowerCase() === emailRaw);
+    if (byEmail.length === 1) {
+      return byEmail[0];
+    }
+    if (byEmail.length > 1) {
+      const narrowed = byEmail.filter(
+        a =>
+          fieldLooselyMatches(prog, (a as any).programName, (a as any).course?.courseName) &&
+          fieldLooselyMatches(uni, (a as any).universityName, (a as any).course?.university?.name),
+      );
+      if (narrowed.length === 1) {
+        return narrowed[0];
+      }
+    }
   }
-  return app;
+
+  const studentMatches = (user: { name?: string | null; email?: string | null }) => {
+    if (emailRaw && user.email?.toLowerCase() === emailRaw) {
+      return true;
+    }
+    if (!sn) {
+      return false;
+    }
+    const uname = normalizeMatchStr(user.name || '');
+    const snNorm = normalizeMatchStr(sn);
+    if (!uname) {
+      return false;
+    }
+    if (uname.includes(snNorm) || snNorm.includes(uname)) {
+      return true;
+    }
+    const words = snNorm.split(' ').filter(w => w.length > 1);
+    if (words.length && words.every(w => uname.includes(w))) {
+      return true;
+    }
+    return false;
+  };
+
+  const programMatches = (app: { programName?: string | null; course?: { courseName?: string } | null }) =>
+    fieldLooselyMatches(prog, app.programName, app.course?.courseName);
+
+  const universityMatches = (app: {
+    universityName?: string | null;
+    course?: { university?: { name?: string } | null } | null;
+  }) => fieldLooselyMatches(uni, app.universityName, app.course?.university?.name);
+
+  for (const app of candidates) {
+    const user = getUser(app);
+    if (!user) {
+      continue;
+    }
+    if (studentMatches(user) && programMatches(app as any) && universityMatches(app as any)) {
+      return app;
+    }
+  }
+
+  throw new AppError(
+    'No matching application — try studentEmail, fuller program/university names, spelling, or pass applicationId (UUID or APP-xxxxx). Recent applications (last 2000 updates) are searched.',
+    404,
+  );
 };
 
 export const uploadOfferLetterByMatchForAdmin = async (
   file: Express.Multer.File,
-  fields: { studentName: string; program: string; university: string },
+  fields: {
+    studentName: string;
+    program: string;
+    university: string;
+    applicationId?: string;
+    studentEmail?: string;
+  },
 ) => {
   if (!file) {
     throw new AppError('File is required', 400);
   }
-  const app = await findApplicationForOfferMatch(fields);
+  const app = fields.applicationId?.trim()
+    ? await getApplicationForAdmin(fields.applicationId.trim())
+    : await findApplicationForOfferMatch({
+        studentName: fields.studentName,
+        program: fields.program,
+        university: fields.university,
+        studentEmail: fields.studentEmail,
+      });
   let letter = await db.OfferLetter.findOne({ where: { applicationId: app.id } });
   if (!letter) {
     const student = await db.StudentProfile.findByPk((app as any).studentId, {
@@ -554,7 +691,7 @@ export const deleteUserForAdmin = async (userId: string, actorUserId: string) =>
 
 export const listDeadlinesForAdmin = async (query: { search?: string; page?: number; limit?: number }) => {
   const page = Math.max(1, Number(query.page) || 1);
-  const limit = Math.min(200, Math.max(1, Number(query.limit) || 50));
+  const limit = Math.min(500, Math.max(1, Number(query.limit) || 50));
   const offset = (page - 1) * limit;
 
   const all = await db.Deadline.findAll({
@@ -694,7 +831,8 @@ export const listOfferLettersForAdmin = async (query: { search?: string }) => {
   const mapped = rows.map((letter: any) => {
     const plain = letter.get ? letter.get({ plain: true }) : letter;
     const fileName = plain.fileUrl ? path.basename(String(plain.fileUrl)) : null;
-    return { ...plain, fileName };
+    const signedFileName = plain.signedFileUrl ? path.basename(String(plain.signedFileUrl)) : null;
+    return { ...plain, fileName, signedFileName };
   });
 
   if (!query.search?.trim()) {
@@ -707,7 +845,8 @@ export const listOfferLettersForAdmin = async (query: { search?: string }) => {
       String(r.studentDisplayName || '').toLowerCase().includes(q) ||
       String(r.universityName || '').toLowerCase().includes(q) ||
       String(r.programName || '').toLowerCase().includes(q) ||
-      String(r.fileName || '').toLowerCase().includes(q),
+      String(r.fileName || '').toLowerCase().includes(q) ||
+      String(r.signedFileName || '').toLowerCase().includes(q),
   );
 };
 
@@ -768,44 +907,148 @@ export const deleteOfferLetterForAdmin = async (param: string) => {
   await letter.destroy();
 };
 
-export const listAgentsForAdmin = async (query: { search?: string; sort?: string }) => {
-  const profiles = await db.AgentProfile.findAll({
-    include: [
-      { model: db.User, as: 'user', attributes: ['id', 'name', 'email', 'phone', 'status'] },
-      { model: db.AgentRanking, as: 'ranking', required: false },
-      { model: db.SubscriptionPlan, as: 'subscriptionPlan', required: false, attributes: ['id', 'name', 'price'] },
-    ],
-    order: [['agencyName', 'ASC']],
+const tierFromMetrics = (conversionRate: number, applicationCount: number) => {
+  if (applicationCount <= 0) {
+    return 'Bronze';
+  }
+  if (conversionRate >= 70) {
+    return 'Gold';
+  }
+  if (conversionRate >= 50) {
+    return 'Silver';
+  }
+  return 'Bronze';
+};
+
+const tierSortRank = (tier: string) => (tier === 'Gold' ? 3 : tier === 'Silver' ? 2 : 1);
+
+type AgentDashboardRow = {
+  id: number;
+  agencyName: string;
+  primaryMarket: string | null;
+  logoUrl: string | null;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  userPhone: string | null;
+  userStatus: boolean;
+  rankingId: number | null;
+  rankingTotalApplications: number | null;
+  rankingDeposits: number | null;
+  rankingVisaSuccessRate: number | null;
+  rankingEnrollments: number | null;
+  subscriptionPlanId: number | null;
+  subscriptionPlanName: string | null;
+  subscriptionPlanPrice: unknown;
+  studentCount: number;
+  applicationCount: number;
+  wonCount: number;
+};
+
+export const listAgentsForAdmin = async (query: {
+  search?: string;
+  sort?: string;
+  page?: string | number;
+  limit?: string | number;
+}) => {
+  const rawRows = (await db.sequelize.query(
+    `
+    SELECT
+      ap.id AS "id",
+      ap.agency_name AS "agencyName",
+      ap.primary_market AS "primaryMarket",
+      ap.logo_url AS "logoUrl",
+      u.id AS "userId",
+      u.name AS "userName",
+      u.email AS "userEmail",
+      u.phone AS "userPhone",
+      u.status AS "userStatus",
+      ar.id AS "rankingId",
+      ar.total_applications AS "rankingTotalApplications",
+      ar.deposits AS "rankingDeposits",
+      ar.visa_success_rate AS "rankingVisaSuccessRate",
+      ar.enrollments AS "rankingEnrollments",
+      spl.id AS "subscriptionPlanId",
+      spl.name AS "subscriptionPlanName",
+      spl.price AS "subscriptionPlanPrice",
+      (
+        SELECT COUNT(*)::int FROM student_profiles sp
+        WHERE sp.agent_profile_id = ap.id
+      ) AS "studentCount",
+      (
+        SELECT COUNT(*)::int FROM applications a
+        WHERE a.agent_id = ap.id
+           OR EXISTS (
+             SELECT 1 FROM student_profiles sp2
+             WHERE sp2.id = a.student_id AND sp2.agent_profile_id = ap.id
+           )
+      ) AS "applicationCount",
+      (
+        SELECT COUNT(*)::int FROM applications a
+        WHERE (
+          a.agent_id = ap.id
+          OR EXISTS (
+            SELECT 1 FROM student_profiles sp2
+            WHERE sp2.id = a.student_id AND sp2.agent_profile_id = ap.id
+          )
+        )
+        AND a.status IN ('enrolled', 'visa_approved', 'deposit_paid')
+      ) AS "wonCount"
+    FROM agent_profiles ap
+    INNER JOIN users u ON u.id = ap.user_id AND u.role = 'agent'
+    LEFT JOIN agent_rankings ar ON ar.agent_id = ap.id
+    LEFT JOIN subscription_plans spl ON spl.id = ap.subscription_plan_id
+    ORDER BY ap.agency_name ASC
+    `,
+    { type: QueryTypes.SELECT },
+  )) as AgentDashboardRow[];
+
+  const enriched = rawRows.map(r => {
+    const applicationCount = Number(r.applicationCount) || 0;
+    const wonCount = Number(r.wonCount) || 0;
+    const conversionRate = applicationCount
+      ? Math.round((wonCount / applicationCount) * 1000) / 10
+      : 0;
+    const tier = tierFromMetrics(conversionRate, applicationCount);
+    const primaryMarket = r.primaryMarket ?? null;
+    return {
+      id: r.id,
+      agencyName: r.agencyName,
+      primaryMarket,
+      /** UI label — same as primary market / region */
+      country: primaryMarket,
+      logoUrl: r.logoUrl,
+      user: {
+        id: r.userId,
+        name: r.userName,
+        email: r.userEmail,
+        phone: r.userPhone,
+        status: r.userStatus,
+      },
+      ranking: r.rankingId
+        ? {
+            id: r.rankingId,
+            totalApplications: r.rankingTotalApplications ?? 0,
+            deposits: r.rankingDeposits ?? 0,
+            visaSuccessRate: r.rankingVisaSuccessRate ?? 0,
+            enrollments: r.rankingEnrollments ?? 0,
+          }
+        : null,
+      subscriptionPlan:
+        r.subscriptionPlanId != null
+          ? {
+              id: r.subscriptionPlanId,
+              name: r.subscriptionPlanName,
+              price: r.subscriptionPlanPrice,
+            }
+          : null,
+      studentCount: Number(r.studentCount) || 0,
+      applicationCount,
+      wonCount,
+      conversionRate,
+      tier,
+    };
   });
-
-  const enriched = await Promise.all(
-    profiles.map(async p => {
-      const pid = p.id;
-      const totalApps = await db.Application.count({ where: { agentId: pid } });
-      const successStatuses = ['enrolled', 'visa_approved', 'deposit_paid'];
-      const won = await db.Application.count({
-        where: { agentId: pid, status: { [Op.in]: successStatuses } },
-      });
-      const conversionRate = totalApps ? Math.round((won / totalApps) * 1000) / 10 : 0;
-
-      const tier =
-        conversionRate >= 70 ? 'Gold' : conversionRate >= 50 ? 'Silver' : totalApps > 0 ? 'Bronze' : 'Bronze';
-
-      return {
-        id: p.id,
-        agencyName: p.agencyName,
-        primaryMarket: p.primaryMarket,
-        logoUrl: p.logoUrl,
-        user: (p as any).user,
-        ranking: (p as any).ranking,
-        subscriptionPlan: (p as any).subscriptionPlan,
-        studentCount: await db.StudentProfile.count({ where: { agentProfileId: pid } }),
-        applicationCount: totalApps,
-        conversionRate,
-        tier,
-      };
-    }),
-  );
 
   let rows = enriched;
   if (query.search?.trim()) {
@@ -814,17 +1057,45 @@ export const listAgentsForAdmin = async (query: { search?: string; sort?: string
       r =>
         r.agencyName.toLowerCase().includes(q) ||
         String(r.primaryMarket || '').toLowerCase().includes(q) ||
-        String((r.user as any)?.name || '')
+        String(r.country || '').toLowerCase().includes(q) ||
+        String(r.user?.name || '')
           .toLowerCase()
           .includes(q),
     );
   }
 
-  if (query.sort === 'conversion') {
-    rows = [...rows].sort((a, b) => b.conversionRate - a.conversionRate);
+  const sort = query.sort?.trim() || 'name';
+  if (sort === 'conversion') {
+    rows = [...rows].sort((a, b) => b.conversionRate - a.conversionRate || a.agencyName.localeCompare(b.agencyName));
+  } else if (sort === 'students') {
+    rows = [...rows].sort((a, b) => b.studentCount - a.studentCount || a.agencyName.localeCompare(b.agencyName));
+  } else if (sort === 'tier') {
+    rows = [...rows].sort(
+      (a, b) =>
+        tierSortRank(b.tier) - tierSortRank(a.tier) ||
+        b.conversionRate - a.conversionRate ||
+        a.agencyName.localeCompare(b.agencyName),
+    );
+  } else {
+    rows = [...rows].sort((a, b) => a.agencyName.localeCompare(b.agencyName));
   }
 
-  return rows;
+  const page = Math.max(1, Number(query.page) || 1);
+  const limitRaw = Number(query.limit);
+  const limit = query.limit != null && query.limit !== '' ? Math.min(200, Math.max(1, limitRaw)) : null;
+
+  const total = rows.length;
+  if (limit != null) {
+    const offset = (page - 1) * limit;
+    rows = rows.slice(offset, offset + limit);
+  }
+
+  return {
+    agents: rows,
+    page: limit != null ? page : 1,
+    limit: limit ?? total,
+    total,
+  };
 };
 
 export const getDashboardForAdmin = async () => {

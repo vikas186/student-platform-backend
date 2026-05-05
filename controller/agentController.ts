@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import constant from '../constant';
 import { catchAsyncError } from '../middleware/catchAsyncError';
 import * as agentPortal from '../services/agentPortal.service';
+import { pickOptionalPositiveInt, pickOptionalTrimmedString } from '../utils/requestFields';
 
 const agentProfileIdFromReq = async (req: Request): Promise<number> => {
   const user: any = req.user;
@@ -59,11 +60,15 @@ export const exportApplicationsCsv = catchAsyncError(async (req: Request, res: R
 
 export const createApplication = catchAsyncError(async (req: Request, res: Response) => {
   const aid = await agentProfileIdFromReq(req);
-  const app = await agentPortal.createAgentApplication(aid, req.body);
+  const result = await agentPortal.createAgentApplication(aid, req.body);
+  const appJson = result.application.get({ plain: true }) as Record<string, unknown>;
   res.status(201).json({
     success: true,
     message: 'Application created',
-    data: app,
+    data: {
+      ...appJson,
+      ...(result.temporaryPassword ? { temporaryPassword: result.temporaryPassword } : {}),
+    },
   });
 });
 
@@ -110,6 +115,20 @@ export const deleteApplication = catchAsyncError(async (req: Request, res: Respo
   });
 });
 
+export const createStudent = catchAsyncError(async (req: Request, res: Response) => {
+  const aid = await agentProfileIdFromReq(req);
+  const result = await agentPortal.createStudentForAgent(aid, req.body);
+  res.status(201).json({
+    success: true,
+    message: 'Student created',
+    data: {
+      studentProfileId: result.studentProfile.id,
+      user: result.user,
+      ...(result.temporaryPassword ? { temporaryPassword: result.temporaryPassword } : {}),
+    },
+  });
+});
+
 export const listStudents = catchAsyncError(async (req: Request, res: Response) => {
   const aid = await agentProfileIdFromReq(req);
   const data = await agentPortal.listAgentStudents(aid, req.query as any);
@@ -137,11 +156,21 @@ export const uploadDocument = catchAsyncError(async (req: Request, res: Response
     return;
   }
   const aid = await agentProfileIdFromReq(req);
-  const applicationId =
-    typeof req.body.applicationId === 'string' ? req.body.applicationId : undefined;
+  const body = req.body as Record<string, unknown>;
+  const query = req.query as Record<string, unknown>;
+  const applicationRef =
+    pickOptionalTrimmedString(body, ['applicationId', 'application_id', 'applicationNumber']) ??
+    pickOptionalTrimmedString(query, ['applicationId', 'application_id', 'applicationNumber']);
+  const studentProfileId =
+    pickOptionalPositiveInt(body, ['studentProfileId', 'student_profile_id']) ??
+    pickOptionalPositiveInt(query, ['studentProfileId', 'student_profile_id']);
   const documentType =
-    typeof req.body.documentType === 'string' ? req.body.documentType : undefined;
-  const doc = await agentPortal.createAgentDocument(aid, file, { applicationId, documentType });
+    pickOptionalTrimmedString(body, ['documentType', 'document_type']) ?? undefined;
+  const doc = await agentPortal.createAgentDocument(aid, file, {
+    applicationRef,
+    studentProfileId: studentProfileId ?? null,
+    documentType,
+  });
   res.status(201).json({
     success: true,
     message: 'Document uploaded',

@@ -11,6 +11,7 @@ import {
   submitApplication,
   deleteApplication,
   listStudents,
+  createStudent,
   listDocuments,
   uploadDocument,
   patchDocument,
@@ -31,11 +32,13 @@ import {
   globalSearch,
 } from '../controller/agentController';
 import { jwtAuthMiddleware } from '../middleware/jwtAuth';
+import { requirePermission } from '../middleware/requirePermission';
 import { agentDocumentUpload } from '../middleware/multer';
 import validateMiddleware from '../middleware/validate';
 import {
   listApplicationsQueryJoiSchema,
   createApplicationBodyJoiSchema,
+  createAgentStudentBodyJoiSchema,
   patchApplicationBodyJoiSchema,
   listDocumentsQueryJoiSchema,
   patchDocumentBodyJoiSchema,
@@ -57,32 +60,93 @@ agentRouter.use(jwtAuthMiddleware(['agent']));
 agentRouter
   .get('/profile', getAgentProfile)
   .patch('/profile', validateMiddleware(agentProfilePatchJoiSchema), patchAgentProfile)
-  .get('/dashboard', getDashboard)
-  .get('/search', validateMiddleware(globalSearchQueryJoiSchema), globalSearch)
-  .get('/students', validateMiddleware(listStudentsQueryJoiSchema), listStudents)
-  .get('/applications/export', validateMiddleware(listApplicationsQueryJoiSchema), exportApplicationsCsv)
-  .get('/applications', validateMiddleware(listApplicationsQueryJoiSchema), listApplications)
-  .post('/applications', validateMiddleware(createApplicationBodyJoiSchema), createApplication)
-  .get('/applications/:applicationId', getApplication)
-  .patch('/applications/:applicationId', validateMiddleware(patchApplicationBodyJoiSchema), patchApplication)
-  .post('/applications/:applicationId/submit', submitApplication)
-  .delete('/applications/:applicationId', deleteApplication)
-  .get('/documents', validateMiddleware(listDocumentsQueryJoiSchema), listDocuments)
-  .post('/documents', agentDocumentUpload.single('file'), uploadDocument)
-  .patch('/documents/:documentId', validateMiddleware(patchDocumentBodyJoiSchema), patchDocument)
-  .delete('/documents/:documentId', deleteDocument)
-  .post('/documents/verify-demo', validateMiddleware(verifyDocumentsBodyJoiSchema), verifyDocumentsDemo)
-  .get('/offer-letters', listOfferLetters)
-  .post('/offer-letters', validateMiddleware(createOfferLetterBodyJoiSchema), createOfferLetter)
-  .get('/offer-letters/:offerLetterId', getOfferLetter)
-  .patch('/offer-letters/:offerLetterId', validateMiddleware(patchOfferLetterBodyJoiSchema), patchOfferLetter)
-  .post('/offer-letters/:offerLetterId/file', agentDocumentUpload.single('file'), uploadOfferLetterFile)
-  .post('/offer-letters/:offerLetterId/signed', agentDocumentUpload.single('file'), uploadSignedOffer)
-  .post('/offer-letters/:offerLetterId/send', sendOfferLetter)
-  .get('/commission', getCommission)
-  .post('/deposits/pay-link', validateMiddleware(depositPayLinkBodyJoiSchema), createDepositPayLink)
-  .get('/deadlines', validateMiddleware(deadlinesQueryJoiSchema), listDeadlines)
-  .get('/discovery/universities', validateMiddleware(discoveryQueryJoiSchema), discoveryUniversities)
-  .get('/discovery/courses', validateMiddleware(discoveryQueryJoiSchema), discoveryCourses);
+  .get('/dashboard', requirePermission('applications', 'view'), getDashboard)
+  .get('/search', requirePermission('applications', 'view'), validateMiddleware(globalSearchQueryJoiSchema), globalSearch)
+  .post('/students', requirePermission('applications', 'create'), validateMiddleware(createAgentStudentBodyJoiSchema), createStudent)
+  .get('/students', requirePermission('applications', 'view'), validateMiddleware(listStudentsQueryJoiSchema), listStudents)
+  .get(
+    '/applications/export',
+    requirePermission('applications', 'view'),
+    validateMiddleware(listApplicationsQueryJoiSchema),
+    exportApplicationsCsv,
+  )
+  .get('/applications', requirePermission('applications', 'view'), validateMiddleware(listApplicationsQueryJoiSchema), listApplications)
+  .post(
+    '/applications',
+    requirePermission('applications', 'create'),
+    validateMiddleware(createApplicationBodyJoiSchema),
+    createApplication,
+  )
+  .get('/applications/:applicationId', requirePermission('applications', 'view'), getApplication)
+  .patch(
+    '/applications/:applicationId',
+    requirePermission('applications', 'edit'),
+    validateMiddleware(patchApplicationBodyJoiSchema),
+    patchApplication,
+  )
+  .post('/applications/:applicationId/submit', requirePermission('applications', 'edit'), submitApplication)
+  .delete('/applications/:applicationId', requirePermission('applications', 'edit'), deleteApplication)
+  .get('/documents', requirePermission('applications', 'view'), validateMiddleware(listDocumentsQueryJoiSchema), listDocuments)
+  .post('/documents', requirePermission('applications', 'edit'), agentDocumentUpload.single('file'), uploadDocument)
+  .patch(
+    '/documents/:documentId',
+    requirePermission('applications', 'edit'),
+    validateMiddleware(patchDocumentBodyJoiSchema),
+    patchDocument,
+  )
+  .delete('/documents/:documentId', requirePermission('applications', 'edit'), deleteDocument)
+  .post(
+    '/documents/verify-demo',
+    requirePermission('applications', 'edit'),
+    validateMiddleware(verifyDocumentsBodyJoiSchema),
+    verifyDocumentsDemo,
+  )
+  .get('/offer-letters', requirePermission('applications', 'view'), listOfferLetters)
+  .post(
+    '/offer-letters',
+    requirePermission('applications', 'edit'),
+    validateMiddleware(createOfferLetterBodyJoiSchema),
+    createOfferLetter,
+  )
+  .get('/offer-letters/:offerLetterId', requirePermission('applications', 'view'), getOfferLetter)
+  .patch(
+    '/offer-letters/:offerLetterId',
+    requirePermission('applications', 'edit'),
+    validateMiddleware(patchOfferLetterBodyJoiSchema),
+    patchOfferLetter,
+  )
+  .post(
+    '/offer-letters/:offerLetterId/file',
+    requirePermission('applications', 'edit'),
+    agentDocumentUpload.single('file'),
+    uploadOfferLetterFile,
+  )
+  .post(
+    '/offer-letters/:offerLetterId/signed',
+    requirePermission('applications', 'edit'),
+    agentDocumentUpload.single('file'),
+    uploadSignedOffer,
+  )
+  .post('/offer-letters/:offerLetterId/send', requirePermission('applications', 'edit'), sendOfferLetter)
+  .get('/commission', requirePermission('commission_slabs', 'view'), getCommission)
+  .post(
+    '/deposits/pay-link',
+    requirePermission('payments', 'create'),
+    validateMiddleware(depositPayLinkBodyJoiSchema),
+    createDepositPayLink,
+  )
+  .get('/deadlines', requirePermission('deadlines', 'view'), validateMiddleware(deadlinesQueryJoiSchema), listDeadlines)
+  .get(
+    '/discovery/universities',
+    requirePermission('applications', 'view'),
+    validateMiddleware(discoveryQueryJoiSchema),
+    discoveryUniversities,
+  )
+  .get(
+    '/discovery/courses',
+    requirePermission('applications', 'view'),
+    validateMiddleware(discoveryQueryJoiSchema),
+    discoveryCourses,
+  );
 
 export default agentRouter;

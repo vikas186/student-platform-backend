@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
-import { randomUUID } from 'crypto';
-import { fn, Op, QueryTypes, Sequelize } from 'sequelize';
+import { randomBytes, randomUUID } from 'crypto';
+import { fn, Op, QueryTypes, Sequelize, type Transaction } from 'sequelize';
 import { db } from '../config/database';
 import AppError from '../utils/errorHandler';
 import { APPLICATION_STATUSES } from '../models/Application.model';
@@ -65,6 +65,103 @@ const applicationIncludeForScope = {
   model: db.StudentProfile,
   as: 'studentProfile',
   required: false,
+};
+
+async function assertStudentInAgentScope(
+  agentProfileId: number,
+  studentProfileId: number,
+  transaction?: Transaction,
+): Promise<void> {
+  const sp = await db.StudentProfile.findByPk(studentProfileId, { transaction });
+  if (!sp) {
+    throw new AppError('Student profile not found', 404);
+  }
+  if (sp.agentProfileId === agentProfileId) {
+    return;
+  }
+  const n = await db.Application.count({
+    where: {
+      [Op.and]: [{ studentId: studentProfileId }, applicationScopeForAgent(agentProfileId)],
+    },
+    transaction,
+  });
+  if (n > 0) {
+    return;
+  }
+  throw new AppError('Student is not in your portfolio', 403);
+}
+
+export type CreateAgentStudentInput = {
+  email: string;
+  password?: string | null;
+  fullName: string;
+  phone?: string | null;
+  targetCountries?: string[];
+  countryOfResidence?: string | null;
+  dateOfBirth?: string | null;
+  nationality?: string | null;
+};
+
+/** Creates a student user + profile linked to this agent (same pattern as signup). */
+export const createStudentForAgent = async (
+  agentProfileId: number,
+  body: CreateAgentStudentInput,
+  options?: { transaction?: Transaction },
+): Promise<{
+  studentProfile: InstanceType<typeof db.StudentProfile>;
+  user: Record<string, unknown>;
+  temporaryPassword?: string;
+}> => {
+  const t = options?.transaction;
+  const email = String(body.email).trim().toLowerCase();
+  if (await db.User.findOne({ where: { email }, transaction: t })) {
+    throw new AppError('Email already taken', 400);
+  }
+
+  let plainPassword = body.password?.trim();
+  let temporaryPassword: string | undefined;
+  if (!plainPassword) {
+    plainPassword = randomBytes(12).toString('base64url').slice(0, 16);
+    temporaryPassword = plainPassword;
+  }
+
+  const academicDetails =
+    body.dateOfBirth || body.nationality
+      ? {
+          ...(body.dateOfBirth ? { dateOfBirth: String(body.dateOfBirth).trim() } : {}),
+          ...(body.nationality ? { nationality: String(body.nationality).trim() } : {}),
+        }
+      : null;
+
+  const user = await db.User.create(
+    {
+      name: String(body.fullName).trim(),
+      email,
+      password: plainPassword,
+      role: 'student',
+      phone: body.phone?.trim() || null,
+      status: true,
+    },
+    { transaction: t },
+  );
+
+  const studentProfile = await db.StudentProfile.create(
+    {
+      userId: user.id,
+      academicDetails,
+      preferredCountry: null,
+      targetCountries: Array.isArray(body.targetCountries) ? body.targetCountries : [],
+      countryOfResidence: body.countryOfResidence?.trim() || null,
+      agentProfileId,
+    },
+    { transaction: t },
+  );
+
+  return {
+    studentProfile,
+    user: user.toSafeObject(),
+    ...(temporaryPassword ? { temporaryPassword } : {}),
+  };
 };
 
 export const requireAgentProfile = async (userId: string) => {
@@ -188,36 +285,67 @@ export const listAgentApplications = async (
   return { data: rows, page, limit, total: count };
 };
 
+export type CreateAgentApplicationBody = {
+  studentProfileId?: number;
+  student?: CreateAgentStudentInput;
+  universityName?: string | null;
+  programName?: string | null;
+  country?: string | null;
+  courseId?: number | null;
+  notes?: string | null;
+  commissionAmount?: number | string | null;
+  commissionSlab?: string | null;
+  metadata?: Record<string, unknown> | null;
+};
+
 export const createAgentApplication = async (
   agentProfileId: number,
-  body: {
-    studentProfileId: number;
-    universityName?: string | null;
-    programName?: string | null;
-    country?: string | null;
-    courseId?: number | null;
-    notes?: string | null;
-    commissionAmount?: number | string | null;
-    commissionSlab?: string | null;
-    metadata?: Record<string, unknown> | null;
-  },
-) => {
-  const sp = await db.StudentProfile.findByPk(body.studentProfileId);
-  if (!sp) {
-    throw new AppError('Student profile not found', 404);
-  }
-  return db.Application.create({
-    studentId: body.studentProfileId,
-    agentId: agentProfileId,
-    courseId: body.courseId ?? null,
-    universityName: body.universityName?.trim() || null,
-    programName: body.programName?.trim() || null,
-    notes: body.notes?.trim() || null,
-    country: body.country?.trim() || null,
-    commissionAmount: body.commissionAmount ?? null,
-    commissionSlab: body.commissionSlab?.trim() || null,
-    metadata: body.metadata ?? null,
-    status: 'draft',
+  body: CreateAgentApplicationBody,
+): Promise<{
+  application: InstanceType<typeof db.Application>;
+  temporaryPassword?: string;
+}> => {
+  return db.sequelize.transaction(async transaction => {
+    let studentProfileId = body.studentProfileId;
+    let temporaryPassword: string | undefined;
+
+    if (body.student) {
+      const created = await createStudentForAgent(agentProfileId, body.student, { transaction });
+      studentProfileId = created.studentProfile.id;
+      temporaryPassword = created.temporaryPassword;
+    }
+
+    if (studentProfileId == null || typeof studentProfileId !== 'number') {
+      throw new AppError('Either studentProfileId or student is required', 400);
+    }
+
+    const sp = await db.StudentProfile.findByPk(studentProfileId, { transaction });
+    if (!sp) {
+      throw new AppError('Student profile not found', 404);
+    }
+    await assertStudentInAgentScope(agentProfileId, studentProfileId, transaction);
+
+    const application = await db.Application.create(
+      {
+        studentId: studentProfileId,
+        agentId: agentProfileId,
+        courseId: body.courseId ?? null,
+        universityName: body.universityName?.trim() || null,
+        programName: body.programName?.trim() || null,
+        notes: body.notes?.trim() || null,
+        country: body.country?.trim() || null,
+        commissionAmount: body.commissionAmount ?? null,
+        commissionSlab: body.commissionSlab?.trim() || null,
+        metadata: body.metadata ?? null,
+        status: 'draft',
+      },
+      { transaction },
+    );
+
+    return {
+      application,
+      ...(temporaryPassword ? { temporaryPassword } : {}),
+    };
   });
 };
 
@@ -360,20 +488,46 @@ export const listAgentDocuments = async (
 export const createAgentDocument = async (
   agentProfileId: number,
   file: Express.Multer.File,
-  opts: { applicationId?: string | null; documentType?: string },
+  opts: {
+    applicationRef?: string | null;
+    studentProfileId?: number | null;
+    documentType?: string;
+  },
 ) => {
   if (!file) {
     throw new AppError('File is required', 400);
   }
-  if (!opts.applicationId?.trim()) {
-    throw new AppError('applicationId is required', 400);
-  }
-  const appRow = await db.Application.findOne({
-    where: applicationWhereForAgent(agentProfileId, opts.applicationId.trim()),
-    include: [applicationIncludeForScope],
-  });
-  if (!appRow) {
-    throw new AppError('Application not found', 404);
+
+  let appRow: InstanceType<typeof db.Application> | null = null;
+
+  if (opts.applicationRef?.trim()) {
+    appRow = await db.Application.findOne({
+      where: applicationWhereForAgent(agentProfileId, opts.applicationRef.trim()),
+      include: [applicationIncludeForScope],
+    });
+    if (!appRow) {
+      throw new AppError('Application not found', 404);
+    }
+  } else if (opts.studentProfileId != null && opts.studentProfileId > 0) {
+    await assertStudentInAgentScope(agentProfileId, opts.studentProfileId);
+    appRow = await db.Application.findOne({
+      where: {
+        [Op.and]: [{ studentId: opts.studentProfileId }, applicationScopeForAgent(agentProfileId)],
+      },
+      include: [applicationIncludeForScope],
+      order: [['updatedAt', 'DESC']],
+    });
+    if (!appRow) {
+      throw new AppError(
+        'No application found for this student — create an application first or pass applicationId / applicationNumber',
+        400,
+      );
+    }
+  } else {
+    throw new AppError(
+      'applicationId, applicationNumber (or application_id), or studentProfileId is required',
+      400,
+    );
   }
 
   const fileUrl = file.path.replace(/\\/g, '/');
@@ -638,6 +792,190 @@ export const sendOfferLetter = async (agentProfileId: number, param: string) => 
   return letter;
 };
 
+const parseSlabDetailsJson = (raw: string | null | undefined): Record<string, unknown> | null => {
+  if (!raw || typeof raw !== 'string' || !raw.trim().startsWith('{')) {
+    return null;
+  }
+  try {
+    return JSON.parse(raw) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+};
+
+export type AgentCommissionCalculatorUniversity = {
+  universityId: number | null;
+  universityName: string;
+  commissionPercent: number | null;
+  commissionId: number | null;
+  slabLabel: string | null;
+  slabDetails: string | null;
+  parsedSlab: Record<string, unknown> | null;
+  /** True if this university appears on at least one of the agent's applications */
+  inPipeline?: boolean;
+};
+
+const calculatorEntryFromCommissionRow = (
+  row: InstanceType<typeof db.Commission>,
+  opts?: { inPipeline?: boolean },
+): AgentCommissionCalculatorUniversity => {
+  const u = (row as any).university as { id?: number; name?: string } | undefined;
+  const name = u?.name || `University ${row.universityId}`;
+  const parsed = parseSlabDetailsJson(row.slabDetails ?? undefined);
+  const pct = Number(row.percentage);
+  const slabLabel =
+    typeof parsed?.label === 'string' ? parsed.label : `${name} — ${pct}% partner rate`;
+  return {
+    universityId: row.universityId,
+    universityName: name,
+    commissionPercent: pct != null && !Number.isNaN(pct) ? pct : null,
+    commissionId: row.id,
+    slabLabel,
+    slabDetails: row.slabDetails ?? null,
+    parsedSlab: parsed,
+    ...(opts?.inPipeline ? { inPipeline: true } : { inPipeline: false }),
+  };
+};
+
+/** Latest admin Commission row per university (for calculator — all slabs admin configured). */
+const fetchLatestCommissionEntryByUniversity = async (): Promise<Map<number, AgentCommissionCalculatorUniversity>> => {
+  const rows = await db.Commission.findAll({
+    include: [{ model: db.University, as: 'university', attributes: ['id', 'name', 'country'] }],
+    order: [['id', 'DESC']],
+  });
+  const m = new Map<number, AgentCommissionCalculatorUniversity>();
+  for (const row of rows) {
+    if (m.has(row.universityId)) {
+      continue;
+    }
+    m.set(row.universityId, calculatorEntryFromCommissionRow(row, { inPipeline: false }));
+  }
+  return m;
+};
+
+/** Universities referenced on the agent's applications (may lack admin slab). */
+const buildCommissionCalculatorPayload = async (
+  apps: InstanceType<typeof db.Application>[],
+): Promise<AgentCommissionCalculatorUniversity[]> => {
+  const byId = new Map<number, string>();
+  const unresolvedNames = new Set<string>();
+
+  for (const a of apps) {
+    const cuni = (a as any).course?.university as { id?: number; name?: string } | undefined;
+    if (cuni?.id != null) {
+      byId.set(Number(cuni.id), String(cuni.name || `University ${cuni.id}`));
+    } else if (a.universityName?.trim()) {
+      unresolvedNames.add(a.universityName.trim());
+    }
+  }
+
+  const freeTextMatched = new Set<string>();
+  if (unresolvedNames.size > 0) {
+    const nameList = [...unresolvedNames];
+    const candidates = await db.University.findAll({
+      where: { [Op.or]: nameList.map(n => ({ name: { [Op.iLike]: n } })) },
+      attributes: ['id', 'name'],
+    });
+    for (const n of nameList) {
+      const match =
+        candidates.find(c => c.name.toLowerCase() === n.toLowerCase()) ||
+        candidates.find(
+          c => c.name.toLowerCase().includes(n.toLowerCase()) || n.toLowerCase().includes(c.name.toLowerCase()),
+        );
+      if (match) {
+        byId.set(match.id, match.name);
+        freeTextMatched.add(n);
+      }
+    }
+  }
+
+  const ids = [...byId.keys()];
+  const commissionRows =
+    ids.length > 0
+      ? await db.Commission.findAll({
+          where: { universityId: { [Op.in]: ids } },
+          include: [{ model: db.University, as: 'university', attributes: ['id', 'name', 'country'] }],
+          order: [['id', 'DESC']],
+        })
+      : [];
+
+  const latestCommissionByUni = new Map<number, InstanceType<typeof db.Commission>>();
+  for (const row of commissionRows) {
+    if (!latestCommissionByUni.has(row.universityId)) {
+      latestCommissionByUni.set(row.universityId, row);
+    }
+  }
+
+  const withSlab = ids
+    .map(uid => {
+      const comm = latestCommissionByUni.get(uid);
+      const parsed = comm ? parseSlabDetailsJson(comm.slabDetails ?? undefined) : null;
+      const pct = comm != null ? Number(comm.percentage) : null;
+      const slabLabel =
+        comm != null
+          ? (typeof parsed?.label === 'string' ? parsed.label : `${byId.get(uid)} — ${pct}% partner rate`)
+          : null;
+      return {
+        universityId: uid,
+        universityName: byId.get(uid) || `University ${uid}`,
+        commissionPercent: pct != null && !Number.isNaN(pct) ? pct : null,
+        commissionId: comm?.id ?? null,
+        slabLabel,
+        slabDetails: comm?.slabDetails ?? null,
+        parsedSlab: parsed,
+        inPipeline: true,
+      };
+    })
+    .sort((a, b) => a.universityName.localeCompare(b.universityName, undefined, { sensitivity: 'base' }));
+
+  const orphanRows = [...unresolvedNames]
+    .filter(n => !freeTextMatched.has(n))
+    .map(n => ({
+      universityId: null as number | null,
+      universityName: n,
+      commissionPercent: null as number | null,
+      commissionId: null as number | null,
+      slabLabel: null as string | null,
+      slabDetails: null as string | null,
+      parsedSlab: null as Record<string, unknown> | null,
+      inPipeline: true,
+    }));
+
+  const orphanDedup = new Map<string, (typeof orphanRows)[0]>();
+  for (const o of orphanRows) {
+    orphanDedup.set(o.universityName.toLowerCase(), o);
+  }
+
+  return [...withSlab, ...[...orphanDedup.values()].sort((a, b) => a.universityName.localeCompare(b.universityName))];
+};
+
+/** Union: every admin commission slab + pipeline-only universities (no duplicate per university / orphan name). */
+const mergeCalculatorPipelineWithAllAdminSlabs = async (
+  pipelineEntries: AgentCommissionCalculatorUniversity[],
+): Promise<AgentCommissionCalculatorUniversity[]> => {
+  const fromAdmin = await fetchLatestCommissionEntryByUniversity();
+  const byKey = new Map<string, AgentCommissionCalculatorUniversity>();
+
+  for (const [, entry] of fromAdmin) {
+    byKey.set(`id:${entry.universityId}`, { ...entry, inPipeline: entry.inPipeline ?? false });
+  }
+
+  for (const p of pipelineEntries) {
+    const key =
+      p.universityId != null ? `id:${p.universityId}` : `orphan:${p.universityName.toLowerCase()}`;
+    const existing = byKey.get(key);
+    if (existing) {
+      existing.inPipeline = true;
+    } else {
+      byKey.set(key, { ...p, inPipeline: true });
+    }
+  }
+
+  return [...byKey.values()].sort((a, b) =>
+    a.universityName.localeCompare(b.universityName, undefined, { sensitivity: 'base' }),
+  );
+};
+
 export const getAgentCommission = async (agentProfileId: number) => {
   const apps = await db.Application.findAll({
     where: applicationScopeForAgent(agentProfileId),
@@ -653,7 +991,7 @@ export const getAgentCommission = async (agentProfileId: number) => {
         model: db.Course,
         as: 'course',
         required: false,
-        include: [{ model: db.University, as: 'university', attributes: ['name'] }],
+        include: [{ model: db.University, as: 'university', attributes: ['id', 'name', 'country'] }],
       },
     ],
     order: [['updatedAt', 'DESC']],
@@ -677,17 +1015,27 @@ export const getAgentCommission = async (agentProfileId: number) => {
 
   const sampleRate = apps.length ? projected / apps.length : 0;
 
+  const pipelineOnly = await buildCommissionCalculatorPayload(apps);
+  const calculatorUniversities = await mergeCalculatorPipelineWithAllAdminSlabs(pipelineOnly);
+
   return {
     summary: {
       earnedThisCycle: earned,
       projectedTotal: projected,
       defaultEnrolledRateSample: sampleRate,
     },
+    /** All admin commission slabs + any pipeline universities without a slab (inPipeline flag). */
+    calculator: {
+      universities: calculatorUniversities,
+      hint:
+        'Lists every admin-configured slab (commissionPercent). Rows with inPipeline also appear on your applications. estimatedCommission = tuition * (commissionPercent / 100) when percent is set.',
+    },
     rows: apps.map(a => ({
       applicationId: a.id,
       applicationNumber: a.applicationNumber,
       studentName: (a as any).studentProfile?.user?.name ?? null,
       university: (a as any).course?.university?.name ?? a.universityName ?? null,
+      universityId: (a as any).course?.university?.id ?? null,
       status: a.status,
       slabSource: a.commissionSlab ?? 'Default rate card',
       amount: a.commissionAmount ?? null,

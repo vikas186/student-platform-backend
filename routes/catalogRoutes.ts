@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { listCourses, listUniversities } from '../controller/catalogController';
 import { jwtAuthMiddleware } from '../middleware/jwtAuth';
+import { requirePermission } from '../middleware/requirePermission';
 
 /**
  * @swagger
@@ -58,7 +59,7 @@ import { jwtAuthMiddleware } from '../middleware/jwtAuth';
 const catalogRouter = Router();
 
 catalogRouter
-  .get('/universities', jwtAuthMiddleware(['all']), listUniversities)
-  .get('/courses', jwtAuthMiddleware(['all']), listCourses);
+  .get('/universities', jwtAuthMiddleware(['all']), requirePermission('applications', 'view'), listUniversities)
+  .get('/courses', jwtAuthMiddleware(['all']), requirePermission('applications', 'view'), listCourses);
 
 export default catalogRouter;

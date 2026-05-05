@@ -230,7 +230,9 @@
  *     tags: [Student]
  *     summary: Upload document (multipart)
  *     description: |
- *       multipart/form-data field "file" (required). Optional applicationId (UUID or APP-xxxxx), documentType (string). Max 1 MB. PDF, JPG, PNG.
+ *       multipart/form-data field "file" (required). Optional link: applicationId, application_id, or applicationNumber (UUID or APP-xxxxx); same keys may be sent as query params.
+ *       If omitted, the document is linked to your most recently updated application when you have at least one (otherwise applicationId stays null).
+ *       Send standalone=true to skip that default (keep applicationId null). Optional documentType / document_type. Max 1 MB. PDF, JPG, PNG.
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -247,6 +249,12 @@
  *               applicationId:
  *                 type: string
  *                 description: UUID or APP-10241
+ *               applicationNumber:
+ *                 type: string
+ *                 description: Alternative to applicationId (same APP-xxxxx format)
+ *               standalone:
+ *                 type: string
+ *                 description: 'true' or '1' to upload without linking to an application
  *               documentType:
  *                 type: string
  *                 example: passport_id
@@ -275,4 +283,130 @@
  *         schema:
  *           type: string
  *           format: uuid
+ */
+
+/**
+ * @swagger
+ * /api/v1/student/offer-letters:
+ *   get:
+ *     tags: [Student]
+ *     summary: List my offer letters
+ *     description: All offer letters linked to this student’s applications (admin/agent uploads). Includes file paths for PDFs when present.
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: OK
+ *       401:
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ApiError'
+ */
+
+/**
+ * @swagger
+ * /api/v1/student/offer-letters/{offerLetterId}:
+ *   get:
+ *     tags: [Student]
+ *     summary: Get one offer letter by id or OFR reference
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: offerLetterId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Numeric id (e.g. 12) or reference (e.g. OFR-201)
+ *     responses:
+ *       200:
+ *         description: OK
+ *       404:
+ *         description: Not found or not yours
+ */
+
+/**
+ * @swagger
+ * /api/v1/student/applications/{applicationId}/offer-letter:
+ *   get:
+ *     tags: [Student]
+ *     summary: Get offer letter for a specific application
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: applicationId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Application UUID or APP-xxxxx
+ *     responses:
+ *       200:
+ *         description: OK
+ *       404:
+ *         description: Application or offer letter not found
+ */
+
+/**
+ * @swagger
+ * /api/v1/student/applications/{applicationId}/offer-letter/signed:
+ *   post:
+ *     tags: [Student]
+ *     summary: Upload signed offer letter (PDF/image) for an application
+ *     description: Requires the official offer (`fileUrl`) to exist first. Sets `signedFileUrl` and status `signed` — visible on admin offer list.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: applicationId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required: [file]
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       200:
+ *         description: Uploaded
+ *       400:
+ *         description: No official offer yet or bad file
+ */
+
+/**
+ * @swagger
+ * /api/v1/student/offer-letters/{offerLetterId}/signed:
+ *   post:
+ *     tags: [Student]
+ *     summary: Upload signed offer by offer id or OFR reference
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: offerLetterId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required: [file]
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       200:
+ *         description: Uploaded
  */
