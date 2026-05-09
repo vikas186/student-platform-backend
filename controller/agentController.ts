@@ -73,7 +73,7 @@ export const createApplication = catchAsyncError(async (req: Request, res: Respo
 });
 
 export const getApplication = catchAsyncError(async (req: Request, res: Response) => {
-  const { applicationId } = req.params;
+  const applicationId = req.params.applicationId as string;
   const aid = await agentProfileIdFromReq(req);
   const app = await agentPortal.getApplicationForAgent(aid, applicationId);
   res.status(constant.msgCode.successCode).json({
@@ -84,7 +84,7 @@ export const getApplication = catchAsyncError(async (req: Request, res: Response
 });
 
 export const patchApplication = catchAsyncError(async (req: Request, res: Response) => {
-  const { applicationId } = req.params;
+  const applicationId = req.params.applicationId as string;
   const aid = await agentProfileIdFromReq(req);
   const app = await agentPortal.updateAgentApplication(aid, applicationId, req.body);
   res.status(constant.msgCode.successCode).json({
@@ -95,7 +95,7 @@ export const patchApplication = catchAsyncError(async (req: Request, res: Respon
 });
 
 export const submitApplication = catchAsyncError(async (req: Request, res: Response) => {
-  const { applicationId } = req.params;
+  const applicationId = req.params.applicationId as string;
   const aid = await agentProfileIdFromReq(req);
   const app = await agentPortal.submitAgentApplication(aid, applicationId);
   res.status(constant.msgCode.successCode).json({
@@ -106,7 +106,7 @@ export const submitApplication = catchAsyncError(async (req: Request, res: Respo
 });
 
 export const deleteApplication = catchAsyncError(async (req: Request, res: Response) => {
-  const { applicationId } = req.params;
+  const applicationId = req.params.applicationId as string;
   const aid = await agentProfileIdFromReq(req);
   await agentPortal.deleteAgentApplication(aid, applicationId);
   res.status(constant.msgCode.successCode).json({
@@ -179,7 +179,7 @@ export const uploadDocument = catchAsyncError(async (req: Request, res: Response
 });
 
 export const patchDocument = catchAsyncError(async (req: Request, res: Response) => {
-  const { documentId } = req.params;
+  const documentId = req.params.documentId as string;
   const aid = await agentProfileIdFromReq(req);
   const doc = await agentPortal.patchAgentDocument(aid, documentId, req.body);
   res.status(constant.msgCode.successCode).json({
@@ -190,7 +190,7 @@ export const patchDocument = catchAsyncError(async (req: Request, res: Response)
 });
 
 export const deleteDocument = catchAsyncError(async (req: Request, res: Response) => {
-  const { documentId } = req.params;
+  const documentId = req.params.documentId as string;
   const aid = await agentProfileIdFromReq(req);
   await agentPortal.deleteAgentDocument(aid, documentId);
   res.status(constant.msgCode.successCode).json({
@@ -231,7 +231,7 @@ export const createOfferLetter = catchAsyncError(async (req: Request, res: Respo
 });
 
 export const getOfferLetter = catchAsyncError(async (req: Request, res: Response) => {
-  const { offerLetterId } = req.params;
+  const offerLetterId = req.params.offerLetterId as string;
   const aid = await agentProfileIdFromReq(req);
   const data = await agentPortal.getOfferLetterForAgent(aid, offerLetterId);
   res.status(constant.msgCode.successCode).json({
@@ -242,7 +242,7 @@ export const getOfferLetter = catchAsyncError(async (req: Request, res: Response
 });
 
 export const patchOfferLetter = catchAsyncError(async (req: Request, res: Response) => {
-  const { offerLetterId } = req.params;
+  const offerLetterId = req.params.offerLetterId as string;
   const aid = await agentProfileIdFromReq(req);
   const data = await agentPortal.patchOfferLetter(aid, offerLetterId, req.body);
   res.status(constant.msgCode.successCode).json({
@@ -258,7 +258,7 @@ export const uploadOfferLetterFile = catchAsyncError(async (req: Request, res: R
     res.status(400).json({ success: false, message: 'File is required (field name: file)' });
     return;
   }
-  const { offerLetterId } = req.params;
+  const offerLetterId = req.params.offerLetterId as string;
   const aid = await agentProfileIdFromReq(req);
   const data = await agentPortal.uploadOfferLetterFile(aid, offerLetterId, file);
   res.status(constant.msgCode.successCode).json({
@@ -274,7 +274,7 @@ export const uploadSignedOffer = catchAsyncError(async (req: Request, res: Respo
     res.status(400).json({ success: false, message: 'File is required (field name: file)' });
     return;
   }
-  const { offerLetterId } = req.params;
+  const offerLetterId = req.params.offerLetterId as string;
   const aid = await agentProfileIdFromReq(req);
   const data = await agentPortal.uploadSignedOfferFile(aid, offerLetterId, file);
   res.status(constant.msgCode.successCode).json({
@@ -285,7 +285,7 @@ export const uploadSignedOffer = catchAsyncError(async (req: Request, res: Respo
 });
 
 export const sendOfferLetter = catchAsyncError(async (req: Request, res: Response) => {
-  const { offerLetterId } = req.params;
+  const offerLetterId = req.params.offerLetterId as string;
   const aid = await agentProfileIdFromReq(req);
   const data = await agentPortal.sendOfferLetter(aid, offerLetterId);
   res.status(constant.msgCode.successCode).json({
