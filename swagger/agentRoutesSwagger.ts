@@ -7,6 +7,73 @@
 
 /**
  * @swagger
+ * /api/v1/agent/agreement:
+ *   get:
+ *     tags: [Agent]
+ *     summary: Get partnership agreement status (onboarding gate)
+ *     description: |
+ *       Returns the current state of the agent's partnership agreement workflow.
+ *       This endpoint is reachable **even before admin approval** so the frontend
+ *       can render the gate screen ("we have sent the agreement on email — please
+ *       upload the signed copy") and unlock the dashboard once approved.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200:
+ *         description: OK
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 message: { type: string }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     status:
+ *                       type: string
+ *                       enum: [pending, submitted, approved, rejected]
+ *                     message: { type: string, description: 'Human-readable text for the gate screen' }
+ *                     canUpload: { type: boolean, description: 'True when status is pending or rejected' }
+ *                     portalUnlocked: { type: boolean, description: 'True only when status is approved' }
+ *                     agreementSentAt: { type: string, format: date-time, nullable: true }
+ *                     signedAgreementUrl: { type: string, nullable: true }
+ *                     agreementUploadedAt: { type: string, format: date-time, nullable: true }
+ *                     agreementApprovedAt: { type: string, format: date-time, nullable: true }
+ *                     agreementRejectionReason: { type: string, nullable: true }
+ */
+
+/**
+ * @swagger
+ * /api/v1/agent/agreement/signed:
+ *   post:
+ *     tags: [Agent]
+ *     summary: Upload signed partnership agreement (PDF, max 10 MB)
+ *     description: |
+ *       Allowed only when the current `status` is `pending` or `rejected`. Sets `status`
+ *       to `submitted` so the admin queue picks it up. The portal stays locked until admin
+ *       approves it via `POST /api/v1/admin/agents/:agentProfileId/agreement/approve`.
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required: [file]
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       200:
+ *         description: Uploaded; awaiting admin approval
+ *       400:
+ *         description: Already submitted or already approved, or wrong file type
+ */
+
+/**
+ * @swagger
  * /api/v1/agent/profile:
  *   get:
  *     tags: [Agent]

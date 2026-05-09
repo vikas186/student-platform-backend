@@ -191,6 +191,28 @@ export const uploadSignedOfferLetterForApplication = catchAsyncError(async (req:
   });
 });
 
+export const listUniversities = catchAsyncError(async (req: Request, res: Response) => {
+  const { search, country, page, limit } = req.query as Record<string, string | undefined>;
+  const data = await studentPortal.listStudentUniversities({ search, country, page, limit });
+  res.status(constant.msgCode.successCode).json({
+    success: constant.msgType.successStatus,
+    message: 'Universities fetched',
+    data,
+  });
+});
+
+export const getUniversity = catchAsyncError(async (req: Request, res: Response) => {
+  const { universityId } = req.params;
+  const id = parseInt(universityId, 10);
+  if (Number.isNaN(id)) throw new AppError('Invalid university id', 400);
+  const data = await studentPortal.getStudentUniversityById(id);
+  res.status(constant.msgCode.successCode).json({
+    success: constant.msgType.successStatus,
+    message: 'University fetched',
+    data,
+  });
+});
+
 export const uploadSignedOfferLetterByIdOrRef = catchAsyncError(async (req: Request, res: Response) => {
   const file = req.file;
   if (!file) throw new AppError('File is required (field name: file)', 400);

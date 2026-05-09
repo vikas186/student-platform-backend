@@ -104,6 +104,30 @@ const studentOfferSignedUpload = multer({
   },
 });
 
+/** Agent signed partnership agreement — PDF only, max 10 MB. */
+const agentAgreementStorage: StorageEngine = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    const uploadPath = 'uploads/agent-agreements/';
+    fs.mkdirSync(uploadPath, { recursive: true });
+    cb(null, uploadPath);
+  },
+  filename: (_req, file, cb) => {
+    const uniqueName = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}${path.extname(file.originalname)}`;
+    cb(null, uniqueName);
+  },
+});
+
+const agentAgreementUpload = multer({
+  storage: agentAgreementStorage,
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (!/\.pdf$/i.test(file.originalname)) {
+      return cb(new multer.MulterError('LIMIT_UNEXPECTED_FILE', 'Only PDF files are allowed.'));
+    }
+    cb(null, true);
+  },
+});
+
 /** University countersigned partnership contract — PDF only, max 10 MB. */
 const universityContractStorage: StorageEngine = multer.diskStorage({
   destination: (_req, _file, cb) => {
@@ -182,6 +206,7 @@ export {
   upload,
   studentDocumentUpload,
   agentDocumentUpload,
+  agentAgreementUpload,
   studentOfferSignedUpload,
   universityContractUpload,
   adminUniversityCsvUpload,

@@ -262,6 +262,20 @@ const patchAgentSubscriptionJoiSchema = {
   }),
 };
 
+const listAgentAgreementsQueryJoiSchema = {
+  query: Joi.object({
+    status: Joi.string().valid('pending', 'submitted', 'approved', 'rejected').optional(),
+    page: Joi.number().integer().min(1).optional(),
+    limit: Joi.number().integer().min(1).max(200).optional(),
+  }),
+};
+
+const rejectAgentAgreementJoiSchema = {
+  body: Joi.object({
+    reason: Joi.string().trim().max(2000).optional().allow('', null),
+  }),
+};
+
 export {
   putPermissionsMatrixJoiSchema,
   listUsersQueryJoiSchema,
@@ -274,6 +288,8 @@ export {
   patchDeadlineJoiSchema,
   createOfferLetterAdminJoiSchema,
   listAgentsQueryJoiSchema,
+  listAgentAgreementsQueryJoiSchema,
+  rejectAgentAgreementJoiSchema,
   listPaymentsQueryJoiSchema,
   createCommissionJoiSchema,
   patchCommissionJoiSchema,
