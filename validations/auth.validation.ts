@@ -157,11 +157,7 @@ const roleBasedSignupJoiSchema = {
     confirmPassword: Joi.string().valid(Joi.ref('password')).required().messages({
       'any.only': 'confirmPassword must match password',
     }),
-    phoneNumber: Joi.when('role', {
-      is: 'student',
-      then: Joi.string().trim().min(8).max(32).required(),
-      otherwise: Joi.string().trim().min(8).max(32).optional().allow(null, ''),
-    }),
+    phoneNumber: Joi.string().trim().min(8).max(32).optional().allow(null, ''),
     targetCountries: Joi.when('role', {
       is: 'student',
       then: Joi.array().items(Joi.string().trim().min(1)).min(1).max(50).required(),

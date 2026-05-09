@@ -7,7 +7,7 @@
  *     summary: Sign up (student, agent, or university)
  *     description: |
  *       Creates a new account based on `role`.
- *       - **student**: requires `fullName`, `phoneNumber` and `targetCountries` (do not send agency fields).
+ *       - **student**: requires `fullName` and `targetCountries` (`phoneNumber` is optional; do not send agency fields).
  *       - **agent**: requires `fullName`, `agencyName` and `primaryMarket` (do not send `targetCountries`).
  *       - **university**: send **`institutionName`** + **`country`** (Enroll UI — finds or creates institution), **or** **`universityId`** + **`fullName`** (link existing institution). Same validation as `POST /auth/university/signup` when using institution fields.
  *     security: []
