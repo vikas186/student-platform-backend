@@ -1,5 +1,8 @@
 import { Model, DataTypes, Sequelize } from 'sequelize';
 
+export const AGENT_AGREEMENT_STATUSES = ['pending', 'submitted', 'approved', 'rejected'] as const;
+export type AgentAgreementStatus = (typeof AGENT_AGREEMENT_STATUSES)[number];
+
 export default (sequelize: Sequelize) => {
   class AgentProfile extends Model {
     public id!: number;
@@ -8,11 +11,24 @@ export default (sequelize: Sequelize) => {
     public primaryMarket?: string | null;
     public logoUrl?: string | null;
     public subscriptionPlanId?: number | null;
+    /** Onboarding partnership agreement workflow (mirrors `University.countersignedContractUrl`). */
+    public agreementStatus!: AgentAgreementStatus;
+    public signedAgreementUrl?: string | null;
+    public agreementSentAt?: Date | null;
+    public agreementUploadedAt?: Date | null;
+    public agreementApprovedAt?: Date | null;
+    public agreementApprovedByUserId?: string | null;
+    public agreementRejectionReason?: string | null;
     public readonly createdAt!: Date;
     public readonly updatedAt!: Date;
 
     static associate(models: any) {
       AgentProfile.belongsTo(models.User, { foreignKey: 'userId', as: 'user', onDelete: 'CASCADE' });
+      AgentProfile.belongsTo(models.User, {
+        foreignKey: 'agreementApprovedByUserId',
+        as: 'agreementApprovedBy',
+        onDelete: 'SET NULL',
+      });
       AgentProfile.belongsTo(models.SubscriptionPlan, { foreignKey: 'subscriptionPlanId', as: 'subscriptionPlan' });
       AgentProfile.hasMany(models.StudentProfile, { foreignKey: 'agentProfileId', as: 'linkedStudents', onDelete: 'SET NULL' });
       AgentProfile.hasMany(models.Application, { foreignKey: 'agentId', as: 'applications' });
@@ -39,6 +55,44 @@ export default (sequelize: Sequelize) => {
         allowNull: true,
         references: { model: 'subscription_plans', key: 'id' },
         onDelete: 'SET NULL',
+      },
+      agreementStatus: {
+        type: DataTypes.ENUM(...AGENT_AGREEMENT_STATUSES),
+        allowNull: false,
+        defaultValue: 'pending',
+        field: 'agreement_status',
+      },
+      signedAgreementUrl: {
+        type: DataTypes.STRING(2048),
+        allowNull: true,
+        field: 'signed_agreement_url',
+      },
+      agreementSentAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: 'agreement_sent_at',
+      },
+      agreementUploadedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: 'agreement_uploaded_at',
+      },
+      agreementApprovedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: 'agreement_approved_at',
+      },
+      agreementApprovedByUserId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'agreement_approved_by_user_id',
+        references: { model: 'users', key: 'id' },
+        onDelete: 'SET NULL',
+      },
+      agreementRejectionReason: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        field: 'agreement_rejection_reason',
       },
     },
     {

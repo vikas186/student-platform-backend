@@ -1272,6 +1272,12 @@ type AgentDashboardRow = {
   agencyName: string;
   primaryMarket: string | null;
   logoUrl: string | null;
+  agreementStatus: string;
+  signedAgreementUrl: string | null;
+  agreementSentAt: Date | null;
+  agreementUploadedAt: Date | null;
+  agreementApprovedAt: Date | null;
+  agreementRejectionReason: string | null;
   userId: string;
   userName: string;
   userEmail: string;
@@ -1303,6 +1309,12 @@ export const listAgentsForAdmin = async (query: {
       ap.agency_name AS "agencyName",
       ap.primary_market AS "primaryMarket",
       ap.logo_url AS "logoUrl",
+      ap.agreement_status AS "agreementStatus",
+      ap.signed_agreement_url AS "signedAgreementUrl",
+      ap.agreement_sent_at AS "agreementSentAt",
+      ap.agreement_uploaded_at AS "agreementUploadedAt",
+      ap.agreement_approved_at AS "agreementApprovedAt",
+      ap.agreement_rejection_reason AS "agreementRejectionReason",
       u.id AS "userId",
       u.name AS "userName",
       u.email AS "userEmail",
@@ -1363,6 +1375,14 @@ export const listAgentsForAdmin = async (query: {
       /** UI label — same as primary market / region */
       country: primaryMarket,
       logoUrl: r.logoUrl,
+      agreement: {
+        status: r.agreementStatus,
+        signedAgreementUrl: r.signedAgreementUrl,
+        agreementSentAt: r.agreementSentAt,
+        agreementUploadedAt: r.agreementUploadedAt,
+        agreementApprovedAt: r.agreementApprovedAt,
+        rejectionReason: r.agreementRejectionReason,
+      },
       user: {
         id: r.userId,
         name: r.userName,
@@ -1441,6 +1461,112 @@ export const listAgentsForAdmin = async (query: {
     limit: limit ?? total,
     total,
   };
+};
+
+const AGENT_AGREEMENT_PUBLIC_FIELDS = [
+  'id',
+  'agencyName',
+  'primaryMarket',
+  'agreementStatus',
+  'signedAgreementUrl',
+  'agreementSentAt',
+  'agreementUploadedAt',
+  'agreementApprovedAt',
+  'agreementApprovedByUserId',
+  'agreementRejectionReason',
+  'createdAt',
+  'updatedAt',
+] as const;
+
+/**
+ * Admin: list agent partnership agreements, optionally filtered by workflow status.
+ * Defaults to `submitted` so admins land on the "needs review" queue.
+ */
+export const listAgentAgreementsForAdmin = async (query: {
+  status?: string;
+  page?: string | number;
+  limit?: string | number;
+}) => {
+  const allowed = new Set(['pending', 'submitted', 'approved', 'rejected']);
+  const status = query.status && allowed.has(String(query.status)) ? String(query.status) : 'submitted';
+  const page = Math.max(1, Number(query.page) || 1);
+  const limit = Math.min(200, Math.max(1, Number(query.limit) || 50));
+  const offset = (page - 1) * limit;
+
+  const { rows, count } = await db.AgentProfile.findAndCountAll({
+    where: { agreementStatus: status },
+    attributes: AGENT_AGREEMENT_PUBLIC_FIELDS as unknown as string[],
+    include: [
+      {
+        model: db.User,
+        as: 'user',
+        attributes: ['id', 'name', 'email', 'phone', 'status'],
+      },
+    ],
+    order: [['agreementUploadedAt', 'DESC']],
+    limit,
+    offset,
+  });
+
+  return {
+    agreements: rows.map(r => r.get({ plain: true })),
+    page,
+    limit,
+    total: count,
+    status,
+  };
+};
+
+const requireAgentProfileForAdmin = async (agentProfileId: number) => {
+  const profile = await db.AgentProfile.findByPk(agentProfileId, {
+    include: [{ model: db.User, as: 'user', attributes: ['id', 'name', 'email'] }],
+  });
+  if (!profile) {
+    throw new AppError('Agent profile not found', 404);
+  }
+  return profile;
+};
+
+/** Admin approves an agent's signed agreement, unlocking their portal. */
+export const approveAgentAgreement = async (agentProfileId: number, adminUserId: string) => {
+  const profile = await requireAgentProfileForAdmin(agentProfileId);
+  if (profile.agreementStatus === 'approved') {
+    return profile.get({ plain: true });
+  }
+  if (profile.agreementStatus !== 'submitted') {
+    throw new AppError(
+      'Only submitted agreements can be approved. The agent has not uploaded a signed copy yet.',
+      400,
+    );
+  }
+  profile.agreementStatus = 'approved';
+  profile.agreementApprovedAt = new Date();
+  profile.agreementApprovedByUserId = adminUserId || null;
+  profile.agreementRejectionReason = null;
+  await profile.save();
+  return profile.get({ plain: true });
+};
+
+/** Admin rejects an agent's signed agreement; agent can re-upload. */
+export const rejectAgentAgreement = async (
+  agentProfileId: number,
+  adminUserId: string,
+  reason?: string | null,
+) => {
+  const profile = await requireAgentProfileForAdmin(agentProfileId);
+  if (profile.agreementStatus !== 'submitted') {
+    throw new AppError(
+      'Only submitted agreements can be rejected.',
+      400,
+    );
+  }
+  profile.agreementStatus = 'rejected';
+  profile.agreementApprovedAt = null;
+  profile.agreementApprovedByUserId = adminUserId || null;
+  profile.agreementRejectionReason =
+    typeof reason === 'string' && reason.trim() ? reason.trim().slice(0, 2000) : null;
+  await profile.save();
+  return profile.get({ plain: true });
 };
 
 export const getDashboardForAdmin = async () => {

@@ -16,6 +16,8 @@ import {
   listDocuments,
   uploadDocument,
   deleteDocument,
+  listUniversities,
+  getUniversity,
 } from '../controller/studentController';
 import { jwtAuthMiddleware } from '../middleware/jwtAuth';
 import { requirePermission } from '../middleware/requirePermission';
@@ -25,6 +27,7 @@ import {
   applicationBodyJoiSchema,
   listApplicationsQueryJoiSchema,
   studentProfilePatchJoiSchema,
+  universitiesQueryJoiSchema,
 } from '../validations/student.validation';
 
 const studentRouter = Router();
@@ -76,6 +79,13 @@ studentRouter
   .get('/offer-letters/:offerLetterId', requirePermission('applications', 'view'), getOfferLetterByIdOrRef)
   .get('/documents', requirePermission('applications', 'view'), listDocuments)
   .post('/documents', requirePermission('applications', 'edit'), studentDocumentUpload.single('file'), uploadDocument)
-  .delete('/documents/:documentId', requirePermission('applications', 'edit'), deleteDocument);
+  .delete('/documents/:documentId', requirePermission('applications', 'edit'), deleteDocument)
+  .get(
+    '/universities',
+    requirePermission('applications', 'view'),
+    validateMiddleware(universitiesQueryJoiSchema),
+    listUniversities,
+  )
+  .get('/universities/:universityId', requirePermission('applications', 'view'), getUniversity);
 
 export default studentRouter;

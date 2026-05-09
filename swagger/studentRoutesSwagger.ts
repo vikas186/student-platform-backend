@@ -410,3 +410,122 @@
  *       200:
  *         description: Uploaded
  */
+
+/**
+ * @swagger
+ * /api/v1/student/universities:
+ *   get:
+ *     tags: [Student]
+ *     summary: List universities (admin-uploaded catalog)
+ *     description: |
+ *       Browse active universities published by admin. Useful before creating an application.
+ *       Only public fields are returned (admin agreement/contract internals are not exposed).
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Matches university name or country (case-insensitive)
+ *       - in: query
+ *         name: country
+ *         schema:
+ *           type: string
+ *         description: Filter by country (case-insensitive contains)
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           default: 1
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 200
+ *           default: 50
+ *     responses:
+ *       200:
+ *         description: OK
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 message: { type: string }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     universities:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id: { type: integer }
+ *                           name: { type: string }
+ *                           country: { type: string }
+ *                           status: { type: boolean }
+ *                           programFeeRanges:
+ *                             type: object
+ *                             nullable: true
+ *                           programsCount: { type: integer }
+ *                           createdAt: { type: string, format: date-time }
+ *                           updatedAt: { type: string, format: date-time }
+ *                     page: { type: integer }
+ *                     limit: { type: integer }
+ *                     total: { type: integer }
+ *       401:
+ *         description: Unauthorized
+ */
+
+/**
+ * @swagger
+ * /api/v1/student/universities/{universityId}:
+ *   get:
+ *     tags: [Student]
+ *     summary: Get one university (with course catalog)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: universityId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: OK
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 message: { type: string }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id: { type: integer }
+ *                     name: { type: string }
+ *                     country: { type: string }
+ *                     status: { type: boolean }
+ *                     programFeeRanges: { type: object, nullable: true }
+ *                     programsCount: { type: integer }
+ *                     courses:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id: { type: integer }
+ *                           courseName: { type: string }
+ *                           degree: { type: string }
+ *                           fee: { type: number }
+ *                           duration: { type: string }
+ *       400:
+ *         description: Invalid id
+ *       404:
+ *         description: University not found
+ */

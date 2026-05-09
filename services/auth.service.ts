@@ -76,6 +76,10 @@ const signupAgent = async (body: SignupAgentBody) => {
     primaryMarket: body.primaryMarket,
     logoUrl: null,
     subscriptionPlanId: null,
+    /** Partnership agreement workflow starts as "pending" and unblocks the dashboard
+     * only after the agent uploads the signed copy and admin approves it. */
+    agreementStatus: 'pending',
+    agreementSentAt: new Date(),
   });
 
   return user.toSafeObject();
