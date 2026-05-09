@@ -39,6 +39,31 @@ export const openapiSchemas = {
     },
   },
 
+  /** `POST /auth/university/signup` — Enroll university signup (no `role` field). */
+  UniversitySignupRequest: {
+    type: 'object',
+    required: ['email', 'password', 'confirmPassword', 'institutionName', 'country'],
+    properties: {
+      email: { type: 'string', format: 'email', example: 'admissions@pnwu.edu' },
+      password: { type: 'string', format: 'password', minLength: 8, maxLength: 128, example: 'SecurePass1' },
+      confirmPassword: { type: 'string', format: 'password', description: 'Must match password' },
+      institutionName: {
+        type: 'string',
+        minLength: 1,
+        maxLength: 300,
+        example: 'Pacific Northwest University',
+        description: 'Institution display name; stored on user `name` and used to find or create `University`.',
+      },
+      country: {
+        type: 'string',
+        minLength: 1,
+        maxLength: 120,
+        example: 'United Kingdom',
+        description: 'Country / region; paired with institution name to match or create the institution.',
+      },
+    },
+  },
+
   LoginResponse: {
     type: 'object',
     properties: {
@@ -94,7 +119,7 @@ export const openapiSchemas = {
       name: { type: 'string' },
       email: { type: 'string', format: 'email' },
       phone: { type: 'string', nullable: true },
-      role: { type: 'string', enum: ['student', 'agent', 'admin'] },
+      role: { type: 'string', enum: ['student', 'agent', 'admin', 'university'] },
       status: { type: 'boolean' },
     },
   },

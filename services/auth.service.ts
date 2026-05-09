@@ -1,3 +1,4 @@
+import { Op } from 'sequelize';
 import AppError from '../utils/errorHandler';
 import type { UserRole } from '../models/User.model';
 import {
@@ -78,28 +79,135 @@ const signupAgent = async (body: SignupAgentBody) => {
 };
 
 type SignupByRoleBody = {
-  role: 'student' | 'agent';
-  fullName: string;
+  role: 'student' | 'agent' | 'university';
+  fullName?: string;
   email: string;
   password: string;
   phoneNumber?: string | null;
   targetCountries?: string[];
   agencyName?: string;
   primaryMarket?: string;
+  universityId?: number;
+  institutionName?: string;
+  country?: string;
+};
+
+/** Match Enroll UI: find by name+country or create institution row. */
+const findOrCreateUniversityForSignup = async (institutionName: string, country: string) => {
+  const name = institutionName.trim();
+  const countryNorm = country.trim() || 'General';
+  let uni = await db.University.findOne({
+    where: {
+      [Op.and]: [{ name: { [Op.iLike]: name } }, { country: { [Op.iLike]: countryNorm } }],
+    },
+  });
+  if (!uni) {
+    uni = await db.University.create({
+      name,
+      country: countryNorm,
+      status: true,
+    });
+  }
+  return uni;
+};
+
+const createUniversityPortalUser = async (params: {
+  userDisplayName: string;
+  email: string;
+  password: string;
+  universityId: number;
+}) => {
+  const emailNorm = String(params.email).trim().toLowerCase();
+  if (await db.User.findOne({ where: { email: emailNorm } })) {
+    throw new AppError('Email already taken', 400);
+  }
+  const user = await db.User.create({
+    name: params.userDisplayName,
+    email: emailNorm,
+    password: params.password,
+    role: 'university',
+    phone: null,
+    status: true,
+  });
+  await db.UniversityProfile.create({
+    userId: user.id,
+    universityId: params.universityId,
+    jobTitle: null,
+  });
+  return user.toSafeObject();
+};
+
+const signupUniversity = async (body: {
+  fullName: string;
+  email: string;
+  password: string;
+  universityId?: number;
+  institutionName?: string;
+  country?: string;
+}) => {
+  let universityId: number;
+  let userDisplayName: string;
+
+  const hasId = body.universityId != null && Number(body.universityId) >= 1;
+  const hasInst =
+    typeof body.institutionName === 'string' &&
+    body.institutionName.trim().length > 0 &&
+    typeof body.country === 'string' &&
+    body.country.trim().length > 0;
+
+  if (hasId && hasInst) {
+    throw new AppError('Provide either universityId or institutionName and country, not both', 400);
+  }
+  if (!hasId && !hasInst) {
+    throw new AppError('Provide universityId and fullName, or institutionName and country', 400);
+  }
+
+  if (hasId) {
+    if (!body.fullName?.trim()) {
+      throw new AppError('fullName is required when universityId is set', 400);
+    }
+    const uni = await db.University.findByPk(Number(body.universityId));
+    if (!uni) {
+      throw new AppError('University not found', 404);
+    }
+    universityId = uni.id;
+    userDisplayName = body.fullName.trim();
+  } else {
+    const uni = await findOrCreateUniversityForSignup(body.institutionName!, body.country!);
+    universityId = uni.id;
+    userDisplayName = body.institutionName!.trim();
+  }
+
+  return createUniversityPortalUser({
+    userDisplayName,
+    email: body.email,
+    password: body.password,
+    universityId,
+  });
 };
 
 const signupByRole = async (body: SignupByRoleBody) => {
   if (body.role === 'student') {
     return signupStudent({
-      fullName: body.fullName,
+      fullName: body.fullName as string,
       email: body.email,
       password: body.password,
       phoneNumber: body.phoneNumber as string,
       targetCountries: body.targetCountries as string[],
     });
   }
+  if (body.role === 'university') {
+    return signupUniversity({
+      fullName: body.fullName ?? '',
+      email: body.email,
+      password: body.password,
+      universityId: body.universityId,
+      institutionName: body.institutionName,
+      country: body.country,
+    });
+  }
   return signupAgent({
-    fullName: body.fullName,
+    fullName: body.fullName as string,
     email: body.email,
     password: body.password,
     agencyName: body.agencyName as string,
@@ -197,6 +305,21 @@ const loginAdminService = async (email: any, password: any) => {
   }
   if (user.role !== 'admin') {
     throw new AppError('Access denied. This account is not an administrator.', 403);
+  }
+  if (!user.status) {
+    throw new AppError('You are not allowed to login', 400);
+  }
+
+  return createAuthSession(user);
+};
+
+const loginUniversityService = async (email: any, password: any) => {
+  const user = await db.User.findOne({ where: { email: String(email).trim().toLowerCase() } });
+  if (!user || !(await user.login(password))) {
+    throw new AppError('Invalid email or password', 400);
+  }
+  if (user.role !== 'university') {
+    throw new AppError('Access denied. This account is not a university portal user.', 403);
   }
   if (!user.status) {
     throw new AppError('You are not allowed to login', 400);
@@ -326,6 +449,7 @@ export default {
   signupAdmin,
   loginService,
   loginAdminService,
+  loginUniversityService,
   refreshSessionService,
   logoutUserService,
   changePasswordService,

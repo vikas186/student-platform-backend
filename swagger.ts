@@ -27,6 +27,10 @@ const swaggerDefinition = {
     { name: 'Catalog', description: 'Universities & courses (auth required)' },
     { name: 'Student', description: 'Student portal — role `student`' },
     { name: 'Agent', description: 'Agent portal — role `agent`' },
+    {
+      name: 'University',
+      description: 'University portal — role `university` (`Bearer` token): dashboard, partnership, applications review',
+    },
     { name: 'Admin', description: 'Admin workspace — role `admin` only (`Bearer` token)' },
   ],
   components: {
@@ -41,16 +45,20 @@ const swaggerDefinition = {
     schemas: {
       SignupRequest: {
         type: 'object',
-        required: ['role', 'fullName', 'email', 'password', 'confirmPassword'],
+        required: ['role', 'email', 'password', 'confirmPassword'],
         description:
-          'Public signup for **student** or **agent**. Required fields depend on `role`: students must send `phoneNumber` and `targetCountries` (omit agency fields). Agents must send `agencyName` and `primaryMarket` (omit `targetCountries`). `phoneNumber` is optional for agents.',
+          'Public signup. **student**: `fullName`, `phoneNumber`, `targetCountries`. **agent**: `fullName`, `agencyName`, `primaryMarket`. **university**: either **`institutionName` + `country`** (Enroll UI — creates/links institution) **or** **`universityId` + `fullName`** (link existing institution). Do not send both modes.',
         properties: {
           role: {
             type: 'string',
-            enum: ['student', 'agent'],
+            enum: ['student', 'agent', 'university'],
             example: 'student',
           },
-          fullName: { type: 'string', example: 'Alex Johnson' },
+          fullName: {
+            type: 'string',
+            description: 'Required for student/agent. For `university` with `universityId`; optional when using `institutionName`+`country` (defaults to institution name).',
+            example: 'Alex Johnson',
+          },
           email: { type: 'string', format: 'email', example: 'user@example.com' },
           password: { type: 'string', format: 'password', minLength: 8, example: 'SecurePass1' },
           confirmPassword: { type: 'string', format: 'password', example: 'SecurePass1' },
@@ -74,6 +82,25 @@ const swaggerDefinition = {
             type: 'string',
             description: 'Required when `role` is `agent`. Omit for students.',
             example: 'India',
+          },
+          institutionName: {
+            type: 'string',
+            maxLength: 300,
+            description: 'When `role` is **university**: pair with `country` to find or create institution (same as `POST /auth/university/signup`).',
+            example: 'Pacific Northwest University',
+          },
+          country: {
+            type: 'string',
+            maxLength: 120,
+            description: 'When `role` is **university**: country / region with `institutionName`.',
+            example: 'United Kingdom',
+          },
+          universityId: {
+            type: 'integer',
+            minimum: 1,
+            description:
+              'When `role` is **university**: existing institution id; requires **`fullName`** (contact display name). Omit when using `institutionName` + `country`.',
+            example: 42,
           },
         },
       },

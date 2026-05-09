@@ -5,6 +5,7 @@ import catalogRouter from './catalogRoutes';
 import studentRouter from './studentRoutes';
 import agentRouter from './agentRoutes';
 import adminRouter from './adminRoutes';
+import universityRouter from './universityRoutes';
 
 interface Route {
   path: string;
@@ -37,6 +38,10 @@ const defaultRoutes: Route[] = [
   {
     path: '/admin',
     route: adminRouter,
+  },
+  {
+    path: '/university',
+    route: universityRouter,
   },
 ];
 

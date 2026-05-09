@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { jwtAuthMiddleware } from '../middleware/jwtAuth';
 import { requirePermission } from '../middleware/requirePermission';
-import { agentDocumentUpload } from '../middleware/multer';
+import { adminUniversityCatalogUpload, adminUniversityCsvUpload, agentDocumentUpload } from '../middleware/multer';
 import validateMiddleware from '../middleware/validate';
 import {
   getDashboard,
@@ -15,7 +15,11 @@ import {
   patchApplicationStatusUi,
   getApplicationStatusOptions,
   listUniversitiesAdmin,
+  importUniversityCatalog,
+  importUniversityCoursesCsv,
   listCoursesAdmin,
+  createCourseAdmin,
+  patchCourseAdmin,
   createIntakeRow,
   deleteApplication,
   listDeadlines,
@@ -61,6 +65,10 @@ import {
   listAgentsQueryJoiSchema,
   listApplicationsQueryJoiSchema,
   listCoursesQueryJoiSchema,
+  listUniversitiesQueryJoiSchema,
+  universityCoursesImportParamsJoiSchema,
+  createAdminCourseJoiSchema,
+  patchAdminCourseJoiSchema,
   listDeadlinesQueryJoiSchema,
   listPaymentsQueryJoiSchema,
   listUsersQueryJoiSchema,
@@ -92,8 +100,28 @@ adminRouter
   .post('/permissions/reset', requirePermission('roles_permissions', 'edit'), resetPermissionsMatrix)
   .get('/application-status-options', requirePermission('applications', 'view'), getApplicationStatusOptions)
   .get('/search', requirePermission('applications', 'view'), validateMiddleware(globalSearchQueryJoiSchema), globalSearch)
-  .get('/universities', requirePermission('deadlines', 'view'), listUniversitiesAdmin)
+  .get(
+    '/universities',
+    requirePermission('deadlines', 'view'),
+    validateMiddleware(listUniversitiesQueryJoiSchema),
+    listUniversitiesAdmin,
+  )
+  .post(
+    '/universities/import-catalog',
+    requirePermission('deadlines', 'create'),
+    adminUniversityCatalogUpload.single('file'),
+    importUniversityCatalog,
+  )
+  .post(
+    '/universities/:universityId/courses/import-csv',
+    requirePermission('deadlines', 'create'),
+    validateMiddleware(universityCoursesImportParamsJoiSchema),
+    adminUniversityCsvUpload.single('file'),
+    importUniversityCoursesCsv,
+  )
   .get('/courses', requirePermission('deadlines', 'view'), validateMiddleware(listCoursesQueryJoiSchema), listCoursesAdmin)
+  .post('/courses', requirePermission('deadlines', 'create'), validateMiddleware(createAdminCourseJoiSchema), createCourseAdmin)
+  .patch('/courses/:courseId', requirePermission('deadlines', 'edit'), validateMiddleware(patchAdminCourseJoiSchema), patchCourseAdmin)
   .get('/users', requirePermission('users', 'view'), validateMiddleware(listUsersQueryJoiSchema), listUsers)
   .post('/users', requirePermission('users', 'create'), validateMiddleware(createAdminUserJoiSchema), createUser)
   .patch('/users/:userId/role', requirePermission('users', 'edit'), validateMiddleware(patchUserRoleJoiSchema), patchUserRole)

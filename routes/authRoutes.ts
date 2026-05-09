@@ -1,9 +1,11 @@
 import { Router } from 'express';
 import {
   signup,
+  signupUniversityUser,
   signupAdmin,
   loginUser,
   loginAdminUser,
+  loginUniversityUser,
   refreshAccessToken,
   logoutUser,
   logoutAllDevices,
@@ -19,12 +21,15 @@ import {
   loginJoiSchema,
   refreshTokenJoiSchema,
   roleBasedSignupJoiSchema,
+  universitySignupJoiSchema,
 } from '../validations/auth.validation';
 
 const authRouter: Router = Router();
 
 authRouter
   .post('/signup', validateMiddleware(roleBasedSignupJoiSchema), signup)
+  .post('/university/signup', validateMiddleware(universitySignupJoiSchema), signupUniversityUser)
+  .post('/university/login', validateMiddleware(loginJoiSchema), loginUniversityUser)
   .post('/admin/signup', validateMiddleware(adminSignupJoiSchema), signupAdmin)
   .post('/admin/login', validateMiddleware(loginJoiSchema), loginAdminUser)
   .post('/login', loginUser)

@@ -4,11 +4,12 @@
  *   post:
  *     tags:
  *       - Auth
- *     summary: Sign up (student or agent)
+ *     summary: Sign up (student, agent, or university)
  *     description: |
- *       Creates a new **student** or **agent** account based on `role`.
- *       - **student**: requires `phoneNumber` and `targetCountries` (do not send agency fields).
- *       - **agent**: requires `agencyName` and `primaryMarket` (do not send `targetCountries`).
+ *       Creates a new account based on `role`.
+ *       - **student**: requires `fullName`, `phoneNumber` and `targetCountries` (do not send agency fields).
+ *       - **agent**: requires `fullName`, `agencyName` and `primaryMarket` (do not send `targetCountries`).
+ *       - **university**: send **`institutionName`** + **`country`** (Enroll UI — finds or creates institution), **or** **`universityId`** + **`fullName`** (link existing institution). Same validation as `POST /auth/university/signup` when using institution fields.
  *     security: []
  *     requestBody:
  *       required: true
@@ -39,6 +40,15 @@
  *                 confirmPassword: SecurePass1
  *                 agencyName: GlobalEdu Consulting
  *                 primaryMarket: India
+ *             university:
+ *               summary: University signup (institution + country)
+ *               value:
+ *                 role: university
+ *                 email: admissions@pnwu.edu
+ *                 password: SecurePass1
+ *                 confirmPassword: SecurePass1
+ *                 institutionName: Pacific Northwest University
+ *                 country: United Kingdom
  *     responses:
  *       201:
  *         description: Account created successfully
@@ -168,6 +178,70 @@
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/ApiError' }
+ */
+
+/**
+ * @swagger
+ * /api/v1/auth/university/signup:
+ *   post:
+ *     tags:
+ *       - Auth
+ *     summary: University portal sign up (Enroll UI fields)
+ *     description: |
+ *       Matches the Enroll **University** signup form: **email**, **password**, **confirmPassword**,
+ *       **institutionName**, **country** (country / region).
+ *       Finds an existing `University` by case-insensitive name + country or creates one, then creates
+ *       `User` (role `university`, display name = institution name) + **`UniversityProfile`**.
+ *       Does not send `role` (always university). For linking an existing row by id only, use `POST /auth/signup`
+ *       with `role: university`, `universityId`, and `fullName`.
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/UniversitySignupRequest'
+ *           example:
+ *             email: admissions@pnwu.edu
+ *             password: SecurePass1
+ *             confirmPassword: SecurePass1
+ *             institutionName: Pacific Northwest University
+ *             country: United Kingdom
+ *     responses:
+ *       201:
+ *         description: Account created
+ *       400:
+ *         description: Validation error or email taken / university not found
+ */
+
+/**
+ * @swagger
+ * /api/v1/auth/university/login:
+ *   post:
+ *     tags:
+ *       - Auth
+ *     summary: University portal log in
+ *     description: |
+ *       Same body as `/auth/login`, but only succeeds for users with role **university**.
+ *       Returns JWT `token`, opaque `refreshToken`, and `data` (user + permissions). Other roles receive 403.
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/LoginRequest'
+ *     responses:
+ *       200:
+ *         description: University login successful
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/LoginResponse'
+ *       400:
+ *         description: Invalid credentials
+ *       403:
+ *         description: Valid credentials but account is not a university user
  */
 
 /**

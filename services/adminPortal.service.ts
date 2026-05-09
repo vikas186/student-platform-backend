@@ -1,3 +1,4 @@
+import fs from 'fs';
 import path from 'path';
 import { Op, QueryTypes, Sequelize, fn } from 'sequelize';
 import { db } from '../config/database';
@@ -12,6 +13,14 @@ import {
   backendApplicationStatusToUi,
   normalizeApplicationStatusInput,
 } from '../utils/adminUiStatus';
+import { applicationScopeForUniversity } from '../utils/universityApplicationScope';
+import { parseSimpleCsvLines } from '../utils/spreadsheetParse';
+import {
+  buildColumnIndexMap,
+  findCatalogHeaderRowIndex,
+  readCatalogSpreadsheetToMatrix,
+  rowToFeeRanges,
+} from '../utils/universityCatalogImport';
 
 const applicationWhereByIdOrRef = (idOrRef: string) => {
   const t = idOrRef.trim();
@@ -173,8 +182,268 @@ export const getApplicationStatusOptionsForAdmin = () => {
   }));
 };
 
-export const listUniversitiesForAdmin = async () => {
-  return db.University.findAll({ order: [['name', 'ASC']] });
+export const listUniversitiesForAdmin = async (query?: {
+  search?: string;
+  page?: string | number;
+  limit?: string | number;
+}) => {
+  const page = Math.max(1, Number(query?.page) || 1);
+  const limit = Math.min(200, Math.max(1, Number(query?.limit) || 100));
+  const offset = (page - 1) * limit;
+
+  const q = query?.search && String(query.search).trim() ? `%${String(query.search).trim()}%` : null;
+  const where = q
+    ? {
+        [Op.or]: [{ name: { [Op.iLike]: q } }, { country: { [Op.iLike]: q } }],
+      }
+    : undefined;
+
+  const { rows, count } = await db.University.findAndCountAll({
+    where: where ?? {},
+    order: [['name', 'ASC']],
+    limit,
+    offset,
+  });
+
+  const universities = await Promise.all(
+    rows.map(async uni => {
+      const plain = uni.get({ plain: true }) as Record<string, unknown>;
+      const scope = applicationScopeForUniversity(uni.id, uni.name);
+      const [programsCount, applicantsCount, offersCount] = await Promise.all([
+        db.Course.count({ where: { universityId: uni.id } }),
+        db.Application.count({
+          where: { [Op.and]: [scope, { status: { [Op.ne]: 'draft' } }] },
+        }),
+        db.Application.count({
+          where: { [Op.and]: [scope, { status: 'offer_generated' }] },
+        }),
+      ]);
+      return {
+        ...plain,
+        programsCount,
+        applicantsCount,
+        offersCount,
+      };
+    }),
+  );
+
+  return { universities, page, limit, total: count };
+};
+
+const mapCsvHeaderToCourseField = (
+  h: string,
+): 'courseName' | 'degree' | 'fee' | 'duration' | null => {
+  const k = h.trim().toLowerCase().replace(/\s+/g, '_');
+  if (['course_name', 'coursename', 'program', 'course', 'program_name'].includes(k)) {
+    return 'courseName';
+  }
+  if (k === 'degree' || k === 'qualification') {
+    return 'degree';
+  }
+  if (k === 'fee' || k === 'tuition') {
+    return 'fee';
+  }
+  if (k === 'duration' || k === 'length') {
+    return 'duration';
+  }
+  return null;
+};
+
+/**
+ * Bulk-import **courses** for a university from a CSV file (admin “Upload university data”).
+ * Required columns: course name, degree, fee, duration (flexible header names).
+ */
+export const importUniversityCoursesCsvForAdmin = async (
+  universityId: number,
+  file: Express.Multer.File,
+) => {
+  if (!file) {
+    throw new AppError('CSV file is required', 400);
+  }
+  const uid = Number(universityId);
+  if (!Number.isFinite(uid) || uid < 1) {
+    throw new AppError('Invalid universityId', 400);
+  }
+  const uni = await db.University.findByPk(uid);
+  if (!uni) {
+    throw new AppError('University not found', 404);
+  }
+
+  const raw = fs.readFileSync(file.path, 'utf8');
+  const table = parseSimpleCsvLines(raw);
+  if (table.length < 2) {
+    throw new AppError('CSV must include a header row and at least one data row', 400);
+  }
+
+  const headerRow = table[0];
+  const colIndex: Partial<Record<'courseName' | 'degree' | 'fee' | 'duration', number>> = {};
+  headerRow.forEach((cell, idx) => {
+    const f = mapCsvHeaderToCourseField(cell);
+    if (f) {
+      colIndex[f] = idx;
+    }
+  });
+  if (
+    colIndex.courseName == null ||
+    colIndex.degree == null ||
+    colIndex.fee == null ||
+    colIndex.duration == null
+  ) {
+    throw new AppError(
+      'CSV headers must map to course name, degree, fee, and duration (e.g. courseName, degree, fee, duration)',
+      400,
+    );
+  }
+
+  let created = 0;
+  let updated = 0;
+  const rowErrors: { line: number; message: string }[] = [];
+
+  for (let r = 1; r < table.length; r++) {
+    const row = table[r];
+    const courseName = row[colIndex.courseName!]?.trim();
+    const degree = row[colIndex.degree!]?.trim();
+    const feeRaw = row[colIndex.fee!]?.trim();
+    const duration = row[colIndex.duration!]?.trim();
+    if (!courseName && !degree && !feeRaw && !duration) {
+      continue;
+    }
+    if (!courseName || !degree || !duration) {
+      rowErrors.push({ line: r + 1, message: 'Missing course name, degree, or duration' });
+      continue;
+    }
+    const fee = parseFloat(String(feeRaw).replace(/[^0-9.-]/g, ''));
+    if (!Number.isFinite(fee)) {
+      rowErrors.push({ line: r + 1, message: 'Invalid fee' });
+      continue;
+    }
+
+    const [course, isCreated] = await db.Course.findOrCreate({
+      where: { universityId: uid, courseName },
+      defaults: {
+        universityId: uid,
+        courseName,
+        degree,
+        fee,
+        duration,
+      },
+    });
+
+    if (isCreated) {
+      created += 1;
+    } else {
+      course.degree = degree;
+      course.fee = fee;
+      course.duration = duration;
+      await course.save();
+      updated += 1;
+    }
+  }
+
+  try {
+    fs.unlinkSync(file.path);
+  } catch {
+    /* ignore */
+  }
+
+  return {
+    universityId: uid,
+    created,
+    updated,
+    rowErrors,
+    message:
+      rowErrors.length === 0
+        ? 'Import completed'
+        : `Import completed with ${rowErrors.length} row warning(s)`,
+  };
+};
+
+/**
+ * Bulk catalog import: each row is its own university (name + country + fee columns).
+ * No `universityId` — creates or updates institutions and stores **programFeeRanges** (Excel/CSV).
+ */
+export const importUniversityCatalogFileForAdmin = async (file: Express.Multer.File) => {
+  if (!file) {
+    throw new AppError('File is required', 400);
+  }
+
+  let matrix: string[][];
+  try {
+    matrix = readCatalogSpreadsheetToMatrix(file.path);
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    throw new AppError(msg, 400);
+  }
+
+  if (matrix.length < 2) {
+    throw new AppError('File must include a header row and at least one data row', 400);
+  }
+
+  const headerIdx = findCatalogHeaderRowIndex(matrix);
+  const headerRow = (matrix[headerIdx] ?? []).map(c => String(c));
+  const colIndex = buildColumnIndexMap(headerRow);
+
+  if (colIndex.university == null || colIndex.country == null) {
+    throw new AppError(
+      'Could not find University and Country columns. First sheet must include headers such as University, Country, and UG/PG fee columns.',
+      400,
+    );
+  }
+
+  let created = 0;
+  let updated = 0;
+  const rowErrors: { line: number; message: string }[] = [];
+
+  for (let r = headerIdx + 1; r < matrix.length; r++) {
+    const row = matrix[r];
+    if (!row || row.every(c => !String(c ?? '').trim())) {
+      continue;
+    }
+
+    const parsed = rowToFeeRanges(row.map(c => String(c ?? '')), colIndex);
+    if (!parsed) {
+      rowErrors.push({ line: r + 1, message: 'Missing university name or country' });
+      continue;
+    }
+
+    let uni = await db.University.findOne({
+      where: {
+        [Op.and]: [
+          { name: { [Op.iLike]: parsed.name.trim() } },
+          { country: { [Op.iLike]: parsed.country.trim() } },
+        ],
+      },
+    });
+
+    if (!uni) {
+      await db.University.create({
+        name: parsed.name.trim(),
+        country: (parsed.country.trim() || 'General').slice(0, 200),
+        status: true,
+        programFeeRanges: parsed.ranges,
+      });
+      created += 1;
+    } else {
+      await uni.update({ programFeeRanges: parsed.ranges });
+      updated += 1;
+    }
+  }
+
+  try {
+    fs.unlinkSync(file.path);
+  } catch {
+    /* ignore */
+  }
+
+  return {
+    created,
+    updated,
+    rowErrors,
+    message:
+      rowErrors.length === 0
+        ? 'Catalog import completed'
+        : `Catalog import completed with ${rowErrors.length} row warning(s)`,
+  };
 };
 
 export const listCoursesForAdmin = async (universityId: number) => {
@@ -185,6 +454,61 @@ export const listCoursesForAdmin = async (universityId: number) => {
     where: { universityId },
     include: [{ model: db.University, as: 'university', attributes: ['id', 'name', 'country'] }],
     order: [['courseName', 'ASC']],
+  });
+};
+
+export const createCourseForAdmin = async (body: {
+  universityId: number;
+  courseName: string;
+  degree: string;
+  fee: number;
+  duration: string;
+}) => {
+  if (!Number.isFinite(body.universityId) || body.universityId < 1) {
+    throw new AppError('Invalid universityId', 400);
+  }
+  const uni = await db.University.findByPk(body.universityId);
+  if (!uni) {
+    throw new AppError('University not found', 404);
+  }
+  const course = await db.Course.create({
+    universityId: body.universityId,
+    courseName: String(body.courseName).trim(),
+    degree: String(body.degree).trim(),
+    fee: Number(body.fee),
+    duration: String(body.duration).trim(),
+  });
+  return course.reload({
+    include: [{ model: db.University, as: 'university', attributes: ['id', 'name', 'country'] }],
+  });
+};
+
+export const patchCourseForAdmin = async (
+  courseId: number,
+  body: Partial<{ courseName: string; degree: string; fee: number; duration: string }>,
+) => {
+  if (!Number.isFinite(courseId) || courseId < 1) {
+    throw new AppError('Invalid course id', 400);
+  }
+  const c = await db.Course.findByPk(courseId);
+  if (!c) {
+    throw new AppError('Course not found', 404);
+  }
+  if (body.courseName !== undefined) {
+    c.courseName = String(body.courseName).trim();
+  }
+  if (body.degree !== undefined) {
+    c.degree = String(body.degree).trim();
+  }
+  if (body.fee !== undefined) {
+    c.fee = Number(body.fee);
+  }
+  if (body.duration !== undefined) {
+    c.duration = String(body.duration).trim();
+  }
+  await c.save();
+  return c.reload({
+    include: [{ model: db.University, as: 'university', attributes: ['id', 'name', 'country'] }],
   });
 };
 
@@ -582,6 +906,7 @@ type CreateAdminUserBody = {
   phone?: string | null;
   agencyName?: string | null;
   targetCountries?: string[];
+  universityId?: number;
 };
 
 export const createUserForAdmin = async (body: CreateAdminUserBody) => {
@@ -617,6 +942,20 @@ export const createUserForAdmin = async (body: CreateAdminUserBody) => {
       userId: user.id,
       agencyName: agency,
       primaryMarket: null,
+    });
+  } else if (role === 'university') {
+    const uid = body.universityId;
+    if (!uid || !Number.isFinite(uid) || uid < 1) {
+      throw new AppError('universityId is required for university users', 400);
+    }
+    const uni = await db.University.findByPk(uid);
+    if (!uni) {
+      throw new AppError('University not found', 404);
+    }
+    await db.UniversityProfile.create({
+      userId: user.id,
+      universityId: uid,
+      jobTitle: null,
     });
   }
 
@@ -665,6 +1004,12 @@ export const updateUserRoleForAdmin = async (
       agencyName: 'Agency',
       primaryMarket: null,
     });
+  }
+  if (newRole === 'university' && !(await db.UniversityProfile.findOne({ where: { userId } }))) {
+    throw new AppError(
+      'Cannot switch to university role without a university profile. Create a new user with role university and universityId.',
+      400,
+    );
   }
 
   void prev;
@@ -1270,7 +1615,14 @@ export const createUniversityForAdmin = async (body: { name: string; country: st
 
 export const updateUniversityForAdmin = async (
   id: number,
-  body: Partial<{ name: string; country: string; status: boolean }>,
+  body: Partial<{
+    name: string;
+    country: string;
+    status: boolean;
+    agreementPackageReference: string | null;
+    agreementDispatchedAt: string | Date | null;
+    countersignedVerifiedAt: string | Date | null;
+  }>,
 ) => {
   const row = await db.University.findByPk(id);
   if (!row) {
@@ -1284,6 +1636,21 @@ export const updateUniversityForAdmin = async (
   }
   if (body.status !== undefined) {
     row.status = Boolean(body.status);
+  }
+  if (body.agreementPackageReference !== undefined) {
+    const v = body.agreementPackageReference;
+    (row as any).agreementPackageReference =
+      v === null || v === '' ? null : String(v).trim().slice(0, 120);
+  }
+  if (body.agreementDispatchedAt !== undefined) {
+    const v = body.agreementDispatchedAt;
+    (row as any).agreementDispatchedAt =
+      v === null || v === '' ? null : v instanceof Date ? v : new Date(String(v));
+  }
+  if (body.countersignedVerifiedAt !== undefined) {
+    const v = body.countersignedVerifiedAt;
+    (row as any).countersignedVerifiedAt =
+      v === null || v === '' ? null : v instanceof Date ? v : new Date(String(v));
   }
   await row.save();
   return row;

@@ -177,3 +177,135 @@
  *         schema: { type: integer, minimum: 1, maximum: 200 }
  *         description: Omit to return all agents (still sorted/filtered)
  */
+
+/**
+ * @swagger
+ * /api/v1/admin/universities:
+ *   get:
+ *     tags: [Admin]
+ *     summary: List universities (admin grid) with metrics
+ *     description: |
+ *       Each item includes **programsCount** (courses), **applicantsCount** (non-draft applications scoped to the institution),
+ *       and **offersCount** (applications with status `offer_generated`). Optional **search** filters by name or country (ILIKE);
+ *       **page** and **limit** paginate (defaults page=1, limit=100).
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *         description: Search university name or country
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, minimum: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, minimum: 1, maximum: 200 }
+ *     responses:
+ *       200:
+ *         description: data.universities, data.total, data.page, data.limit
+ */
+
+/**
+ * @swagger
+ * /api/v1/admin/universities/import-catalog:
+ *   post:
+ *     tags: [Admin]
+ *     summary: Import university catalog (Excel/CSV, one row per institution)
+ *     description: |
+ *       **No university id in the path** — each data row is a separate institution (name + country + fee matrix).
+ *       Creates or updates `University` by name+country and stores **programFeeRanges** (UG/PG Business, STEM, CS).
+ *       Accepts **.xlsx**, **.xls**, or **.csv** (export/save as UTF-8 CSV from Excel if needed). First sheet is read;
+ *       the header row is auto-detected (rows above titles are skipped). Column titles may match e.g. *University*,
+ *       *Country*, *UG – Business Fees (USD/year)*, *PG – STEM Fees*, etc.
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required: [file]
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       200:
+ *         description: created / updated row counts; optional rowErrors
+ */
+
+/**
+ * @swagger
+ * /api/v1/admin/universities/{universityId}/courses/import-csv:
+ *   post:
+ *     tags: [Admin]
+ *     summary: Import courses for one university (CSV)
+ *     description: |
+ *       For **course rows** linked to a **selected** `universityId` only. For a **full fee matrix** (one row per university, no pre-selected school), use **`POST /admin/universities/import-catalog`** instead.
+ *       Multipart field **file** (`.csv`, max 10 MB). Header row must map to **course name**, **degree**, **fee**, **duration**
+ *       (flexible column names e.g. courseName, program, tuition). Upserts **Course** by `universityId` + course name.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: universityId
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required: [file]
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       200:
+ *         description: created/updated counts and optional rowErrors
+ */
+
+/**
+ * @swagger
+ * /api/v1/admin/courses:
+ *   get:
+ *     tags: [Admin]
+ *     summary: List courses for a university
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: universityId
+ *         required: true
+ *         schema: { type: integer }
+ *   post:
+ *     tags: [Admin]
+ *     summary: Create a course under a university (fee / duration)
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [universityId, courseName, degree, fee, duration]
+ *             properties:
+ *               universityId: { type: integer }
+ *               courseName: { type: string }
+ *               degree: { type: string }
+ *               fee: { type: number }
+ *               duration: { type: string }
+ */
+
+/**
+ * @swagger
+ * /api/v1/admin/courses/{courseId}:
+ *   patch:
+ *     tags: [Admin]
+ *     summary: Patch course catalog fields
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: courseId
+ *         required: true
+ *         schema: { type: integer }
+ */

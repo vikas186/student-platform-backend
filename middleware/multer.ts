@@ -104,4 +104,86 @@ const studentOfferSignedUpload = multer({
   },
 });
 
-export { upload, studentDocumentUpload, agentDocumentUpload, studentOfferSignedUpload };
+/** University countersigned partnership contract — PDF only, max 10 MB. */
+const universityContractStorage: StorageEngine = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    const uploadPath = 'uploads/university-contracts/';
+    fs.mkdirSync(uploadPath, { recursive: true });
+    cb(null, uploadPath);
+  },
+  filename: (_req, file, cb) => {
+    const uniqueName = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}${path.extname(file.originalname)}`;
+    cb(null, uniqueName);
+  },
+});
+
+const universityContractUpload = multer({
+  storage: universityContractStorage,
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (!/\.pdf$/i.test(file.originalname)) {
+      return cb(new multer.MulterError('LIMIT_UNEXPECTED_FILE', 'Only PDF files are allowed.'));
+    }
+    cb(null, true);
+  },
+});
+
+/** Admin: bulk course CSV import for a university (`uploads/admin-university-import/`). */
+const adminUniversityCsvStorage: StorageEngine = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    const uploadPath = 'uploads/admin-university-import/';
+    fs.mkdirSync(uploadPath, { recursive: true });
+    cb(null, uploadPath);
+  },
+  filename: (_req, file, cb) => {
+    const uniqueName = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}${path.extname(file.originalname)}`;
+    cb(null, uniqueName);
+  },
+});
+
+const adminUniversityCsvUpload = multer({
+  storage: adminUniversityCsvStorage,
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (!/\.csv$/i.test(file.originalname)) {
+      return cb(new multer.MulterError('LIMIT_UNEXPECTED_FILE', 'Only CSV files are allowed.'));
+    }
+    cb(null, true);
+  },
+});
+
+/** Admin: full university catalog (Excel/CSV) — one row per institution, fee matrix columns. */
+const adminUniversityCatalogStorage: StorageEngine = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    const uploadPath = 'uploads/admin-university-catalog/';
+    fs.mkdirSync(uploadPath, { recursive: true });
+    cb(null, uploadPath);
+  },
+  filename: (_req, file, cb) => {
+    const uniqueName = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}${path.extname(file.originalname)}`;
+    cb(null, uniqueName);
+  },
+});
+
+const adminUniversityCatalogUpload = multer({
+  storage: adminUniversityCatalogStorage,
+  limits: { fileSize: 25 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (!/\.(csv|xlsx|xls)$/i.test(file.originalname)) {
+      return cb(
+        new multer.MulterError('LIMIT_UNEXPECTED_FILE', 'Only .csv, .xlsx, or .xls files are allowed.'),
+      );
+    }
+    cb(null, true);
+  },
+});
+
+export {
+  upload,
+  studentDocumentUpload,
+  agentDocumentUpload,
+  studentOfferSignedUpload,
+  universityContractUpload,
+  adminUniversityCsvUpload,
+  adminUniversityCatalogUpload,
+};

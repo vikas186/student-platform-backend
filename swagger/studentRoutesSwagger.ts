@@ -254,7 +254,7 @@
  *                 description: Alternative to applicationId (same APP-xxxxx format)
  *               standalone:
  *                 type: string
- *                 description: 'true' or '1' to upload without linking to an application
+ *                 description: Send true or 1 for standalone upload without linking to an application
  *               documentType:
  *                 type: string
  *                 example: passport_id
