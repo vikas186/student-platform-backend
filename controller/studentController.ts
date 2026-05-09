@@ -202,7 +202,7 @@ export const listUniversities = catchAsyncError(async (req: Request, res: Respon
 });
 
 export const getUniversity = catchAsyncError(async (req: Request, res: Response) => {
-  const { universityId } = req.params;
+  const universityId = req.params.universityId as string;
   const id = parseInt(universityId, 10);
   if (Number.isNaN(id)) throw new AppError('Invalid university id', 400);
   const data = await studentPortal.getStudentUniversityById(id);
