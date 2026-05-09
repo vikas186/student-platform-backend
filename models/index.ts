@@ -6,6 +6,7 @@ import UniversityModel from './University.model';
 import CourseModel from './Course.model';
 import StudentProfileModel from './StudentProfile.model';
 import AgentProfileModel from './AgentProfile.model';
+import UniversityProfileModel from './UniversityProfile.model';
 import ApplicationModel from './Application.model';
 import DocumentModel from './Document.model';
 import OfferLetterModel from './OfferLetter.model';
@@ -28,6 +29,7 @@ interface Db {
   Course: ReturnType<typeof CourseModel>;
   StudentProfile: ReturnType<typeof StudentProfileModel>;
   AgentProfile: ReturnType<typeof AgentProfileModel>;
+  UniversityProfile: ReturnType<typeof UniversityProfileModel>;
   Application: ReturnType<typeof ApplicationModel>;
   Document: ReturnType<typeof DocumentModel>;
   OfferLetter: ReturnType<typeof OfferLetterModel>;
@@ -54,6 +56,7 @@ const db: Db = {
   Course: CourseModel(sequelize),
   StudentProfile: StudentProfileModel(sequelize),
   AgentProfile: AgentProfileModel(sequelize),
+  UniversityProfile: UniversityProfileModel(sequelize),
   Application: ApplicationModel(sequelize),
   Document: DocumentModel(sequelize),
   OfferLetter: OfferLetterModel(sequelize),

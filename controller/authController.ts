@@ -9,11 +9,33 @@ import { isUuid } from '../utils/isUuid';
 
 const signup = catchAsyncError(async (req: Request, res: Response) => {
   const user = await authService.signupByRole(req.body);
+  const role = req.body.role as string;
   const message =
-    req.body.role === 'agent' ? 'Agent account created successfully' : 'Student account created successfully';
+    role === 'agent'
+      ? 'Agent account created successfully'
+      : role === 'university'
+        ? 'University account created successfully'
+        : 'Student account created successfully';
   res.status(201).json({
     success: true,
     message,
+    data: { user },
+  });
+});
+
+const signupUniversityUser = catchAsyncError(async (req: Request, res: Response) => {
+  const user = await authService.signupByRole({
+    role: 'university',
+    fullName: typeof req.body.fullName === 'string' ? req.body.fullName : '',
+    email: req.body.email,
+    password: req.body.password,
+    universityId: req.body.universityId,
+    institutionName: req.body.institutionName,
+    country: req.body.country,
+  });
+  res.status(201).json({
+    success: true,
+    message: 'University account created successfully',
     data: { user },
   });
 });
@@ -45,6 +67,18 @@ const loginAdminUser = catchAsyncError(async (req: Request, res: Response) => {
   res.status(200).json({
     success: true,
     message: 'Admin login successful',
+    token,
+    refreshToken,
+    data: user,
+  });
+});
+
+const loginUniversityUser = catchAsyncError(async (req: Request, res: Response) => {
+  const { email, password } = req.body;
+  const { token, refreshToken, user } = await authService.loginUniversityService(email, password);
+  res.status(200).json({
+    success: true,
+    message: 'University login successful',
     token,
     refreshToken,
     data: user,
@@ -138,8 +172,10 @@ const deleteUser = catchAsyncError(async (req: Request, res: Response) => {
 export {
   loginUser,
   loginAdminUser,
+  loginUniversityUser,
   refreshAccessToken,
   signup,
+  signupUniversityUser,
   signupAdmin,
   logoutUser,
   changePassword,

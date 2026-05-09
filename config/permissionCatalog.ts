@@ -130,9 +130,9 @@ export const DEFAULT_PERMISSION_MATRIX: Record<UserRole, Record<string, Record<s
   },
   admin: buildFullAccessForCatalog(),
   university: {
-    applications: { view: true, create: false, edit: false, approve: false },
+    applications: { view: true, create: false, edit: true, approve: false },
     users: { view: false, create: false, edit: false, delete: false },
-    commission_slabs: { view: false, create: false, edit: false, delete: false },
+    commission_slabs: { view: true, create: false, edit: false, delete: false },
     subscriptions: { view: false, create: false, edit: false, delete: false },
     deadlines: { view: false, create: false, edit: false, delete: false },
     payments: { view: false, create: false, edit: false, approve: false },

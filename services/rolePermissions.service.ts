@@ -48,6 +48,23 @@ export const ensureAdminHasAllCatalogPermissions = async (): Promise<void> => {
   }
 };
 
+/** Portal review + commission read for role `university` (aligned with DEFAULT_PERMISSION_MATRIX). */
+export const ensureUniversityPortalPermissions = async (): Promise<void> => {
+  await seedRolePermissionsIfEmpty();
+  const cells: { moduleKey: string; actionKey: string }[] = [
+    { moduleKey: 'applications', actionKey: 'view' },
+    { moduleKey: 'applications', actionKey: 'edit' },
+    { moduleKey: 'commission_slabs', actionKey: 'view' },
+  ];
+  for (const c of cells) {
+    const [row] = await db.RolePermission.findOrCreate({
+      where: { role: 'university', moduleKey: c.moduleKey, actionKey: c.actionKey },
+      defaults: { allowed: true },
+    });
+    await row.update({ allowed: true });
+  }
+};
+
 const cloneRoleMatrix = (m: Record<string, Record<string, boolean>>): Record<string, Record<string, boolean>> => {
   const o: Record<string, Record<string, boolean>> = {};
   for (const k of Object.keys(m)) {

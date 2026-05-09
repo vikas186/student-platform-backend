@@ -32,6 +32,11 @@ const createAdminUserJoiSchema = {
       then: Joi.array().items(Joi.string().trim()).optional(),
       otherwise: Joi.forbidden(),
     }),
+    universityId: Joi.when('role', {
+      is: 'university',
+      then: Joi.number().integer().positive().required(),
+      otherwise: Joi.forbidden(),
+    }),
   }),
 };
 
@@ -166,6 +171,9 @@ const patchUniversityJoiSchema = {
     name: Joi.string().trim().min(1).max(300).optional(),
     country: Joi.string().trim().min(1).max(120).optional(),
     status: Joi.boolean().optional(),
+    agreementPackageReference: Joi.string().trim().max(120).optional().allow(null, ''),
+    agreementDispatchedAt: Joi.alternatives().try(Joi.date(), Joi.string().isoDate()).optional().allow(null),
+    countersignedVerifiedAt: Joi.alternatives().try(Joi.date(), Joi.string().isoDate()).optional().allow(null),
   }).min(1),
 };
 
@@ -185,6 +193,46 @@ const listCoursesQueryJoiSchema = {
   query: Joi.object({
     universityId: Joi.number().integer().positive().required(),
   }),
+};
+
+/** Admin Universities grid — search by name/country + pagination; metrics included in response. */
+const listUniversitiesQueryJoiSchema = {
+  query: Joi.object().keys({
+    search: Joi.string().trim().max(300).optional().allow(''),
+    page: Joi.alternatives()
+      .try(Joi.number().integer().min(1), Joi.string().pattern(/^\d+$/))
+      .optional(),
+    limit: Joi.alternatives()
+      .try(Joi.number().integer().min(1).max(200), Joi.string().pattern(/^\d+$/))
+      .optional(),
+  }),
+};
+
+const universityCoursesImportParamsJoiSchema = {
+  params: Joi.object().keys({
+    universityId: Joi.alternatives()
+      .try(Joi.number().integer().positive(), Joi.string().pattern(/^\d+$/))
+      .required(),
+  }),
+};
+
+const createAdminCourseJoiSchema = {
+  body: Joi.object({
+    universityId: Joi.number().integer().positive().required(),
+    courseName: Joi.string().trim().min(1).max(500).required(),
+    degree: Joi.string().trim().min(1).max(200).required(),
+    fee: Joi.number().min(0).required(),
+    duration: Joi.string().trim().min(1).max(120).required(),
+  }),
+};
+
+const patchAdminCourseJoiSchema = {
+  body: Joi.object({
+    courseName: Joi.string().trim().min(1).max(500).optional(),
+    degree: Joi.string().trim().min(1).max(200).optional(),
+    fee: Joi.number().min(0).optional(),
+    duration: Joi.string().trim().min(1).max(120).optional(),
+  }).or('courseName', 'degree', 'fee', 'duration'),
 };
 
 const intakeRowJoiSchema = {
@@ -236,6 +284,10 @@ export {
   globalSearchQueryJoiSchema,
   patchApplicationStatusUiJoiSchema,
   listCoursesQueryJoiSchema,
+  listUniversitiesQueryJoiSchema,
+  universityCoursesImportParamsJoiSchema,
+  createAdminCourseJoiSchema,
+  patchAdminCourseJoiSchema,
   intakeRowJoiSchema,
   commissionSlabRichJoiSchema,
   patchAgentSubscriptionJoiSchema,

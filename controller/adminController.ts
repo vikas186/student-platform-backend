@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { catchAsyncError } from '../middleware/catchAsyncError';
 import constant from '../constant';
+import AppError from '../utils/errorHandler';
 import * as adminPortal from '../services/adminPortal.service';
 import * as rolePermissions from '../services/rolePermissions.service';
 import { pickOptionalTrimmedString } from '../utils/requestFields';
@@ -100,11 +101,38 @@ export const patchApplicationStatusUi = catchAsyncError(async (req: Request, res
   });
 });
 
-export const listUniversitiesAdmin = catchAsyncError(async (_req: Request, res: Response) => {
-  const universities = await adminPortal.listUniversitiesForAdmin();
+export const listUniversitiesAdmin = catchAsyncError(async (req: Request, res: Response) => {
+  const result = await adminPortal.listUniversitiesForAdmin(req.query as Record<string, unknown>);
   res.status(constant.msgCode.successCode).json({
     success: true,
-    data: { universities },
+    data: result,
+  });
+});
+
+export const importUniversityCatalog = catchAsyncError(async (req: Request, res: Response) => {
+  const file = req.file as Express.Multer.File | undefined;
+  if (!file) {
+    throw new AppError('Catalog file is required (field name: file). Use .xlsx, .xls, or .csv.', 400);
+  }
+  const result = await adminPortal.importUniversityCatalogFileForAdmin(file);
+  res.status(constant.msgCode.successCode).json({
+    success: true,
+    message: result.message,
+    data: result,
+  });
+});
+
+export const importUniversityCoursesCsv = catchAsyncError(async (req: Request, res: Response) => {
+  const uid = Number((req.params as { universityId: string }).universityId);
+  const file = req.file as Express.Multer.File | undefined;
+  if (!file) {
+    throw new AppError('CSV file is required (field name: file)', 400);
+  }
+  const result = await adminPortal.importUniversityCoursesCsvForAdmin(uid, file);
+  res.status(constant.msgCode.successCode).json({
+    success: true,
+    message: result.message,
+    data: result,
   });
 });
 
@@ -114,6 +142,25 @@ export const listCoursesAdmin = catchAsyncError(async (req: Request, res: Respon
   res.status(constant.msgCode.successCode).json({
     success: true,
     data: { courses },
+  });
+});
+
+export const createCourseAdmin = catchAsyncError(async (req: Request, res: Response) => {
+  const course = await adminPortal.createCourseForAdmin(req.body);
+  res.status(201).json({
+    success: true,
+    message: 'Course created',
+    data: { course },
+  });
+});
+
+export const patchCourseAdmin = catchAsyncError(async (req: Request, res: Response) => {
+  const courseId = Number((req.params as any).courseId);
+  const course = await adminPortal.patchCourseForAdmin(courseId, req.body);
+  res.status(constant.msgCode.successCode).json({
+    success: true,
+    message: 'Course updated',
+    data: { course },
   });
 });
 

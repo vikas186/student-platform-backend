@@ -21,6 +21,7 @@ export default (sequelize: Sequelize) => {
     static associate(models: any) {
       User.hasOne(models.StudentProfile, { foreignKey: 'userId', as: 'studentProfile', onDelete: 'CASCADE' });
       User.hasOne(models.AgentProfile, { foreignKey: 'userId', as: 'agentProfile', onDelete: 'CASCADE' });
+      User.hasOne(models.UniversityProfile, { foreignKey: 'userId', as: 'universityProfile', onDelete: 'CASCADE' });
       User.hasMany(models.Token, { foreignKey: 'userId', onDelete: 'CASCADE' });
       User.hasMany(models.PasswordResetToken, { foreignKey: 'userId', as: 'resetTokens', onDelete: 'CASCADE' });
       User.hasMany(models.Payment, { foreignKey: 'userId', onDelete: 'CASCADE' });

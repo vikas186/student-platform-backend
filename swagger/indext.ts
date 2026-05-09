@@ -9,4 +9,6 @@
  *     description: Universities and courses (authenticated)
  *   - name: Student
  *     description: Student portal — applications, documents, profile
+ *   - name: University
+ *     description: University portal — dashboard, partnership, applications review
  */
