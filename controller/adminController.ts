@@ -34,8 +34,9 @@ export const createUser = catchAsyncError(async (req: Request, res: Response) =>
 });
 
 export const patchUserRole = catchAsyncError(async (req: Request, res: Response) => {
+  const userId = req.params.userId as string;
   const actor = req.user as { id?: string };
-  const user = await adminPortal.updateUserRoleForAdmin(req.params.userId, req.body.role, actor.id || '');
+  const user = await adminPortal.updateUserRoleForAdmin(userId, req.body.role, actor.id || '');
   res.status(constant.msgCode.successCode).json({
     success: true,
     message: 'Role updated',
@@ -44,8 +45,9 @@ export const patchUserRole = catchAsyncError(async (req: Request, res: Response)
 });
 
 export const deleteUser = catchAsyncError(async (req: Request, res: Response) => {
+  const userId = req.params.userId as string;
   const actor = req.user as { id?: string };
-  await adminPortal.deleteUserForAdmin(req.params.userId, actor.id || '');
+  await adminPortal.deleteUserForAdmin(userId, actor.id || '');
   res.status(constant.msgCode.successCode).json({
     success: true,
     message: 'User deleted',
@@ -62,7 +64,8 @@ export const listApplications = catchAsyncError(async (req: Request, res: Respon
 });
 
 export const getApplication = catchAsyncError(async (req: Request, res: Response) => {
-  const app = await adminPortal.getApplicationForAdmin(req.params.applicationId);
+  const applicationId = req.params.applicationId as string;
+  const app = await adminPortal.getApplicationForAdmin(applicationId);
   res.status(constant.msgCode.successCode).json({
     success: true,
     data: { application: app },
@@ -70,8 +73,9 @@ export const getApplication = catchAsyncError(async (req: Request, res: Response
 });
 
 export const patchApplicationStatus = catchAsyncError(async (req: Request, res: Response) => {
+  const applicationId = req.params.applicationId as string;
   const app = await adminPortal.updateApplicationStatusForAdmin(
-    req.params.applicationId,
+    applicationId,
     req.body.status,
   );
   res.status(constant.msgCode.successCode).json({
@@ -90,8 +94,9 @@ export const getApplicationStatusOptions = catchAsyncError(async (_req: Request,
 });
 
 export const patchApplicationStatusUi = catchAsyncError(async (req: Request, res: Response) => {
+  const applicationId = req.params.applicationId as string;
   const app = await adminPortal.updateApplicationStatusFromUiForAdmin(
-    req.params.applicationId,
+    applicationId,
     req.body.uiStatus,
   );
   res.status(constant.msgCode.successCode).json({
@@ -223,7 +228,8 @@ export const patchAgentSubscription = catchAsyncError(async (req: Request, res: 
 });
 
 export const deleteApplication = catchAsyncError(async (req: Request, res: Response) => {
-  await adminPortal.deleteApplicationForAdmin(req.params.applicationId);
+  const applicationId = req.params.applicationId as string;
+  await adminPortal.deleteApplicationForAdmin(applicationId);
   res.status(constant.msgCode.successCode).json({
     success: true,
     message: 'Application deleted',
@@ -284,8 +290,9 @@ export const createOfferLetter = catchAsyncError(async (req: Request, res: Respo
 });
 
 export const uploadOfferLetterFile = catchAsyncError(async (req: Request, res: Response) => {
+  const offerLetterId = req.params.offerLetterId as string;
   const file = req.file as Express.Multer.File | undefined;
-  const letter = await adminPortal.uploadOfferLetterFileForAdmin(req.params.offerLetterId, file as Express.Multer.File);
+  const letter = await adminPortal.uploadOfferLetterFileForAdmin(offerLetterId, file as Express.Multer.File);
   res.status(constant.msgCode.successCode).json({
     success: true,
     message: 'File uploaded',
@@ -294,7 +301,8 @@ export const uploadOfferLetterFile = catchAsyncError(async (req: Request, res: R
 });
 
 export const deleteOfferLetter = catchAsyncError(async (req: Request, res: Response) => {
-  await adminPortal.deleteOfferLetterForAdmin(req.params.offerLetterId);
+  const offerLetterId = req.params.offerLetterId as string;
+  await adminPortal.deleteOfferLetterForAdmin(offerLetterId);
   res.status(constant.msgCode.successCode).json({
     success: true,
     message: 'Offer letter deleted',
