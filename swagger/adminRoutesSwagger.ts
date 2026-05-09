@@ -180,6 +180,87 @@
 
 /**
  * @swagger
+ * /api/v1/admin/agents/agreements:
+ *   get:
+ *     tags: [Admin]
+ *     summary: List agent partnership agreements (queue)
+ *     description: |
+ *       Defaults to the **submitted** queue (agents who have uploaded a signed copy
+ *       and are awaiting admin approval). Use `status` to view other states.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [pending, submitted, approved, rejected]
+ *           default: submitted
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, minimum: 1, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+ *     responses:
+ *       200:
+ *         description: OK
+ */
+
+/**
+ * @swagger
+ * /api/v1/admin/agents/{agentProfileId}/agreement/approve:
+ *   post:
+ *     tags: [Admin]
+ *     summary: Approve an agent's signed agreement (unlocks their portal)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: agentProfileId
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Approved
+ *       400:
+ *         description: Agent has not submitted a signed agreement yet
+ *       404:
+ *         description: Agent profile not found
+ */
+
+/**
+ * @swagger
+ * /api/v1/admin/agents/{agentProfileId}/agreement/reject:
+ *   post:
+ *     tags: [Admin]
+ *     summary: Reject an agent's signed agreement (agent can re-upload)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: agentProfileId
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               reason:
+ *                 type: string
+ *                 maxLength: 2000
+ *                 description: Optional human-readable reason shown to the agent
+ *     responses:
+ *       200:
+ *         description: Rejected
+ *       400:
+ *         description: Agreement is not in a rejectable state
+ *       404:
+ *         description: Agent profile not found
+ */
+
+/**
+ * @swagger
  * /api/v1/admin/universities:
  *   get:
  *     tags: [Admin]

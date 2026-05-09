@@ -38,4 +38,18 @@ const listApplicationsQueryJoiSchema = {
   }),
 };
 
-export { studentProfilePatchJoiSchema, applicationBodyJoiSchema, listApplicationsQueryJoiSchema };
+const universitiesQueryJoiSchema = {
+  query: Joi.object().keys({
+    search: Joi.string().trim().max(200).optional().allow(''),
+    country: Joi.string().trim().max(120).optional().allow(''),
+    page: Joi.number().integer().min(1).optional(),
+    limit: Joi.number().integer().min(1).max(200).optional(),
+  }),
+};
+
+export {
+  studentProfilePatchJoiSchema,
+  applicationBodyJoiSchema,
+  listApplicationsQueryJoiSchema,
+  universitiesQueryJoiSchema,
+};

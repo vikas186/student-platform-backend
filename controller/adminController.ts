@@ -332,6 +332,45 @@ export const listPayments = catchAsyncError(async (req: Request, res: Response) 
   });
 });
 
+export const listAgentAgreements = catchAsyncError(async (req: Request, res: Response) => {
+  const result = await adminPortal.listAgentAgreementsForAdmin(req.query as any);
+  res.status(constant.msgCode.successCode).json({
+    success: true,
+    message: 'Agent agreements fetched',
+    data: result.agreements,
+    meta: { page: result.page, limit: result.limit, total: result.total, status: result.status },
+  });
+});
+
+export const approveAgentAgreement = catchAsyncError(async (req: Request, res: Response) => {
+  const actor = req.user as { id?: string };
+  const id = Number(req.params.agentProfileId);
+  if (!Number.isFinite(id) || id < 1) {
+    throw new AppError('Invalid agent profile id', 400);
+  }
+  const data = await adminPortal.approveAgentAgreement(id, actor.id || '');
+  res.status(constant.msgCode.successCode).json({
+    success: true,
+    message: 'Agreement approved',
+    data,
+  });
+});
+
+export const rejectAgentAgreement = catchAsyncError(async (req: Request, res: Response) => {
+  const actor = req.user as { id?: string };
+  const id = Number(req.params.agentProfileId);
+  if (!Number.isFinite(id) || id < 1) {
+    throw new AppError('Invalid agent profile id', 400);
+  }
+  const reason = pickOptionalTrimmedString(req.body as Record<string, unknown>, ['reason']) ?? null;
+  const data = await adminPortal.rejectAgentAgreement(id, actor.id || '', reason);
+  res.status(constant.msgCode.successCode).json({
+    success: true,
+    message: 'Agreement rejected',
+    data,
+  });
+});
+
 export const listCommissions = catchAsyncError(async (_req: Request, res: Response) => {
   const rows = await adminPortal.listCommissionsForAdmin();
   res.status(constant.msgCode.successCode).json({

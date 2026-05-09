@@ -43,6 +43,24 @@ const requireStudentProfile = async (userId: string) => {
   return profile;
 };
 
+/**
+ * If `universityName` matches an active admin-uploaded university (case-insensitive, trimmed),
+ * return that university's country as the canonical value. Otherwise return null and let
+ * caller fall back to the body value. Prevents the frontend from "defaulting" the country
+ * to e.g. the student's targetCountries[0] when they've actually picked a university.
+ */
+const resolveCountryFromUniversityName = async (
+  universityName: string | null | undefined,
+): Promise<string | null> => {
+  const name = typeof universityName === 'string' ? universityName.trim() : '';
+  if (!name) return null;
+  const uni = await db.University.findOne({
+    where: { name: { [Op.iLike]: name }, status: true },
+    attributes: ['id', 'country'],
+  });
+  return uni?.country?.trim() || null;
+};
+
 const buildMergedProfile = (user: any, profile: any) => ({
   id: user.id,
   fullName: user.name,
@@ -188,14 +206,17 @@ export const createStudentApplication = async (
 ) => {
   const sp = await db.StudentProfile.findByPk(studentProfileId);
   const linkedAgentId = sp?.agentProfileId ?? null;
+  const uniName = body.universityName?.trim() || null;
+  const uniCountry = await resolveCountryFromUniversityName(uniName);
+  const fallbackCountry = body.country?.trim() || null;
   return db.Application.create({
     studentId: studentProfileId,
     agentId: linkedAgentId,
     courseId: null,
-    universityName: body.universityName?.trim() || null,
+    universityName: uniName,
     programName: body.programName?.trim() || null,
     notes: body.notes?.trim() || null,
-    country: body.country?.trim() || null,
+    country: uniCountry ?? fallbackCountry,
     status: 'draft',
   });
 };
@@ -222,6 +243,17 @@ export const updateStudentApplication = async (
   if (body.programName !== undefined) app.programName = body.programName?.trim() || null;
   if (body.notes !== undefined) app.notes = body.notes?.trim() || null;
   if (body.country !== undefined) app.country = body.country?.trim() || null;
+
+  // If university is set/changed and matches an admin university, the country must follow it
+  // (avoids the frontend leaking targetCountries[0] / stale defaults like "Canada" into a
+  // submission for a non-Canadian university).
+  if (app.universityName) {
+    const uniCountry = await resolveCountryFromUniversityName(app.universityName);
+    if (uniCountry) {
+      app.country = uniCountry;
+    }
+  }
+
   await app.save();
   return app;
 };
@@ -240,6 +272,15 @@ export const submitStudentApplication = async (studentProfileId: number, idOrRef
   if (sp?.agentProfileId && app.agentId == null) {
     app.agentId = sp.agentProfileId;
   }
+
+  // Final guard at submit time: pin country to the university's country if the
+  // university is in the admin catalog. Stops accidental "Canada"-style defaults
+  // from the form ever being persisted on a submitted application.
+  const uniCountry = await resolveCountryFromUniversityName(app.universityName);
+  if (uniCountry) {
+    app.country = uniCountry;
+  }
+
   app.status = 'submitted';
   await app.save();
   return app;
@@ -447,6 +488,90 @@ export const uploadStudentSignedOfferLetterForApplication = async (
   letter.status = 'signed';
   await letter.save();
   return letter;
+};
+
+/** Public-facing university fields a student is allowed to see (excludes admin agreement/contract internals). */
+const STUDENT_UNIVERSITY_ATTRIBUTES = [
+  'id',
+  'name',
+  'country',
+  'status',
+  'programFeeRanges',
+  'createdAt',
+  'updatedAt',
+] as const;
+
+/**
+ * List active universities uploaded by admin. Visible to authenticated students for browsing
+ * before creating an application. Supports pagination, free-text search (name/country) and a country filter.
+ */
+export const listStudentUniversities = async (query: {
+  search?: string;
+  country?: string;
+  page?: string | number;
+  limit?: string | number;
+}) => {
+  const page = Math.max(1, Number(query.page) || 1);
+  const limit = Math.min(200, Math.max(1, Number(query.limit) || 50));
+  const offset = (page - 1) * limit;
+
+  const where: Record<string, unknown> = { status: true };
+  const andClauses: Record<string, unknown>[] = [];
+
+  if (query.country && String(query.country).trim()) {
+    andClauses.push({ country: { [Op.iLike]: `%${String(query.country).trim()}%` } });
+  }
+  if (query.search && String(query.search).trim()) {
+    const q = `%${String(query.search).trim()}%`;
+    andClauses.push({
+      [Op.or]: [{ name: { [Op.iLike]: q } }, { country: { [Op.iLike]: q } }],
+    });
+  }
+  if (andClauses.length > 0) {
+    (where as any)[Op.and] = andClauses;
+  }
+
+  const { rows, count } = await db.University.findAndCountAll({
+    where,
+    attributes: STUDENT_UNIVERSITY_ATTRIBUTES as unknown as string[],
+    order: [['name', 'ASC']],
+    limit,
+    offset,
+  });
+
+  const universities = await Promise.all(
+    rows.map(async uni => {
+      const plain = uni.get({ plain: true }) as Record<string, unknown>;
+      const programsCount = await db.Course.count({ where: { universityId: uni.id } });
+      return { ...plain, programsCount };
+    }),
+  );
+
+  return { universities, page, limit, total: count };
+};
+
+/** Single active university details + its course catalog (read-only) for the student portal. */
+export const getStudentUniversityById = async (universityId: number) => {
+  if (!Number.isFinite(universityId) || universityId < 1) {
+    throw new AppError('Invalid university id', 400);
+  }
+  const uni = await db.University.findOne({
+    where: { id: universityId, status: true },
+    attributes: STUDENT_UNIVERSITY_ATTRIBUTES as unknown as string[],
+  });
+  if (!uni) throw new AppError('University not found', 404);
+
+  const courses = await db.Course.findAll({
+    where: { universityId: uni.id },
+    attributes: ['id', 'courseName', 'degree', 'fee', 'duration'],
+    order: [['courseName', 'ASC']],
+  });
+
+  return {
+    ...(uni.get({ plain: true }) as Record<string, unknown>),
+    programsCount: courses.length,
+    courses,
+  };
 };
 
 export const deleteStudentDocument = async (studentProfileId: number, documentId: string) => {

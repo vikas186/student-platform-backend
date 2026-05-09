@@ -1,6 +1,7 @@
-import { Request, Response } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import constant from '../constant';
 import { catchAsyncError } from '../middleware/catchAsyncError';
+import AppError from '../utils/errorHandler';
 import * as agentPortal from '../services/agentPortal.service';
 import { pickOptionalPositiveInt, pickOptionalTrimmedString } from '../utils/requestFields';
 
@@ -9,6 +10,42 @@ const agentProfileIdFromReq = async (req: Request): Promise<number> => {
   const profile = await agentPortal.requireAgentProfile(user.id);
   return profile.id;
 };
+
+export const getAgreementStatus = catchAsyncError(async (req: Request, res: Response) => {
+  const user: any = req.user;
+  const data = await agentPortal.getAgentAgreementStatus(user.id);
+  res.status(constant.msgCode.successCode).json({
+    success: constant.msgType.successStatus,
+    message: 'Agreement status',
+    data,
+  });
+});
+
+export const uploadAgreement = catchAsyncError(async (req: Request, res: Response) => {
+  const user: any = req.user;
+  const file = req.file as Express.Multer.File | undefined;
+  if (!file) {
+    throw new AppError('PDF file is required (field name: file)', 400);
+  }
+  const data = await agentPortal.uploadAgentSignedAgreement(user.id, file);
+  res.status(constant.msgCode.successCode).json({
+    success: constant.msgType.successStatus,
+    message: 'Signed agreement uploaded. Awaiting admin approval.',
+    data,
+  });
+});
+
+/**
+ * Gate middleware for the rest of the agent portal — must run AFTER the agreement
+ * endpoints so the agent can still see status / upload while the gate is active.
+ */
+export const requireAgreementApproved = catchAsyncError(
+  async (req: Request, _res: Response, next: NextFunction) => {
+    const user: any = req.user;
+    await agentPortal.assertAgentAgreementApproved(user.id);
+    next();
+  },
+);
 
 export const getAgentProfile = catchAsyncError(async (req: Request, res: Response) => {
   const user: any = req.user;

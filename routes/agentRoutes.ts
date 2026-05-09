@@ -30,10 +30,13 @@ import {
   discoveryUniversities,
   discoveryCourses,
   globalSearch,
+  getAgreementStatus,
+  uploadAgreement,
+  requireAgreementApproved,
 } from '../controller/agentController';
 import { jwtAuthMiddleware } from '../middleware/jwtAuth';
 import { requirePermission } from '../middleware/requirePermission';
-import { agentDocumentUpload } from '../middleware/multer';
+import { agentAgreementUpload, agentDocumentUpload } from '../middleware/multer';
 import validateMiddleware from '../middleware/validate';
 import {
   listApplicationsQueryJoiSchema,
@@ -56,6 +59,20 @@ import {
 const agentRouter = Router();
 
 agentRouter.use(jwtAuthMiddleware(['agent']));
+
+/**
+ * Agreement workflow — these MUST be reachable even before admin approval, otherwise
+ * the agent has no way to see the gate message or upload the signed copy.
+ */
+agentRouter
+  .get('/agreement', getAgreementStatus)
+  .post('/agreement/signed', agentAgreementUpload.single('file'), uploadAgreement);
+
+/**
+ * Everything below this line requires the agent's partnership agreement to be
+ * approved by admin. The gate returns 403 with a `Portal locked` message until then.
+ */
+agentRouter.use(requireAgreementApproved);
 
 agentRouter
   .get('/profile', getAgentProfile)
