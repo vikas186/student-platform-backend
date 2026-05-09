@@ -13,7 +13,7 @@ type SignupStudentBody = {
   fullName: string;
   email: string;
   password: string;
-  phoneNumber: string;
+  phoneNumber?: string | null;
   targetCountries: string[];
 };
 
@@ -22,12 +22,15 @@ const signupStudent = async (body: SignupStudentBody) => {
     throw new AppError('Email already taken', 400);
   }
 
+  const phone =
+    body.phoneNumber && String(body.phoneNumber).trim() !== '' ? String(body.phoneNumber).trim() : null;
+
   const user = await db.User.create({
     name: body.fullName,
     email: body.email,
     password: body.password,
     role: 'student',
-    phone: body.phoneNumber,
+    phone,
     status: true,
   });
 
@@ -192,7 +195,7 @@ const signupByRole = async (body: SignupByRoleBody) => {
       fullName: body.fullName as string,
       email: body.email,
       password: body.password,
-      phoneNumber: body.phoneNumber as string,
+      phoneNumber: body.phoneNumber,
       targetCountries: body.targetCountries as string[],
     });
   }
