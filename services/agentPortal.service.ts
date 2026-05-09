@@ -172,6 +172,81 @@ export const requireAgentProfile = async (userId: string) => {
   return profile;
 };
 
+const AGREEMENT_PENDING_MESSAGE =
+  'We have sent the partnership agreement to your email. Please sign and upload the signed copy to continue.';
+const AGREEMENT_SUBMITTED_MESSAGE =
+  'Your signed agreement has been received and is pending admin approval. The dashboard will unlock once it is approved.';
+const AGREEMENT_REJECTED_MESSAGE =
+  'Your signed agreement was rejected. Please review the rejection reason and re-upload a corrected copy.';
+const AGREEMENT_APPROVED_MESSAGE = 'Your partnership agreement is approved. You have full access to the portal.';
+
+const messageForAgreementStatus = (status: string): string => {
+  switch (status) {
+    case 'submitted':
+      return AGREEMENT_SUBMITTED_MESSAGE;
+    case 'rejected':
+      return AGREEMENT_REJECTED_MESSAGE;
+    case 'approved':
+      return AGREEMENT_APPROVED_MESSAGE;
+    default:
+      return AGREEMENT_PENDING_MESSAGE;
+  }
+};
+
+const buildAgreementSummary = (profile: InstanceType<typeof db.AgentProfile>) => ({
+  status: profile.agreementStatus,
+  message: messageForAgreementStatus(profile.agreementStatus),
+  canUpload: profile.agreementStatus === 'pending' || profile.agreementStatus === 'rejected',
+  portalUnlocked: profile.agreementStatus === 'approved',
+  agreementSentAt: profile.agreementSentAt ?? null,
+  signedAgreementUrl: profile.signedAgreementUrl ?? null,
+  agreementUploadedAt: profile.agreementUploadedAt ?? null,
+  agreementApprovedAt: profile.agreementApprovedAt ?? null,
+  agreementRejectionReason: profile.agreementRejectionReason ?? null,
+});
+
+/** Public-to-agent: returns the current agreement workflow state for the gating UI. */
+export const getAgentAgreementStatus = async (userId: string) => {
+  const profile = await requireAgentProfile(userId);
+  return buildAgreementSummary(profile);
+};
+
+/** Agent uploads the signed agreement PDF. Allowed only when status is `pending` or `rejected`. */
+export const uploadAgentSignedAgreement = async (userId: string, file: Express.Multer.File) => {
+  if (!file) {
+    throw new AppError('File is required (field name: file)', 400);
+  }
+  const profile = await requireAgentProfile(userId);
+  if (profile.agreementStatus === 'submitted') {
+    throw new AppError('Your signed agreement is already under review.', 400);
+  }
+  if (profile.agreementStatus === 'approved') {
+    throw new AppError('Your agreement has already been approved.', 400);
+  }
+  const fileUrl = file.path.replace(/\\/g, '/');
+  profile.signedAgreementUrl = fileUrl;
+  profile.agreementUploadedAt = new Date();
+  profile.agreementStatus = 'submitted';
+  /** Clear any prior rejection reason so re-uploads start clean. */
+  profile.agreementRejectionReason = null;
+  await profile.save();
+  return buildAgreementSummary(profile);
+};
+
+/**
+ * Express middleware-style guard: throws 403 if the agent's agreement is not yet `approved`.
+ * Apply on the agent router AFTER the agreement endpoints so those remain reachable.
+ */
+export const assertAgentAgreementApproved = async (userId: string): Promise<void> => {
+  const profile = await requireAgentProfile(userId);
+  if (profile.agreementStatus !== 'approved') {
+    throw new AppError(
+      'Portal locked until your partnership agreement is approved.',
+      403,
+    );
+  }
+};
+
 const offerLetterWhereClause = (param: string): { id?: number; referenceCode?: string } => {
   const t = param.trim();
   if (/^\d+$/.test(t)) {

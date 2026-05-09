@@ -32,6 +32,9 @@ import {
   uploadOfferLetterFile,
   deleteOfferLetter,
   listAgents,
+  listAgentAgreements,
+  approveAgentAgreement,
+  rejectAgentAgreement,
   listPayments,
   listCommissions,
   createCommission,
@@ -63,6 +66,8 @@ import {
   globalSearchQueryJoiSchema,
   intakeRowJoiSchema,
   listAgentsQueryJoiSchema,
+  listAgentAgreementsQueryJoiSchema,
+  rejectAgentAgreementJoiSchema,
   listApplicationsQueryJoiSchema,
   listCoursesQueryJoiSchema,
   listUniversitiesQueryJoiSchema,
@@ -172,6 +177,23 @@ adminRouter
   )
   .delete('/offer-letters/:offerLetterId', requirePermission('applications', 'edit'), deleteOfferLetter)
   .get('/agents', requirePermission('agent_ranking', 'view'), validateMiddleware(listAgentsQueryJoiSchema), listAgents)
+  .get(
+    '/agents/agreements',
+    requirePermission('agent_ranking', 'view'),
+    validateMiddleware(listAgentAgreementsQueryJoiSchema),
+    listAgentAgreements,
+  )
+  .post(
+    '/agents/:agentProfileId/agreement/approve',
+    requirePermission('agent_ranking', 'approve'),
+    approveAgentAgreement,
+  )
+  .post(
+    '/agents/:agentProfileId/agreement/reject',
+    requirePermission('agent_ranking', 'approve'),
+    validateMiddleware(rejectAgentAgreementJoiSchema),
+    rejectAgentAgreement,
+  )
   .patch(
     '/agents/:agentProfileId/subscription',
     requirePermission('subscriptions', 'edit'),
