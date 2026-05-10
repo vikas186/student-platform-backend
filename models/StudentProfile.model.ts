@@ -12,6 +12,8 @@ export default (sequelize: Sequelize) => {
     public gradeGpa?: string | null;
     /** Counsellor / agency this student is linked to — applications inherit this for the agent portal */
     public agentProfileId?: number | null;
+    /** When set, student chat/RAG may include concrete university names */
+    public counsellingCompletedAt?: Date | null;
     public readonly createdAt!: Date;
     public readonly updatedAt!: Date;
 
@@ -44,6 +46,11 @@ export default (sequelize: Sequelize) => {
         allowNull: true,
         references: { model: 'agent_profiles', key: 'id' },
         onDelete: 'SET NULL',
+      },
+      counsellingCompletedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: 'counselling_completed_at',
       },
     },
     {

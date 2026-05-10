@@ -276,6 +276,15 @@ const rejectAgentAgreementJoiSchema = {
   }),
 };
 
+const patchStudentCounsellingJoiSchema = {
+  params: Joi.object({
+    studentProfileId: Joi.number().integer().positive().required(),
+  }),
+  body: Joi.object({
+    counsellingCompleted: Joi.boolean().required(),
+  }),
+};
+
 export {
   putPermissionsMatrixJoiSchema,
   listUsersQueryJoiSchema,
@@ -307,4 +316,5 @@ export {
   intakeRowJoiSchema,
   commissionSlabRichJoiSchema,
   patchAgentSubscriptionJoiSchema,
+  patchStudentCounsellingJoiSchema,
 };
