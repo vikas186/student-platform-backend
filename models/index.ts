@@ -17,6 +17,9 @@ import AgentRankingModel from './AgentRanking.model';
 import NotificationModel from './Notification.model';
 import ActivityLogModel from './ActivityLog.model';
 import ChatMessageModel from './ChatMessage.model';
+import ChatSessionModel from './ChatSession.model';
+import AssistantChatMessageModel from './AssistantChatMessage.model';
+import ChatFeedbackModel from './ChatFeedback.model';
 import TokenModel from './Token.model';
 import ErrorLogModel from './ErrorLog.model';
 import PasswordResetTokenModel from './PasswordResetToken.model';
@@ -40,6 +43,9 @@ interface Db {
   Notification: ReturnType<typeof NotificationModel>;
   ActivityLog: ReturnType<typeof ActivityLogModel>;
   ChatMessage: ReturnType<typeof ChatMessageModel>;
+  ChatSession: ReturnType<typeof ChatSessionModel>;
+  AssistantChatMessage: ReturnType<typeof AssistantChatMessageModel>;
+  ChatFeedback: ReturnType<typeof ChatFeedbackModel>;
   Token: ReturnType<typeof TokenModel>;
   ErrorLogs: ReturnType<typeof ErrorLogModel>;
   PasswordResetToken: ReturnType<typeof PasswordResetTokenModel>;
@@ -67,6 +73,9 @@ const db: Db = {
   Notification: NotificationModel(sequelize),
   ActivityLog: ActivityLogModel(sequelize),
   ChatMessage: ChatMessageModel(sequelize),
+  ChatSession: ChatSessionModel(sequelize),
+  AssistantChatMessage: AssistantChatMessageModel(sequelize),
+  ChatFeedback: ChatFeedbackModel(sequelize),
   Token: TokenModel(sequelize),
   ErrorLogs: ErrorLogModel(sequelize),
   PasswordResetToken: PasswordResetTokenModel(sequelize),
