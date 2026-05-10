@@ -35,6 +35,7 @@ import {
   listAgentAgreements,
   approveAgentAgreement,
   rejectAgentAgreement,
+  deleteAgentAgreement,
   listPayments,
   listCommissions,
   createCommission,
@@ -54,6 +55,8 @@ import {
   putPermissionsMatrix,
   resetPermissionsMatrix,
   patchAgentSubscription,
+  syncChatKnowledge,
+  patchStudentCounselling,
 } from '../controller/adminController';
 import {
   commissionSlabRichJoiSchema,
@@ -78,6 +81,7 @@ import {
   listPaymentsQueryJoiSchema,
   listUsersQueryJoiSchema,
   patchAgentSubscriptionJoiSchema,
+  patchStudentCounsellingJoiSchema,
   patchApplicationStatusJoiSchema,
   patchApplicationStatusUiJoiSchema,
   patchCommissionJoiSchema,
@@ -194,6 +198,11 @@ adminRouter
     validateMiddleware(rejectAgentAgreementJoiSchema),
     rejectAgentAgreement,
   )
+  .delete(
+    '/agents/:agentProfileId/agreement',
+    requirePermission('agent_ranking', 'approve'),
+    deleteAgentAgreement,
+  )
   .patch(
     '/agents/:agentProfileId/subscription',
     requirePermission('subscriptions', 'edit'),
@@ -237,6 +246,13 @@ adminRouter
     validateMiddleware(patchUniversityJoiSchema),
     patchUniversity,
   )
-  .delete('/universities/:universityId', requirePermission('deadlines', 'delete'), deleteUniversity);
+  .delete('/universities/:universityId', requirePermission('deadlines', 'delete'), deleteUniversity)
+  .post('/chat/knowledge/sync', requirePermission('deadlines', 'edit'), syncChatKnowledge)
+  .patch(
+    '/students/:studentProfileId/counselling',
+    requirePermission('users', 'edit'),
+    validateMiddleware(patchStudentCounsellingJoiSchema),
+    patchStudentCounselling,
+  );
 
 export default adminRouter;

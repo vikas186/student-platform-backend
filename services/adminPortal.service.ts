@@ -21,6 +21,7 @@ import {
   readCatalogSpreadsheetToMatrix,
   rowToFeeRanges,
 } from '../utils/universityCatalogImport';
+import { syncKnowledgeBase } from '../src/modules/chat/knowledge-sync.service';
 
 const applicationWhereByIdOrRef = (idOrRef: string) => {
   const t = idOrRef.trim();
@@ -1569,6 +1570,29 @@ export const rejectAgentAgreement = async (
   return profile.get({ plain: true });
 };
 
+/**
+ * Admin removes the stored signed agreement and resets the workflow to `pending`.
+ * The agent must upload a new signed copy and an admin must approve again; the portal locks until approval.
+ */
+export const deleteAgentAgreement = async (agentProfileId: number) => {
+  const profile = await requireAgentProfileForAdmin(agentProfileId);
+  const url = profile.signedAgreementUrl;
+  if (url && !String(url).trim().startsWith('http')) {
+    const abs = path.isAbsolute(url) ? url : path.join(process.cwd(), url);
+    if (fs.existsSync(abs)) {
+      fs.unlinkSync(abs);
+    }
+  }
+  profile.agreementStatus = 'pending';
+  profile.signedAgreementUrl = null;
+  profile.agreementUploadedAt = null;
+  profile.agreementApprovedAt = null;
+  profile.agreementApprovedByUserId = null;
+  profile.agreementRejectionReason = null;
+  await profile.save();
+  return profile.get({ plain: true });
+};
+
 export const getDashboardForAdmin = async () => {
   const [userCounts, appStatusRows, paymentPending, agents] = await Promise.all([
     db.User.findAll({
@@ -1823,6 +1847,18 @@ export const adminGlobalSearch = async (q: string) => {
   });
 
   return { applications, users, universities };
+};
+
+export const syncChatKnowledgeForAdmin = async () => syncKnowledgeBase();
+
+export const patchStudentCounsellingForAdmin = async (studentProfileId: number, counsellingCompleted: boolean) => {
+  const row = await db.StudentProfile.findByPk(studentProfileId);
+  if (!row) {
+    throw new AppError('Student profile not found', 404);
+  }
+  row.counsellingCompletedAt = counsellingCompleted ? new Date() : null;
+  await row.save();
+  return row.get({ plain: true });
 };
 
 export const getRolesMetadataForAdmin = () => ({

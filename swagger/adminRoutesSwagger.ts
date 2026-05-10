@@ -261,6 +261,28 @@
 
 /**
  * @swagger
+ * /api/v1/admin/agents/{agentProfileId}/agreement:
+ *   delete:
+ *     tags: [Admin]
+ *     summary: Delete an agent's signed agreement and reset onboarding
+ *     description: |
+ *       Clears the stored signed PDF (when saved locally), sets status to **pending**, and removes approval metadata.
+ *       The agent portal locks until the agent uploads again and an admin approves.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: agentProfileId
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Agreement removed; workflow reset to pending
+ *       404:
+ *         description: Agent profile not found
+ */
+
+/**
+ * @swagger
  * /api/v1/admin/universities:
  *   get:
  *     tags: [Admin]
@@ -284,6 +306,30 @@
  *     responses:
  *       200:
  *         description: data.universities, data.total, data.page, data.limit
+ */
+
+/**
+ * @swagger
+ * /api/v1/admin/universities/{universityId}:
+ *   delete:
+ *     tags: [Admin]
+ *     summary: Delete a university
+ *     description: |
+ *       Permanently removes the university row. Related **courses**, **deadlines**, **commissions**, and **university profiles**
+ *       are removed via database cascades. Applications that only store the university as free text are not deleted.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: universityId
+ *         required: true
+ *         schema: { type: integer, minimum: 1 }
+ *     responses:
+ *       200:
+ *         description: University deleted
+ *       400:
+ *         description: Invalid university id
+ *       404:
+ *         description: University not found
  */
 
 /**

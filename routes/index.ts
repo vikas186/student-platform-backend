@@ -6,6 +6,7 @@ import studentRouter from './studentRoutes';
 import agentRouter from './agentRoutes';
 import adminRouter from './adminRoutes';
 import universityRouter from './universityRoutes';
+import chatRouter from '../src/modules/chat/chat.routes';
 
 interface Route {
   path: string;
@@ -42,6 +43,10 @@ const defaultRoutes: Route[] = [
   {
     path: '/university',
     route: universityRouter,
+  },
+  {
+    path: '/chat',
+    route: chatRouter,
   },
 ];
 

@@ -32,6 +32,26 @@ import {
 
 const studentRouter = Router();
 
+/**
+ * Universities catalog browsing — readable by students, agents, and admins.
+ * Declared BEFORE the student-only auth gate so other portal roles aren't rejected.
+ * `requirePermission('applications','view')` is satisfied by the default matrix
+ * for all three roles (admins short-circuit to allowed).
+ */
+studentRouter.get(
+  '/universities',
+  jwtAuthMiddleware(['student', 'agent', 'admin']),
+  requirePermission('applications', 'view'),
+  validateMiddleware(universitiesQueryJoiSchema),
+  listUniversities,
+);
+studentRouter.get(
+  '/universities/:universityId',
+  jwtAuthMiddleware(['student', 'agent', 'admin']),
+  requirePermission('applications', 'view'),
+  getUniversity,
+);
+
 studentRouter.use(jwtAuthMiddleware(['student']));
 
 studentRouter
@@ -79,13 +99,6 @@ studentRouter
   .get('/offer-letters/:offerLetterId', requirePermission('applications', 'view'), getOfferLetterByIdOrRef)
   .get('/documents', requirePermission('applications', 'view'), listDocuments)
   .post('/documents', requirePermission('applications', 'edit'), studentDocumentUpload.single('file'), uploadDocument)
-  .delete('/documents/:documentId', requirePermission('applications', 'edit'), deleteDocument)
-  .get(
-    '/universities',
-    requirePermission('applications', 'view'),
-    validateMiddleware(universitiesQueryJoiSchema),
-    listUniversities,
-  )
-  .get('/universities/:universityId', requirePermission('applications', 'view'), getUniversity);
+  .delete('/documents/:documentId', requirePermission('applications', 'edit'), deleteDocument);
 
 export default studentRouter;

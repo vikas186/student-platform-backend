@@ -32,6 +32,7 @@ const swaggerDefinition = {
       description: 'University portal — role `university` (`Bearer` token): dashboard, partnership, applications review',
     },
     { name: 'Admin', description: 'Admin workspace — role `admin` only (`Bearer` token)' },
+    { name: 'Chat', description: 'AI assistant — all authenticated roles (`Bearer` token)' },
   ],
   components: {
     securitySchemes: {

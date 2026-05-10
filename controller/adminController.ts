@@ -371,6 +371,19 @@ export const rejectAgentAgreement = catchAsyncError(async (req: Request, res: Re
   });
 });
 
+export const deleteAgentAgreement = catchAsyncError(async (req: Request, res: Response) => {
+  const id = Number(req.params.agentProfileId);
+  if (!Number.isFinite(id) || id < 1) {
+    throw new AppError('Invalid agent profile id', 400);
+  }
+  const data = await adminPortal.deleteAgentAgreement(id);
+  res.status(constant.msgCode.successCode).json({
+    success: true,
+    message: 'Agreement removed; agent must upload and obtain approval again',
+    data,
+  });
+});
+
 export const listCommissions = catchAsyncError(async (_req: Request, res: Response) => {
   const rows = await adminPortal.listCommissionsForAdmin();
   res.status(constant.msgCode.successCode).json({
@@ -460,7 +473,11 @@ export const patchUniversity = catchAsyncError(async (req: Request, res: Respons
 });
 
 export const deleteUniversity = catchAsyncError(async (req: Request, res: Response) => {
-  await adminPortal.deleteUniversityForAdmin(Number(req.params.universityId));
+  const id = Number(req.params.universityId);
+  if (!Number.isFinite(id) || id < 1) {
+    throw new AppError('Invalid university id', 400);
+  }
+  await adminPortal.deleteUniversityForAdmin(id);
   res.status(constant.msgCode.successCode).json({
     success: true,
     message: 'University deleted',
@@ -507,5 +524,28 @@ export const resetPermissionsMatrix = catchAsyncError(async (_req: Request, res:
     success: true,
     message: 'Permissions reset to defaults',
     data,
+  });
+});
+
+export const syncChatKnowledge = catchAsyncError(async (_req: Request, res: Response) => {
+  const data = await adminPortal.syncChatKnowledgeForAdmin();
+  res.status(constant.msgCode.successCode).json({
+    success: true,
+    message: 'Knowledge base synced',
+    data,
+  });
+});
+
+export const patchStudentCounselling = catchAsyncError(async (req: Request, res: Response) => {
+  const id = Number(req.params.studentProfileId);
+  if (!Number.isFinite(id) || id < 1) {
+    throw new AppError('Invalid student profile id', 400);
+  }
+  const { counsellingCompleted } = req.body as { counsellingCompleted: boolean };
+  const row = await adminPortal.patchStudentCounsellingForAdmin(id, counsellingCompleted);
+  res.status(constant.msgCode.successCode).json({
+    success: true,
+    message: 'Student counselling flag updated',
+    data: { studentProfile: row },
   });
 });
