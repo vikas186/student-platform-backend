@@ -43,7 +43,7 @@ export default (sequelize: Sequelize) => {
     {
       sequelize,
       modelName: 'ChatMessage',
-      tableName: 'chat_messages',
+      tableName: 'peer_chat_messages',
       timestamps: true,
     },
   );
