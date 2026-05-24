@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { jwtAuthMiddleware } from '../../../middleware/jwtAuth';
 import validateMiddleware from '../../../middleware/validate';
 import {
@@ -15,7 +15,8 @@ const chatRouter = Router();
 const keyByUserId = (req: import('express').Request) => {
   const id = (req as { user?: { id?: string } }).user?.id;
   if (id && typeof id === 'string') return id;
-  return req.ip || 'unknown';
+  if (req.ip) return ipKeyGenerator(req.ip);
+  return 'unknown';
 };
 
 const messageLimiter = rateLimit({

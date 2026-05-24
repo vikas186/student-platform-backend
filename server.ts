@@ -3,6 +3,7 @@ import https from 'https';
 import fs from 'fs';
 import app from './app';
 import './config/database';
+import { registerScrapeCron } from './src/scheduler/scrape.cron';
 import { colorizeText } from './utils/others';
 
 // Define PORT and environment variables
@@ -27,4 +28,5 @@ const server = isStaging
 // Start the server and log status
 server.listen(PORT, () => {
   console.log(colorizeText(`Server Running on ${isStaging ? 'HTTPS' : 'HTTP'} on Port ${PORT}`, 'green', true));
+  registerScrapeCron();
 });

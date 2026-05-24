@@ -25,7 +25,7 @@ app.use(globalResponse); // Global response formatting
 // Swagger
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDoc));
 
-// Routes
+// Routes (scrape + auth + portals under /api/v1)
 app.use('/api/v1', allRoutes);
 app.get('/', (req: Request, res: Response) => res.json({ success: true, message: 'Server is Running' }));
 

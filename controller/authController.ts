@@ -157,7 +157,7 @@ const resetPassword = catchAsyncError(async (req: Request, res: Response) => {
 });
 
 const deleteUser = catchAsyncError(async (req: Request, res: Response) => {
-  const userId = req.params.userId as string;
+  const { userId } = req.params;
   if (!isUuid(userId)) {
     throw new AppError('Invalid user id', 400);
   }

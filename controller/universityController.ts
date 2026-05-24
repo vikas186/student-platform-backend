@@ -60,7 +60,7 @@ export const listApplications = catchAsyncError(async (req: Request, res: Respon
 
 export const getApplication = catchAsyncError(async (req: Request, res: Response) => {
   const user: any = req.user;
-  const applicationId = req.params.applicationId as string;
+  const { applicationId } = req.params;
   const data = await universityPortal.getApplicationForUniversity(user.id, applicationId);
   res.status(constant.msgCode.successCode).json({
     success: constant.msgType.successStatus,
@@ -71,7 +71,7 @@ export const getApplication = catchAsyncError(async (req: Request, res: Response
 
 export const getApplicationChecklist = catchAsyncError(async (req: Request, res: Response) => {
   const user: any = req.user;
-  const applicationId = req.params.applicationId as string;
+  const { applicationId } = req.params;
   const data = await universityPortal.getApplicationChecklistForUniversity(user.id, applicationId);
   res.status(constant.msgCode.successCode).json({
     success: constant.msgType.successStatus,
@@ -82,7 +82,7 @@ export const getApplicationChecklist = catchAsyncError(async (req: Request, res:
 
 export const patchApplicationStatus = catchAsyncError(async (req: Request, res: Response) => {
   const user: any = req.user;
-  const applicationId = req.params.applicationId as string;
+  const { applicationId } = req.params;
   const status = String((req.body as any)?.status ?? '').trim();
   const data = await universityPortal.patchUniversityApplicationStatus(user.id, applicationId, status);
   res.status(constant.msgCode.successCode).json({
@@ -94,7 +94,7 @@ export const patchApplicationStatus = catchAsyncError(async (req: Request, res: 
 
 export const patchDocument = catchAsyncError(async (req: Request, res: Response) => {
   const user: any = req.user;
-  const documentId = req.params.documentId as string;
+  const { documentId } = req.params;
   const data = await universityPortal.patchUniversityDocument(user.id, documentId, req.body);
   res.status(constant.msgCode.successCode).json({
     success: constant.msgType.successStatus,

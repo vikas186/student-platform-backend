@@ -1,0 +1,18 @@
+{
+  "watch": [
+    "src",
+    "workers",
+    "config",
+    "routes",
+    "services",
+    "models",
+    "controller",
+    "middleware",
+    "validations",
+    "utils",
+    "app.ts",
+    "server.ts"
+  ],
+  "ignore": ["debug/**", "raw/**", "logs/**", "uploads/**", "node_modules/**"],
+  "ext": "ts,json"
+}
