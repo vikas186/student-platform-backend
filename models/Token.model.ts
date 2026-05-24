@@ -5,7 +5,7 @@ export default (sequelize: Sequelize) => {
     public id!: number;
     /** Access (Bearer) JWT — stored for session validation */
     public token!: string;
-    /** Opaque refresh token; rotated on each refresh */
+    /** Opaque refresh token; issued at login, reused until expiry */
     public refreshToken?: string | null;
     public refreshExpiresAt?: Date | null;
     public userId!: string;

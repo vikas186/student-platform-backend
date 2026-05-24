@@ -24,6 +24,14 @@ import TokenModel from './Token.model';
 import ErrorLogModel from './ErrorLog.model';
 import PasswordResetTokenModel from './PasswordResetToken.model';
 import RolePermissionModel from './RolePermission.model';
+import ScrapeJobModel from './ScrapeJob.model';
+import RawScrapeBatchModel from './RawScrapeBatch.model';
+import ScrapedCourseModel from './ScrapedCourse.model';
+import ScrapeUniversityModel from './ScrapeUniversity.model';
+import ScrapeFeeModel from './ScrapeFee.model';
+import ScrapeScholarshipModel from './ScrapeScholarship.model';
+import ScrapeRejectedPageModel from './ScrapeRejectedPage.model';
+import ScrapeAiMetaModel from './ScrapeAiMeta.model';
 
 interface Db {
   User: ReturnType<typeof UserModel>;
@@ -50,6 +58,14 @@ interface Db {
   ErrorLogs: ReturnType<typeof ErrorLogModel>;
   PasswordResetToken: ReturnType<typeof PasswordResetTokenModel>;
   RolePermission: ReturnType<typeof RolePermissionModel>;
+  ScrapeJob: ReturnType<typeof ScrapeJobModel>;
+  RawScrapeBatch: ReturnType<typeof RawScrapeBatchModel>;
+  ScrapedCourse: ReturnType<typeof ScrapedCourseModel>;
+  ScrapeUniversity: ReturnType<typeof ScrapeUniversityModel>;
+  ScrapeFee: ReturnType<typeof ScrapeFeeModel>;
+  ScrapeScholarship: ReturnType<typeof ScrapeScholarshipModel>;
+  ScrapeRejectedPage: ReturnType<typeof ScrapeRejectedPageModel>;
+  ScrapeAiMeta: ReturnType<typeof ScrapeAiMetaModel>;
   sequelize: Sequelize;
   Sequelize: typeof Sequelize;
   [key: string]: any;
@@ -80,6 +96,14 @@ const db: Db = {
   ErrorLogs: ErrorLogModel(sequelize),
   PasswordResetToken: PasswordResetTokenModel(sequelize),
   RolePermission: RolePermissionModel(sequelize),
+  ScrapeJob: ScrapeJobModel(sequelize),
+  RawScrapeBatch: RawScrapeBatchModel(sequelize),
+  ScrapedCourse: ScrapedCourseModel(sequelize),
+  ScrapeUniversity: ScrapeUniversityModel(sequelize),
+  ScrapeFee: ScrapeFeeModel(sequelize),
+  ScrapeScholarship: ScrapeScholarshipModel(sequelize),
+  ScrapeRejectedPage: ScrapeRejectedPageModel(sequelize),
+  ScrapeAiMeta: ScrapeAiMetaModel(sequelize),
   sequelize,
   Sequelize,
 };

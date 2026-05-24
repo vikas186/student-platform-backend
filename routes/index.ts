@@ -7,6 +7,7 @@ import agentRouter from './agentRoutes';
 import adminRouter from './adminRoutes';
 import universityRouter from './universityRoutes';
 import chatRouter from '../src/modules/chat/chat.routes';
+import scrapeRouter from '../src/modules/scrape/scrape.routes';
 
 interface Route {
   path: string;
@@ -47,6 +48,10 @@ const defaultRoutes: Route[] = [
   {
     path: '/chat',
     route: chatRouter,
+  },
+  {
+    path: '/',
+    route: scrapeRouter,
   },
 ];
 

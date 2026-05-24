@@ -173,29 +173,34 @@ async function ensureApplicationNumberSequence(): Promise<void> {
   await sequelize.query(`SELECT setval('application_number_seq', ${floor}, true)`);
 }
 
-void (async () => {
-  try {
-    await repairLegacyApplicationUuidSchema();
-    await repairApplicationNumberColumn();
-    await sequelize.sync({ alter: true });
-    await ensureApplicationNumberSequence();
-    await ensureOfferLetterReferenceSequence();
-    const { ensureAdminHasAllCatalogPermissions, ensureUniversityPortalPermissions } = await import(
-      '../services/rolePermissions.service'
-    );
-    await ensureAdminHasAllCatalogPermissions();
-    await ensureUniversityPortalPermissions();
-    console.log('Database & tables synced successfully.');
-  } catch (error: any) {
-    console.error('Error syncing database:', error?.message || error);
-    const pg = error?.parent ?? error?.original;
-    if (pg?.message) {
-      console.error('[PostgreSQL]', pg.message);
+const isWorkerProcess = process.argv.some(arg => /workers[\\/]/.test(arg.replace(/\\/g, '/')));
+const shouldSyncDb = process.env.SKIP_DB_SYNC !== '1' && !isWorkerProcess;
+
+if (shouldSyncDb) {
+  void (async () => {
+    try {
+      await repairLegacyApplicationUuidSchema();
+      await repairApplicationNumberColumn();
+      await sequelize.sync({ alter: true });
+      await ensureApplicationNumberSequence();
+      await ensureOfferLetterReferenceSequence();
+      const { ensureAdminHasAllCatalogPermissions, ensureUniversityPortalPermissions } = await import(
+        '../services/rolePermissions.service'
+      );
+      await ensureAdminHasAllCatalogPermissions();
+      await ensureUniversityPortalPermissions();
+      console.log('Database & tables synced successfully.');
+    } catch (error: any) {
+      console.error('Error syncing database:', error?.message || error);
+      const pg = error?.parent ?? error?.original;
+      if (pg?.message) {
+        console.error('[PostgreSQL]', pg.message);
+      }
+      if (process.env.NODE_ENV === 'development') {
+        console.error(error);
+      }
     }
-    if (process.env.NODE_ENV === 'development') {
-      console.error(error);
-    }
-  }
-})();
+  })();
+}
 
 export { sequelize, db };

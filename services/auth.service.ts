@@ -5,6 +5,7 @@ import {
   generateToken,
   generateOpaqueRefreshToken,
   refreshTtlMs,
+  resolveSessionForBearer,
 } from './token.service';
 import { db } from '../config/database';
 import { getPermissionMatrixSliceForRole } from './rolePermissions.service';
@@ -358,29 +359,28 @@ const refreshSessionService = async (refreshToken: string) => {
   }
 
   const newAccess = await generateToken(user);
-  const newRefresh = generateOpaqueRefreshToken();
   const newRefreshExpiresAt = new Date(Date.now() + refreshTtlMs());
 
+  // Keep the same refresh token so concurrent refresh calls (e.g. multiple tabs) do not race.
   await session.update({
     token: newAccess,
-    refreshToken: newRefresh,
     refreshExpiresAt: newRefreshExpiresAt,
   });
 
   const safe = user.toSafeObject() as Record<string, unknown>;
   const permissions = await getPermissionMatrixSliceForRole(user.role as UserRole);
-  return { token: newAccess, refreshToken: newRefresh, user: { ...safe, permissions } };
+  return { token: newAccess, refreshToken: trimmed, user: { ...safe, permissions } };
 };
 
 const logoutUserService = async (userId: any, token: any) => {
   if (!token) throw new AppError('Token is required for logout', 400);
 
-  const result = await db.Token.destroy({
-    where: { userId, token },
-  });
+  const session = await resolveSessionForBearer(token);
+  if (!session || session.userId !== userId) {
+    throw new AppError('Token not found or already invalidated', 400);
+  }
 
-  if (!result) throw new AppError('Token not found or already invalidated', 400);
-
+  await session.destroy();
   return { success: true, message: 'Logged out successfully' };
 };
 
