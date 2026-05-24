@@ -1,8 +1,10 @@
 import { Router } from 'express';
+import { loginAdminUser } from '../controller/authController';
 import { jwtAuthMiddleware } from '../middleware/jwtAuth';
 import { requirePermission } from '../middleware/requirePermission';
 import { adminUniversityCatalogUpload, adminUniversityCsvUpload, agentDocumentUpload } from '../middleware/multer';
 import validateMiddleware from '../middleware/validate';
+import { loginJoiSchema } from '../validations/auth.validation';
 import {
   getDashboard,
   listUsers,
@@ -93,6 +95,9 @@ import {
 } from '../validations/admin.validation';
 
 const adminRouter = Router();
+
+/** Enroll UI calls `/api/v1/admin/login`; auth router also exposes `/api/v1/auth/admin/login`. */
+adminRouter.post('/login', validateMiddleware(loginJoiSchema), loginAdminUser);
 
 adminRouter.use(jwtAuthMiddleware(['admin']));
 

@@ -2,7 +2,7 @@ import jwt, { type JwtPayload } from 'jsonwebtoken';
 import { catchAsyncError } from './catchAsyncError';
 import AppError from '../utils/errorHandler';
 import constant from '../constant';
-import { handleExpiredToken, verifyTokenInDb } from '../services/token.service';
+import { verifyTokenInDb } from '../services/token.service';
 import { db } from '../config/database';
 import { Op } from 'sequelize';
 import { isUuid } from '../utils/isUuid';
@@ -54,7 +54,7 @@ export const jwtAuthMiddleware = (allowedRoles: string[]) =>
     } catch (e: unknown) {
       const name = e && typeof e === 'object' && 'name' in e ? (e as { name: string }).name : '';
       if (name === 'TokenExpiredError') {
-        await handleExpiredToken(authHeader);
+        // Do not delete the DB session row — refresh-token rotation needs it intact.
         return next(new AppError('Token has expired. Please log in again.', constant.msgCode.unAuthorizedUser));
       }
       return next(new AppError('Invalid token', constant.msgCode.forbidden));

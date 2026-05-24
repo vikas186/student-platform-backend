@@ -1,0 +1,32 @@
+# Local infrastructure for development (RabbitMQ for university scraping).
+# Requires Docker Desktop: https://www.docker.com/products/docker-desktop/
+#
+# Start:  npm run docker:up
+# Stop:   npm run docker:down
+# UI:     http://localhost:15672  (guest / guest)
+
+services:
+  rabbitmq:
+    build:
+      context: ./docker/rabbitmq
+      dockerfile: Dockerfile
+    image: enroll-rabbitmq:local
+    container_name: enroll-rabbitmq
+    restart: unless-stopped
+    ports:
+      - '5672:5672'
+      - '15672:15672'
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ['CMD', 'rabbitmq-diagnostics', '-q', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+volumes:
+  rabbitmq_data:

@@ -86,6 +86,17 @@ export const PERMISSION_CATALOG: PermissionModuleDef[] = [
       { key: 'edit', label: 'EDIT' },
     ],
   },
+  {
+    moduleKey: 'university_scraping',
+    moduleLabel: 'University scraping',
+    actions: [
+      { key: 'view', label: 'VIEW' },
+      { key: 'create', label: 'CREATE' },
+      { key: 'edit', label: 'EDIT' },
+      { key: 'delete', label: 'DELETE' },
+      { key: 'approve', label: 'APPROVE' },
+    ],
+  },
 ];
 
 export const MATRIX_ROLES: UserRole[] = ['student', 'agent', 'admin', 'university'];
@@ -117,6 +128,7 @@ export const DEFAULT_PERMISSION_MATRIX: Record<UserRole, Record<string, Record<s
     payments: { view: false, create: false, edit: false, approve: false },
     agent_ranking: { view: false, approve: false },
     roles_permissions: { view: false, edit: false },
+    university_scraping: { view: false, create: false, edit: false, delete: false, approve: false },
   },
   agent: {
     applications: { view: true, create: true, edit: true, approve: false },
@@ -127,6 +139,7 @@ export const DEFAULT_PERMISSION_MATRIX: Record<UserRole, Record<string, Record<s
     payments: { view: true, create: true, edit: false, approve: false },
     agent_ranking: { view: true, approve: false },
     roles_permissions: { view: false, edit: false },
+    university_scraping: { view: false, create: false, edit: false, delete: false, approve: false },
   },
   admin: buildFullAccessForCatalog(),
   university: {
@@ -138,5 +151,6 @@ export const DEFAULT_PERMISSION_MATRIX: Record<UserRole, Record<string, Record<s
     payments: { view: false, create: false, edit: false, approve: false },
     agent_ranking: { view: false, approve: false },
     roles_permissions: { view: false, edit: false },
+    university_scraping: { view: false, create: false, edit: false, delete: false, approve: false },
   },
 };

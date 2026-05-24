@@ -55,7 +55,7 @@ export const createApplication = catchAsyncError(async (req: Request, res: Respo
 });
 
 export const getApplication = catchAsyncError(async (req: Request, res: Response) => {
-  const applicationId = req.params.applicationId as string;
+  const { applicationId } = req.params;
   const pid = await getStudentProfileIdFromReq(req);
   const app = await studentPortal.getStudentApplication(pid, applicationId);
   res.status(constant.msgCode.successCode).json({
@@ -66,7 +66,7 @@ export const getApplication = catchAsyncError(async (req: Request, res: Response
 });
 
 export const patchApplication = catchAsyncError(async (req: Request, res: Response) => {
-  const applicationId = req.params.applicationId as string;
+  const { applicationId } = req.params;
   const pid = await getStudentProfileIdFromReq(req);
   const app = await studentPortal.updateStudentApplication(pid, applicationId, req.body);
   res.status(constant.msgCode.successCode).json({
@@ -77,7 +77,7 @@ export const patchApplication = catchAsyncError(async (req: Request, res: Respon
 });
 
 export const submitApplication = catchAsyncError(async (req: Request, res: Response) => {
-  const applicationId = req.params.applicationId as string;
+  const { applicationId } = req.params;
   const pid = await getStudentProfileIdFromReq(req);
   const app = await studentPortal.submitStudentApplication(pid, applicationId);
   res.status(constant.msgCode.successCode).json({
@@ -88,7 +88,7 @@ export const submitApplication = catchAsyncError(async (req: Request, res: Respo
 });
 
 export const deleteApplication = catchAsyncError(async (req: Request, res: Response) => {
-  const applicationId = req.params.applicationId as string;
+  const { applicationId } = req.params;
   const pid = await getStudentProfileIdFromReq(req);
   await studentPortal.deleteStudentApplication(pid, applicationId);
   res.status(constant.msgCode.successCode).json({
@@ -157,7 +157,7 @@ export const listOfferLetters = catchAsyncError(async (req: Request, res: Respon
 });
 
 export const getOfferLetterForApplication = catchAsyncError(async (req: Request, res: Response) => {
-  const applicationId = req.params.applicationId as string;
+  const { applicationId } = req.params;
   const pid = await getStudentProfileIdFromReq(req);
   const letter = await studentPortal.getStudentOfferLetterForApplication(pid, applicationId);
   res.status(constant.msgCode.successCode).json({
@@ -168,7 +168,7 @@ export const getOfferLetterForApplication = catchAsyncError(async (req: Request,
 });
 
 export const getOfferLetterByIdOrRef = catchAsyncError(async (req: Request, res: Response) => {
-  const offerLetterId = req.params.offerLetterId as string;
+  const { offerLetterId } = req.params;
   const pid = await getStudentProfileIdFromReq(req);
   const letter = await studentPortal.getStudentOfferLetterByIdOrRef(pid, offerLetterId);
   res.status(constant.msgCode.successCode).json({
@@ -181,7 +181,7 @@ export const getOfferLetterByIdOrRef = catchAsyncError(async (req: Request, res:
 export const uploadSignedOfferLetterForApplication = catchAsyncError(async (req: Request, res: Response) => {
   const file = req.file;
   if (!file) throw new AppError('File is required (field name: file)', 400);
-  const applicationId = req.params.applicationId as string;
+  const { applicationId } = req.params;
   const pid = await getStudentProfileIdFromReq(req);
   const letter = await studentPortal.uploadStudentSignedOfferLetterForApplication(pid, applicationId, file);
   res.status(constant.msgCode.successCode).json({
@@ -202,7 +202,7 @@ export const listUniversities = catchAsyncError(async (req: Request, res: Respon
 });
 
 export const getUniversity = catchAsyncError(async (req: Request, res: Response) => {
-  const universityId = req.params.universityId as string;
+  const { universityId } = req.params;
   const id = parseInt(universityId, 10);
   if (Number.isNaN(id)) throw new AppError('Invalid university id', 400);
   const data = await studentPortal.getStudentUniversityById(id);
@@ -216,7 +216,7 @@ export const getUniversity = catchAsyncError(async (req: Request, res: Response)
 export const uploadSignedOfferLetterByIdOrRef = catchAsyncError(async (req: Request, res: Response) => {
   const file = req.file;
   if (!file) throw new AppError('File is required (field name: file)', 400);
-  const offerLetterId = req.params.offerLetterId as string;
+  const { offerLetterId } = req.params;
   const pid = await getStudentProfileIdFromReq(req);
   const letter = await studentPortal.uploadStudentSignedOfferLetterByIdOrRef(pid, offerLetterId, file);
   res.status(constant.msgCode.successCode).json({
