@@ -406,6 +406,71 @@ export const openapiSchemas = {
     },
   },
 
+  CatalogProgram: {
+    type: 'object',
+    description: 'Program nested under a university — from admin courses, scraped catalog, or fee-range matrix.',
+    properties: {
+      id: {
+        oneOf: [{ type: 'integer' }, { type: 'string' }],
+        example: 10,
+        description: 'Numeric id for DB/scraped rows; synthetic string id for fee-range programs (e.g. fee-ugBusinessUsdYear).',
+      },
+      courseName: { type: 'string', example: 'Master of Computer Science' },
+      degree: { type: 'string', example: 'Postgraduate' },
+      fee: { type: 'number', nullable: true, example: 42000 },
+      feeRange: {
+        type: 'string',
+        nullable: true,
+        example: '$18,000 – $38,000',
+        description: 'Present for scraped tuition strings or catalog fee-matrix rows.',
+      },
+      duration: { type: 'string', example: '2 Years' },
+      source: {
+        type: 'string',
+        enum: ['course', 'scrape', 'fee_range'],
+        example: 'scrape',
+      },
+    },
+  },
+
+  CatalogUniversityWithPrograms: {
+    type: 'object',
+    properties: {
+      id: { type: 'integer', example: 1 },
+      name: { type: 'string', example: 'University of Toronto' },
+      country: { type: 'string', example: 'Canada' },
+      status: { type: 'boolean', example: true },
+      programFeeRanges: { type: 'object', nullable: true },
+      programsCount: { type: 'integer', example: 2 },
+      programs: {
+        type: 'array',
+        items: { $ref: '#/components/schemas/CatalogProgram' },
+      },
+      createdAt: { type: 'string', format: 'date-time' },
+      updatedAt: { type: 'string', format: 'date-time' },
+    },
+  },
+
+  PublicUniversitiesWithProgramsResponse: {
+    type: 'object',
+    properties: {
+      success: { type: 'boolean', example: true },
+      message: { type: 'string', example: 'Universities with programs fetched' },
+      data: {
+        type: 'object',
+        properties: {
+          universities: {
+            type: 'array',
+            items: { $ref: '#/components/schemas/CatalogUniversityWithPrograms' },
+          },
+          page: { type: 'integer', example: 1 },
+          limit: { type: 'integer', example: 20 },
+          total: { type: 'integer', example: 25 },
+        },
+      },
+    },
+  },
+
   AgentDashboardResponse: {
     type: 'object',
     properties: {

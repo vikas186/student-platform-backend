@@ -24,7 +24,7 @@ const swaggerDefinition = {
   tags: [
     { name: 'Auth', description: 'Public signup & login; token refresh' },
     { name: 'User', description: 'Any authenticated role' },
-    { name: 'Catalog', description: 'Universities & courses (auth required)' },
+    { name: 'Catalog', description: 'Universities & courses — public catalog + authenticated list endpoints' },
     { name: 'Student', description: 'Student portal — role `student`' },
     { name: 'Agent', description: 'Agent portal — role `agent`' },
     {
