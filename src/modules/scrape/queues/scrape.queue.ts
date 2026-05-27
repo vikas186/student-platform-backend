@@ -20,10 +20,10 @@ type ConsumerHandler = (payload: unknown) => Promise<void>;
 
 const consumerRegistrations: Array<{ queueName: string; handler: ConsumerHandler }> = [];
 
-const rabbitUrl = () => process.env.RABBITMQ_URL || 'amqp://localhost:5672';
+const rabbitUrl = () => process.env.RABBITMQ_URL || 'amqp://guest:guest@127.0.0.1:5672';
 
-/** Default 3600 — long Playwright jobs; set 0 to disable heartbeat timeout. */
-const rabbitHeartbeat = (): number => parseInt(process.env.RABBITMQ_HEARTBEAT ?? '3600', 10);
+/** Match server heartbeat (docker/rabbitmq.conf sets heartbeat=0). */
+const rabbitHeartbeat = (): number => parseInt(process.env.RABBITMQ_HEARTBEAT ?? '0', 10);
 
 const RECONNECT_BASE_MS = 3_000;
 const RECONNECT_MAX_MS = 60_000;
@@ -86,8 +86,8 @@ export const connectRabbitMq = async (): Promise<Channel> => {
 
 /** Connect with retries — used on worker boot when RabbitMQ may still be starting. */
 export const connectRabbitMqWithRetry = async (): Promise<Channel> => {
-  const maxAttempts = parseInt(process.env.RABBITMQ_CONNECT_RETRIES || '20', 10);
-  const delayMs = parseInt(process.env.RABBITMQ_CONNECT_DELAY_MS || '3000', 10);
+  const maxAttempts = parseInt(process.env.RABBITMQ_CONNECT_RETRIES || '60', 10);
+  const delayMs = parseInt(process.env.RABBITMQ_CONNECT_DELAY_MS || '5000', 10);
   let lastErr: unknown;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {

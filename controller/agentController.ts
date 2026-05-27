@@ -3,6 +3,7 @@ import constant from '../constant';
 import { catchAsyncError } from '../middleware/catchAsyncError';
 import AppError from '../utils/errorHandler';
 import * as agentPortal from '../services/agentPortal.service';
+import { getQueryString } from '../utils/getQueryString';
 import { pickOptionalPositiveInt, pickOptionalTrimmedString } from '../utils/requestFields';
 
 const agentProfileIdFromReq = async (req: Request): Promise<number> => {
@@ -112,7 +113,7 @@ export const createApplication = catchAsyncError(async (req: Request, res: Respo
 export const getApplication = catchAsyncError(async (req: Request, res: Response) => {
   const { applicationId } = req.params;
   const aid = await agentProfileIdFromReq(req);
-  const app = await agentPortal.getApplicationForAgent(aid, applicationId);
+  const app = await agentPortal.getApplicationForAgent(aid, getQueryString(applicationId));
   res.status(constant.msgCode.successCode).json({
     success: constant.msgType.successStatus,
     message: 'Application fetched',
@@ -123,7 +124,7 @@ export const getApplication = catchAsyncError(async (req: Request, res: Response
 export const patchApplication = catchAsyncError(async (req: Request, res: Response) => {
   const { applicationId } = req.params;
   const aid = await agentProfileIdFromReq(req);
-  const app = await agentPortal.updateAgentApplication(aid, applicationId, req.body);
+  const app = await agentPortal.updateAgentApplication(aid, getQueryString(applicationId), req.body);
   res.status(constant.msgCode.successCode).json({
     success: constant.msgType.successStatus,
     message: 'Application updated',
@@ -134,7 +135,7 @@ export const patchApplication = catchAsyncError(async (req: Request, res: Respon
 export const submitApplication = catchAsyncError(async (req: Request, res: Response) => {
   const { applicationId } = req.params;
   const aid = await agentProfileIdFromReq(req);
-  const app = await agentPortal.submitAgentApplication(aid, applicationId);
+  const app = await agentPortal.submitAgentApplication(aid, getQueryString(applicationId));
   res.status(constant.msgCode.successCode).json({
     success: constant.msgType.successStatus,
     message: 'Application submitted',
@@ -145,7 +146,7 @@ export const submitApplication = catchAsyncError(async (req: Request, res: Respo
 export const deleteApplication = catchAsyncError(async (req: Request, res: Response) => {
   const { applicationId } = req.params;
   const aid = await agentProfileIdFromReq(req);
-  await agentPortal.deleteAgentApplication(aid, applicationId);
+  await agentPortal.deleteAgentApplication(aid, getQueryString(applicationId));
   res.status(constant.msgCode.successCode).json({
     success: constant.msgType.successStatus,
     message: 'Application deleted',
@@ -218,7 +219,7 @@ export const uploadDocument = catchAsyncError(async (req: Request, res: Response
 export const patchDocument = catchAsyncError(async (req: Request, res: Response) => {
   const { documentId } = req.params;
   const aid = await agentProfileIdFromReq(req);
-  const doc = await agentPortal.patchAgentDocument(aid, documentId, req.body);
+  const doc = await agentPortal.patchAgentDocument(aid, getQueryString(documentId), req.body);
   res.status(constant.msgCode.successCode).json({
     success: constant.msgType.successStatus,
     message: 'Document updated',
@@ -229,7 +230,7 @@ export const patchDocument = catchAsyncError(async (req: Request, res: Response)
 export const deleteDocument = catchAsyncError(async (req: Request, res: Response) => {
   const { documentId } = req.params;
   const aid = await agentProfileIdFromReq(req);
-  await agentPortal.deleteAgentDocument(aid, documentId);
+  await agentPortal.deleteAgentDocument(aid, getQueryString(documentId));
   res.status(constant.msgCode.successCode).json({
     success: constant.msgType.successStatus,
     message: 'Document deleted',
@@ -270,7 +271,7 @@ export const createOfferLetter = catchAsyncError(async (req: Request, res: Respo
 export const getOfferLetter = catchAsyncError(async (req: Request, res: Response) => {
   const { offerLetterId } = req.params;
   const aid = await agentProfileIdFromReq(req);
-  const data = await agentPortal.getOfferLetterForAgent(aid, offerLetterId);
+  const data = await agentPortal.getOfferLetterForAgent(aid, getQueryString(offerLetterId));
   res.status(constant.msgCode.successCode).json({
     success: constant.msgType.successStatus,
     message: 'Offer letter fetched',
@@ -281,7 +282,7 @@ export const getOfferLetter = catchAsyncError(async (req: Request, res: Response
 export const patchOfferLetter = catchAsyncError(async (req: Request, res: Response) => {
   const { offerLetterId } = req.params;
   const aid = await agentProfileIdFromReq(req);
-  const data = await agentPortal.patchOfferLetter(aid, offerLetterId, req.body);
+  const data = await agentPortal.patchOfferLetter(aid, getQueryString(offerLetterId), req.body);
   res.status(constant.msgCode.successCode).json({
     success: constant.msgType.successStatus,
     message: 'Offer letter updated',
@@ -297,7 +298,7 @@ export const uploadOfferLetterFile = catchAsyncError(async (req: Request, res: R
   }
   const { offerLetterId } = req.params;
   const aid = await agentProfileIdFromReq(req);
-  const data = await agentPortal.uploadOfferLetterFile(aid, offerLetterId, file);
+  const data = await agentPortal.uploadOfferLetterFile(aid, getQueryString(offerLetterId), file);
   res.status(constant.msgCode.successCode).json({
     success: constant.msgType.successStatus,
     message: 'Offer file uploaded',
@@ -313,7 +314,7 @@ export const uploadSignedOffer = catchAsyncError(async (req: Request, res: Respo
   }
   const { offerLetterId } = req.params;
   const aid = await agentProfileIdFromReq(req);
-  const data = await agentPortal.uploadSignedOfferFile(aid, offerLetterId, file);
+  const data = await agentPortal.uploadSignedOfferFile(aid, getQueryString(offerLetterId), file);
   res.status(constant.msgCode.successCode).json({
     success: constant.msgType.successStatus,
     message: 'Signed offer uploaded',
@@ -324,7 +325,7 @@ export const uploadSignedOffer = catchAsyncError(async (req: Request, res: Respo
 export const sendOfferLetter = catchAsyncError(async (req: Request, res: Response) => {
   const { offerLetterId } = req.params;
   const aid = await agentProfileIdFromReq(req);
-  const data = await agentPortal.sendOfferLetter(aid, offerLetterId);
+  const data = await agentPortal.sendOfferLetter(aid, getQueryString(offerLetterId));
   res.status(constant.msgCode.successCode).json({
     success: constant.msgType.successStatus,
     message: 'Offer letter marked as sent',

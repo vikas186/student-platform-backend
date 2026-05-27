@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import constant from '../constant';
 import { catchAsyncError } from '../middleware/catchAsyncError';
 import AppError from '../utils/errorHandler';
+import { getQueryString } from '../utils/getQueryString';
 import * as universityPortal from '../services/universityPortal.service';
 
 export const getPartnership = catchAsyncError(async (req: Request, res: Response) => {
@@ -61,7 +62,7 @@ export const listApplications = catchAsyncError(async (req: Request, res: Respon
 export const getApplication = catchAsyncError(async (req: Request, res: Response) => {
   const user: any = req.user;
   const { applicationId } = req.params;
-  const data = await universityPortal.getApplicationForUniversity(user.id, applicationId);
+  const data = await universityPortal.getApplicationForUniversity(user.id, getQueryString(applicationId));
   res.status(constant.msgCode.successCode).json({
     success: constant.msgType.successStatus,
     message: 'Application fetched',
@@ -72,7 +73,7 @@ export const getApplication = catchAsyncError(async (req: Request, res: Response
 export const getApplicationChecklist = catchAsyncError(async (req: Request, res: Response) => {
   const user: any = req.user;
   const { applicationId } = req.params;
-  const data = await universityPortal.getApplicationChecklistForUniversity(user.id, applicationId);
+  const data = await universityPortal.getApplicationChecklistForUniversity(user.id, getQueryString(applicationId));
   res.status(constant.msgCode.successCode).json({
     success: constant.msgType.successStatus,
     message: 'Checklist',
@@ -84,7 +85,11 @@ export const patchApplicationStatus = catchAsyncError(async (req: Request, res: 
   const user: any = req.user;
   const { applicationId } = req.params;
   const status = String((req.body as any)?.status ?? '').trim();
-  const data = await universityPortal.patchUniversityApplicationStatus(user.id, applicationId, status);
+  const data = await universityPortal.patchUniversityApplicationStatus(
+    user.id,
+    getQueryString(applicationId),
+    status,
+  );
   res.status(constant.msgCode.successCode).json({
     success: constant.msgType.successStatus,
     message: 'Application updated',
@@ -95,7 +100,7 @@ export const patchApplicationStatus = catchAsyncError(async (req: Request, res: 
 export const patchDocument = catchAsyncError(async (req: Request, res: Response) => {
   const user: any = req.user;
   const { documentId } = req.params;
-  const data = await universityPortal.patchUniversityDocument(user.id, documentId, req.body);
+  const data = await universityPortal.patchUniversityDocument(user.id, getQueryString(documentId), req.body);
   res.status(constant.msgCode.successCode).json({
     success: constant.msgType.successStatus,
     message: 'Document updated',

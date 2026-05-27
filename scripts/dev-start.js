@@ -38,8 +38,8 @@ const startDocker = () => {
     console.log('[dev] SKIP_DOCKER=1 — not starting RabbitMQ container');
     return false;
   }
-  console.log('[dev] Starting RabbitMQ (docker compose up -d rabbitmq)...');
-  const r = spawnSync('docker', ['compose', 'up', '-d', 'rabbitmq'], {
+  console.log('[dev] Starting RabbitMQ (docker compose up -d --wait rabbitmq)...');
+  const r = spawnSync('docker', ['compose', 'up', '-d', '--wait', 'rabbitmq'], {
     stdio: 'inherit',
     shell: isWin,
   });
@@ -94,6 +94,48 @@ const runConcurrently = () => {
   child.on('exit', code => process.exit(code ?? 0));
 };
 
+const waitForDockerRabbitMq = async (maxMs = 120_000) => {
+  const deadline = Date.now() + maxMs;
+  while (Date.now() < deadline) {
+    const r = spawnSync('docker', ['exec', 'enroll-rabbitmq', 'rabbitmq-diagnostics', '-q', 'ping'], {
+      encoding: 'utf8',
+      shell: isWin,
+    });
+    if (r.status === 0) return;
+    await new Promise(resolve => setTimeout(resolve, 2_000));
+  }
+  throw new Error('Timed out waiting for RabbitMQ diagnostics ping');
+};
+
+/** Wait until AMQP accepts connections from the host (port open != AMQP ready). */
+const waitForAmqp = async (maxMs = 240_000) => {
+  const path = require('path');
+  require('dotenv').config({
+    path: path.join(process.cwd(), 'config', `.env.${process.env.NODE_ENV || 'development'}`),
+  });
+  const url = process.env.RABBITMQ_URL || 'amqp://guest:guest@127.0.0.1:5672';
+  const heartbeat = parseInt(process.env.RABBITMQ_HEARTBEAT || '0', 10);
+  const amqp = require('amqplib');
+  const deadline = Date.now() + maxMs;
+  let attempt = 0;
+
+  while (Date.now() < deadline) {
+    attempt += 1;
+    try {
+      const conn = await amqp.connect(url, { heartbeat });
+      await conn.close();
+      if (attempt > 1) {
+        console.log(`[dev] RabbitMQ AMQP ready after ${attempt} attempt(s)`);
+      }
+      return;
+    } catch {
+      await new Promise(resolve => setTimeout(resolve, 3_000));
+    }
+  }
+
+  throw new Error('Timed out waiting for RabbitMQ AMQP connection');
+};
+
 const main = async () => {
   freePort(API_PORT);
   const dockerStarted = startDocker();
@@ -102,6 +144,8 @@ const main = async () => {
     console.log(`[dev] Waiting for RabbitMQ on port ${RABBIT_PORT}...`);
     try {
       await waitForTcp('127.0.0.1', RABBIT_PORT);
+      await waitForDockerRabbitMq();
+      await waitForAmqp();
       console.log('[dev] RabbitMQ is ready');
     } catch {
       console.warn('[dev] RabbitMQ not ready yet — workers will retry connection');

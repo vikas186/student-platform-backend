@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { catchAsyncError } from '../../../middleware/catchAsyncError';
 import constant from '../../../constant';
+import { getQueryString } from '../../../utils/getQueryString';
 import * as scrape from './scrape.service';
 import type { StartScrapeBody } from './config/scrape-target.util';
 
@@ -20,7 +21,7 @@ export const listJobs = catchAsyncError(async (req: Request, res: Response) => {
 });
 
 export const getJob = catchAsyncError(async (req: Request, res: Response) => {
-  const data = await scrape.getScrapeJobById(req.params.id);
+  const data = await scrape.getScrapeJobById(getQueryString(req.params.id));
   res.status(constant.msgCode.successCode).json({ success: true, message: 'Scrape job fetched', data });
 });
 
@@ -61,12 +62,12 @@ export const exportScholarships = exportHandler(scrape.exportScholarships);
 
 export const deleteJob = catchAsyncError(async (req: Request, res: Response) => {
   const force = req.query.force === 'true' || req.query.force === '1';
-  await scrape.deleteScrapeJob(req.params.id, force);
+  await scrape.deleteScrapeJob(getQueryString(req.params.id), force);
   res.status(constant.msgCode.successCode).json({ success: true, message: 'Scrape job deleted' });
 });
 
 export const deleteCourse = catchAsyncError(async (req: Request, res: Response) => {
-  await scrape.deleteCourse(req.params.id);
+  await scrape.deleteCourse(getQueryString(req.params.id));
   res.status(constant.msgCode.successCode).json({ success: true, message: 'Course deleted' });
 });
 
@@ -76,16 +77,16 @@ export const deleteCoursesBulk = catchAsyncError(async (req: Request, res: Respo
 });
 
 export const deleteUniversity = catchAsyncError(async (req: Request, res: Response) => {
-  await scrape.deleteUniversity(req.params.id);
+  await scrape.deleteUniversity(getQueryString(req.params.id));
   res.status(constant.msgCode.successCode).json({ success: true, message: 'University deleted' });
 });
 
 export const deleteFee = catchAsyncError(async (req: Request, res: Response) => {
-  await scrape.deleteFee(req.params.id);
+  await scrape.deleteFee(getQueryString(req.params.id));
   res.status(constant.msgCode.successCode).json({ success: true, message: 'Fee record deleted' });
 });
 
 export const deleteScholarship = catchAsyncError(async (req: Request, res: Response) => {
-  await scrape.deleteScholarship(req.params.id);
+  await scrape.deleteScholarship(getQueryString(req.params.id));
   res.status(constant.msgCode.successCode).json({ success: true, message: 'Scholarship deleted' });
 });

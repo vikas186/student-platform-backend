@@ -4,6 +4,7 @@ import constant from '../constant';
 import AppError from '../utils/errorHandler';
 import * as adminPortal from '../services/adminPortal.service';
 import * as rolePermissions from '../services/rolePermissions.service';
+import { getQueryString } from '../utils/getQueryString';
 import { pickOptionalTrimmedString } from '../utils/requestFields';
 
 export const getDashboard = catchAsyncError(async (_req: Request, res: Response) => {
@@ -35,7 +36,7 @@ export const createUser = catchAsyncError(async (req: Request, res: Response) =>
 
 export const patchUserRole = catchAsyncError(async (req: Request, res: Response) => {
   const actor = req.user as { id?: string };
-  const user = await adminPortal.updateUserRoleForAdmin(req.params.userId, req.body.role, actor.id || '');
+  const user = await adminPortal.updateUserRoleForAdmin(getQueryString(req.params.userId), req.body.role, actor.id || '');
   res.status(constant.msgCode.successCode).json({
     success: true,
     message: 'Role updated',
@@ -45,7 +46,7 @@ export const patchUserRole = catchAsyncError(async (req: Request, res: Response)
 
 export const deleteUser = catchAsyncError(async (req: Request, res: Response) => {
   const actor = req.user as { id?: string };
-  await adminPortal.deleteUserForAdmin(req.params.userId, actor.id || '');
+  await adminPortal.deleteUserForAdmin(getQueryString(req.params.userId), actor.id || '');
   res.status(constant.msgCode.successCode).json({
     success: true,
     message: 'User deleted',
@@ -62,7 +63,7 @@ export const listApplications = catchAsyncError(async (req: Request, res: Respon
 });
 
 export const getApplication = catchAsyncError(async (req: Request, res: Response) => {
-  const app = await adminPortal.getApplicationForAdmin(req.params.applicationId);
+  const app = await adminPortal.getApplicationForAdmin(getQueryString(req.params.applicationId));
   res.status(constant.msgCode.successCode).json({
     success: true,
     data: { application: app },
@@ -71,7 +72,7 @@ export const getApplication = catchAsyncError(async (req: Request, res: Response
 
 export const patchApplicationStatus = catchAsyncError(async (req: Request, res: Response) => {
   const app = await adminPortal.updateApplicationStatusForAdmin(
-    req.params.applicationId,
+    getQueryString(req.params.applicationId),
     req.body.status,
   );
   res.status(constant.msgCode.successCode).json({
@@ -91,7 +92,7 @@ export const getApplicationStatusOptions = catchAsyncError(async (_req: Request,
 
 export const patchApplicationStatusUi = catchAsyncError(async (req: Request, res: Response) => {
   const app = await adminPortal.updateApplicationStatusFromUiForAdmin(
-    req.params.applicationId,
+    getQueryString(req.params.applicationId),
     req.body.uiStatus,
   );
   res.status(constant.msgCode.successCode).json({
@@ -123,7 +124,7 @@ export const importUniversityCatalog = catchAsyncError(async (req: Request, res:
 });
 
 export const importUniversityCoursesCsv = catchAsyncError(async (req: Request, res: Response) => {
-  const uid = Number((req.params as { universityId: string }).universityId);
+  const uid = Number(getQueryString(req.params.universityId));
   const file = req.file as Express.Multer.File | undefined;
   if (!file) {
     throw new AppError('CSV file is required (field name: file)', 400);
@@ -155,7 +156,7 @@ export const createCourseAdmin = catchAsyncError(async (req: Request, res: Respo
 });
 
 export const patchCourseAdmin = catchAsyncError(async (req: Request, res: Response) => {
-  const courseId = Number((req.params as any).courseId);
+  const courseId = Number(getQueryString(req.params.courseId));
   const course = await adminPortal.patchCourseForAdmin(courseId, req.body);
   res.status(constant.msgCode.successCode).json({
     success: true,
@@ -210,7 +211,7 @@ export const createCommissionRich = catchAsyncError(async (req: Request, res: Re
 
 export const patchAgentSubscription = catchAsyncError(async (req: Request, res: Response) => {
   const agent = await adminPortal.patchAgentSubscriptionForAdmin(
-    Number(req.params.agentProfileId),
+    Number(getQueryString(req.params.agentProfileId)),
     req.body.subscriptionPlanId === undefined || req.body.subscriptionPlanId === ''
       ? null
       : Number(req.body.subscriptionPlanId),
@@ -223,7 +224,7 @@ export const patchAgentSubscription = catchAsyncError(async (req: Request, res: 
 });
 
 export const deleteApplication = catchAsyncError(async (req: Request, res: Response) => {
-  await adminPortal.deleteApplicationForAdmin(req.params.applicationId);
+  await adminPortal.deleteApplicationForAdmin(getQueryString(req.params.applicationId));
   res.status(constant.msgCode.successCode).json({
     success: true,
     message: 'Application deleted',
@@ -249,7 +250,7 @@ export const createDeadline = catchAsyncError(async (req: Request, res: Response
 });
 
 export const patchDeadline = catchAsyncError(async (req: Request, res: Response) => {
-  const row = await adminPortal.updateDeadlineForAdmin(Number(req.params.deadlineId), req.body);
+  const row = await adminPortal.updateDeadlineForAdmin(Number(getQueryString(req.params.deadlineId)), req.body);
   res.status(constant.msgCode.successCode).json({
     success: true,
     message: 'Deadline updated',
@@ -258,7 +259,7 @@ export const patchDeadline = catchAsyncError(async (req: Request, res: Response)
 });
 
 export const deleteDeadline = catchAsyncError(async (req: Request, res: Response) => {
-  await adminPortal.deleteDeadlineForAdmin(Number(req.params.deadlineId));
+  await adminPortal.deleteDeadlineForAdmin(Number(getQueryString(req.params.deadlineId)));
   res.status(constant.msgCode.successCode).json({
     success: true,
     message: 'Deadline deleted',
@@ -285,7 +286,10 @@ export const createOfferLetter = catchAsyncError(async (req: Request, res: Respo
 
 export const uploadOfferLetterFile = catchAsyncError(async (req: Request, res: Response) => {
   const file = req.file as Express.Multer.File | undefined;
-  const letter = await adminPortal.uploadOfferLetterFileForAdmin(req.params.offerLetterId, file as Express.Multer.File);
+  const letter = await adminPortal.uploadOfferLetterFileForAdmin(
+    getQueryString(req.params.offerLetterId),
+    file as Express.Multer.File,
+  );
   res.status(constant.msgCode.successCode).json({
     success: true,
     message: 'File uploaded',
@@ -294,7 +298,7 @@ export const uploadOfferLetterFile = catchAsyncError(async (req: Request, res: R
 });
 
 export const deleteOfferLetter = catchAsyncError(async (req: Request, res: Response) => {
-  await adminPortal.deleteOfferLetterForAdmin(req.params.offerLetterId);
+  await adminPortal.deleteOfferLetterForAdmin(getQueryString(req.params.offerLetterId));
   res.status(constant.msgCode.successCode).json({
     success: true,
     message: 'Offer letter deleted',
@@ -336,7 +340,7 @@ export const listAgentAgreements = catchAsyncError(async (req: Request, res: Res
 
 export const approveAgentAgreement = catchAsyncError(async (req: Request, res: Response) => {
   const actor = req.user as { id?: string };
-  const id = Number(req.params.agentProfileId);
+  const id = Number(getQueryString(req.params.agentProfileId));
   if (!Number.isFinite(id) || id < 1) {
     throw new AppError('Invalid agent profile id', 400);
   }
@@ -350,7 +354,7 @@ export const approveAgentAgreement = catchAsyncError(async (req: Request, res: R
 
 export const rejectAgentAgreement = catchAsyncError(async (req: Request, res: Response) => {
   const actor = req.user as { id?: string };
-  const id = Number(req.params.agentProfileId);
+  const id = Number(getQueryString(req.params.agentProfileId));
   if (!Number.isFinite(id) || id < 1) {
     throw new AppError('Invalid agent profile id', 400);
   }
@@ -364,7 +368,7 @@ export const rejectAgentAgreement = catchAsyncError(async (req: Request, res: Re
 });
 
 export const deleteAgentAgreement = catchAsyncError(async (req: Request, res: Response) => {
-  const id = Number(req.params.agentProfileId);
+  const id = Number(getQueryString(req.params.agentProfileId));
   if (!Number.isFinite(id) || id < 1) {
     throw new AppError('Invalid agent profile id', 400);
   }
@@ -395,7 +399,7 @@ export const createCommission = catchAsyncError(async (req: Request, res: Respon
 });
 
 export const patchCommission = catchAsyncError(async (req: Request, res: Response) => {
-  const row = await adminPortal.updateCommissionForAdmin(Number(req.params.commissionId), req.body);
+  const row = await adminPortal.updateCommissionForAdmin(Number(getQueryString(req.params.commissionId)), req.body);
   res.status(constant.msgCode.successCode).json({
     success: true,
     message: 'Commission slab updated',
@@ -404,7 +408,7 @@ export const patchCommission = catchAsyncError(async (req: Request, res: Respons
 });
 
 export const deleteCommission = catchAsyncError(async (req: Request, res: Response) => {
-  await adminPortal.deleteCommissionForAdmin(Number(req.params.commissionId));
+  await adminPortal.deleteCommissionForAdmin(Number(getQueryString(req.params.commissionId)));
   res.status(constant.msgCode.successCode).json({
     success: true,
     message: 'Commission slab deleted',
@@ -430,7 +434,7 @@ export const createSubscriptionPlan = catchAsyncError(async (req: Request, res: 
 });
 
 export const patchSubscriptionPlan = catchAsyncError(async (req: Request, res: Response) => {
-  const row = await adminPortal.updateSubscriptionPlanForAdmin(Number(req.params.planId), req.body);
+  const row = await adminPortal.updateSubscriptionPlanForAdmin(Number(getQueryString(req.params.planId)), req.body);
   res.status(constant.msgCode.successCode).json({
     success: true,
     message: 'Subscription plan updated',
@@ -439,7 +443,7 @@ export const patchSubscriptionPlan = catchAsyncError(async (req: Request, res: R
 });
 
 export const deleteSubscriptionPlan = catchAsyncError(async (req: Request, res: Response) => {
-  await adminPortal.deleteSubscriptionPlanForAdmin(Number(req.params.planId));
+  await adminPortal.deleteSubscriptionPlanForAdmin(Number(getQueryString(req.params.planId)));
   res.status(constant.msgCode.successCode).json({
     success: true,
     message: 'Subscription plan deleted',
@@ -456,7 +460,7 @@ export const createUniversity = catchAsyncError(async (req: Request, res: Respon
 });
 
 export const patchUniversity = catchAsyncError(async (req: Request, res: Response) => {
-  const row = await adminPortal.updateUniversityForAdmin(Number(req.params.universityId), req.body);
+  const row = await adminPortal.updateUniversityForAdmin(Number(getQueryString(req.params.universityId)), req.body);
   res.status(constant.msgCode.successCode).json({
     success: true,
     message: 'University updated',
@@ -465,7 +469,7 @@ export const patchUniversity = catchAsyncError(async (req: Request, res: Respons
 });
 
 export const deleteUniversity = catchAsyncError(async (req: Request, res: Response) => {
-  const id = Number(req.params.universityId);
+  const id = Number(getQueryString(req.params.universityId));
   if (!Number.isFinite(id) || id < 1) {
     throw new AppError('Invalid university id', 400);
   }
@@ -529,7 +533,7 @@ export const syncChatKnowledge = catchAsyncError(async (_req: Request, res: Resp
 });
 
 export const patchStudentCounselling = catchAsyncError(async (req: Request, res: Response) => {
-  const id = Number(req.params.studentProfileId);
+  const id = Number(getQueryString(req.params.studentProfileId));
   if (!Number.isFinite(id) || id < 1) {
     throw new AppError('Invalid student profile id', 400);
   }

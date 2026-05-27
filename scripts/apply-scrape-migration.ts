@@ -1,5 +1,5 @@
 /**
- * Applies scrape schema updates (007 + 008).
+ * Applies scrape schema (005–009 in order).
  * Usage: npm run migrate:scrape
  */
 import dotenv from 'dotenv';
@@ -33,9 +33,12 @@ async function main(): Promise<void> {
   });
 
   await sequelize.authenticate();
+  await runSql(sequelize, '005_idp_aecc_scrape.sql');
+  await runSql(sequelize, '006_generic_scrape_targets.sql');
   await runSql(sequelize, '007_multi_entity_scrape.sql');
   await runSql(sequelize, '008_scrape_ai_enrichment.sql');
   await runSql(sequelize, '009_scrape_ai_meta_job_fk.sql');
+  await runSql(sequelize, '010_scrape_jobs_status_enum.sql');
   await sequelize.close();
 }
 

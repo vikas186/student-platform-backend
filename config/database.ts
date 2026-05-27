@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import { Sequelize } from 'sequelize';
 import AppError from '../utils/errorHandler';
 
@@ -154,6 +156,21 @@ async function ensureOfferLetterReferenceSequence(): Promise<void> {
   await sequelize.query(`SELECT setval('offer_letter_ref_seq', ${floor}, true)`);
 }
 
+async function repairScrapeJobsEnumColumns(): Promise<void> {
+  const [[jobsTable]]: any = await sequelize.query(`
+    SELECT EXISTS (
+      SELECT FROM information_schema.tables
+      WHERE table_schema = 'public' AND table_name = 'scrape_jobs'
+    ) AS e
+  `);
+  if (!jobsTable?.e) return;
+
+  const migrationPath = path.join(__dirname, '..', 'migrations', '010_scrape_jobs_status_enum.sql');
+  if (fs.existsSync(migrationPath)) {
+    await sequelize.query(fs.readFileSync(migrationPath, 'utf8'));
+  }
+}
+
 async function ensureApplicationNumberSequence(): Promise<void> {
   await sequelize.query(`
     CREATE SEQUENCE IF NOT EXISTS application_number_seq
@@ -181,6 +198,7 @@ if (shouldSyncDb) {
     try {
       await repairLegacyApplicationUuidSchema();
       await repairApplicationNumberColumn();
+      await repairScrapeJobsEnumColumns();
       await sequelize.sync({ alter: true });
       await ensureApplicationNumberSequence();
       await ensureOfferLetterReferenceSequence();
