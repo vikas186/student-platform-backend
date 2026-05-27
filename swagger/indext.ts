@@ -6,7 +6,7 @@
  *   - name: User
  *     description: Authenticated user profile
  *   - name: Catalog
- *     description: Universities and courses (authenticated)
+ *     description: Universities and courses — includes public endpoints (no auth) and authenticated catalog
  *   - name: Student
  *     description: Student portal — applications, documents, profile
  *   - name: University
