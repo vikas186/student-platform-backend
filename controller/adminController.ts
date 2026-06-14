@@ -532,6 +532,15 @@ export const syncChatKnowledge = catchAsyncError(async (_req: Request, res: Resp
   });
 });
 
+export const syncRecommendationKnowledge = catchAsyncError(async (_req: Request, res: Response) => {
+  const data = await adminPortal.syncRecommendationKnowledgeForAdmin();
+  res.status(constant.msgCode.successCode).json({
+    success: true,
+    message: 'Recommendation knowledge base synced',
+    data,
+  });
+});
+
 export const patchStudentCounselling = catchAsyncError(async (req: Request, res: Response) => {
   const id = Number(getQueryString(req.params.studentProfileId));
   if (!Number.isFinite(id) || id < 1) {

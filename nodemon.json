@@ -13,6 +13,7 @@
     "app.ts",
     "server.ts"
   ],
-  "ignore": ["debug/**", "raw/**", "logs/**", "uploads/**", "node_modules/**"],
-  "ext": "ts,json"
+  "ignore": ["debug/**", "raw/**", "logs/**", "uploads/**", "node_modules/**", "swagger/**"],
+  "ext": "ts,json",
+  "delay": 1500
 }

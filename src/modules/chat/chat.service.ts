@@ -4,8 +4,10 @@ import AppError from '../../../utils/errorHandler';
 import { isUuid } from '../../../utils/isUuid';
 import type { UserRole } from '../../../models/User.model';
 import { assertKnowledgeBaseReady } from './knowledge-base.service';
-import { generateAssistantReply } from './ai-chat.service';
+import { generateAssistantReply, generatePublicStudentReply } from './ai-chat.service';
 import type { AssistantChatRole, ChatHistoryMessage, PostChatMessageResponse, PostFeedbackBody } from './chat.types';
+import { getChatSuggestions, type ChatSuggestionAudience } from './public-chat.config';
+import { normalizePublicMessageBody, type PublicMessageBody } from './public-chat.util';
 
 async function assertSessionOwner(sessionId: string, userId: string) {
   const session = await db.ChatSession.findOne({ where: { id: sessionId, userId } });
@@ -118,6 +120,46 @@ export async function getHistory(
   }));
 
   return { messages };
+}
+
+export async function getPublicSuggestions(audience: ChatSuggestionAudience) {
+  return {
+    audience,
+    suggestions: getChatSuggestions(audience),
+  };
+}
+
+const defaultAudienceForRole = (role: UserRole): ChatSuggestionAudience => {
+  if (role === 'agent') return 'agent';
+  return 'student';
+};
+
+export async function getSuggestionsForUser(role: UserRole, audience?: ChatSuggestionAudience) {
+  const resolved = audience ?? defaultAudienceForRole(role);
+  return getPublicSuggestions(resolved);
+}
+
+export async function postPublicMessage(body: PublicMessageBody): Promise<{ reply: string }> {
+  await assertKnowledgeBaseReady();
+
+  const { priorTurns, exploreHint } = normalizePublicMessageBody(body);
+
+  let reply: string;
+  try {
+    reply = await generatePublicStudentReply({
+      userMessage: body.message.trim(),
+      priorTurns,
+      exploreHint: exploreHint || undefined,
+    });
+  } catch (e: unknown) {
+    if (e instanceof AppError) {
+      throw e;
+    }
+    const msg = e instanceof Error ? e.message : 'Assistant unavailable';
+    throw new AppError(msg, 503);
+  }
+
+  return { reply };
 }
 
 export async function deleteHistory(userId: string, sessionId?: string, all?: boolean): Promise<void> {

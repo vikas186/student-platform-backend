@@ -55,6 +55,8 @@ import {
   agentProfilePatchJoiSchema,
   listStudentsQueryJoiSchema,
 } from '../validations/agent.validation';
+import { postAgentMatch } from '../src/modules/recommendations/recommendations.controller';
+import { agentMatchJoiSchema } from '../src/modules/recommendations/recommendations.validation';
 
 const agentRouter = Router();
 
@@ -164,6 +166,12 @@ agentRouter
     requirePermission('applications', 'view'),
     validateMiddleware(discoveryQueryJoiSchema),
     discoveryCourses,
+  )
+  .post(
+    '/recommendations/match',
+    requirePermission('applications', 'view'),
+    validateMiddleware(agentMatchJoiSchema as any),
+    postAgentMatch,
   );
 
 export default agentRouter;

@@ -1,19 +1,70 @@
 import OpenAI from 'openai';
-import { Op, fn } from 'sequelize';
 import { db } from '../../../config/database';
 import type { UserRole } from '../../../models/User.model';
-import { applicationScopeForUniversity } from '../../../utils/universityApplicationScope';
 import { embedText } from './embedding.service';
 import { searchSimilarKnowledge, sanitizeKnowledgeSnippets } from './knowledge-base.service';
+import { buildPlatformDataContext } from './platform-data-context.service';
 import type { AssistantChatRole, ChatUserContext, OpenAiChatMessage } from './chat.types';
 
-const SYSTEM_PROMPT = `You are an AI assistant for a Student Recruitment Platform.
-Answer only using the provided platform context.
-If information is missing, say you don't have confirmed information and suggest contacting the counsellor/admin.
-Follow role-based restrictions.
-Do not expose private student data.
-Do not show commission data to students.
-Keep answers clear, short, and helpful.`;
+const SHARED_RULES = `Never reveal passwords, JWT tokens, or internal file storage paths.
+Only use data present in the provided context — do not invent users, documents, or application records.
+Keep answers clear, structured, and helpful. Use bullet lists when listing multiple items.`;
+
+const STUDENT_PROMPT = `You are **Enroll Assistant**, the friendly AI helper for students on the Enroll study-abroad platform.
+
+Your job: help students with studying abroad — programs, countries, IELTS/English tests, documents, applications, deadlines, budgets, and how to use Explore.
+
+Student conversation rules:
+- Speak in plain, simple English. Be warm, patient, and direct.
+- Always answer the student's actual question. For short follow-ups ("oh", "what?", "I don't understand", "why?") — look at the conversation history and clarify or simplify your previous answer.
+- If they ask your name: you are Enroll Assistant on Enroll.
+- NEVER give internal agent or counsellor sales advice (e.g. "improve conversion", "discovery flow", "first calls", "pathways for agents"). Those topics are not for students.
+- For IELTS questions: explain it is commonly required for UK/Canada/Australia; typical scores are roughly 6.0–7.5 but vary by program; PTE/TOEFL/Duolingo may be accepted; suggest Explore or their counsellor for exact requirements.
+- Before counselling is complete: do not reveal specific university names from catalog data (they may appear masked).
+- If you lack specific data, say so honestly and suggest Explore, signing in, or speaking to a counsellor — do not make up programs or fees.
+
+${SHARED_RULES}`;
+
+const AGENT_PROMPT = `You are an AI assistant for education agents on the Enroll platform.
+Help with partner universities, commissions, student applications in their scope, documents, and pathways.
+Agents may receive sales and workflow guidance when relevant to their role.
+
+${SHARED_RULES}`;
+
+const ADMIN_PROMPT = `You are an AI assistant for Enroll platform administrators.
+You may list users, pending document reviews, applications, payments, scrape jobs, and commissions from the live context.
+
+${SHARED_RULES}`;
+
+const UNIVERSITY_PROMPT = `You are an AI assistant for university staff on the Enroll platform.
+Help with applications, document verification, courses, deadlines, and institution-specific data in their scope.
+
+${SHARED_RULES}`;
+
+const DEFAULT_PROMPT = `You are an AI assistant for the Enroll Student Recruitment Platform.
+Answer using the live database context and knowledge snippets when relevant.
+
+${SHARED_RULES}`;
+
+const VAGUE_FOLLOWUP =
+  /^(oh|ok|okay|k|hmm+|what\??|why\??|huh\??|not understanding|i don'?t understand|don'?t understand|explain|sorry\??|what do you mean\??)$/i;
+
+const isVagueFollowUp = (message: string): boolean => VAGUE_FOLLOWUP.test(message.trim());
+
+const buildRoleSystemPrompt = (role: UserRole): string => {
+  switch (role) {
+    case 'student':
+      return STUDENT_PROMPT;
+    case 'agent':
+      return AGENT_PROMPT;
+    case 'admin':
+      return ADMIN_PROMPT;
+    case 'university':
+      return UNIVERSITY_PROMPT;
+    default:
+      return DEFAULT_PROMPT;
+  }
+};
 
 let client: OpenAI | null = null;
 
@@ -71,94 +122,48 @@ export async function buildChatUserContext(user: { id: string; role: UserRole })
   return base;
 }
 
-export async function buildPlatformContext(ctx: ChatUserContext): Promise<string> {
-  if (ctx.role === 'admin') {
-    const [apps, unis, students] = await Promise.all([db.Application.count(), db.University.count(), db.StudentProfile.count()]);
-    return `Admin overview (aggregates only): applications=${apps}, universities=${unis}, student profiles=${students}.`;
-  }
+const PUBLIC_EXPLORE_CTX: ChatUserContext = {
+  userId: 'public-explore',
+  role: 'student',
+  agentProfileId: null,
+  universityId: null,
+  universityName: null,
+  studentProfileId: null,
+  counsellingCompletedAt: null,
+};
 
-  if (ctx.role === 'student' && ctx.studentProfileId) {
-    const apps = await db.Application.findAll({
-      where: { studentId: ctx.studentProfileId },
-      attributes: ['status', 'applicationNumber', 'universityName', 'programName', 'country'],
-    });
-    const byStatus: Record<string, number> = {};
-    for (const a of apps) {
-      const s = a.status;
-      byStatus[s] = (byStatus[s] || 0) + 1;
-    }
-    const counselling = Boolean(ctx.counsellingCompletedAt);
-    const lines = [`Student pipeline status counts: ${JSON.stringify(byStatus)}.`];
-    if (counselling) {
-      const refs = apps
-        .slice(0, 8)
-        .map(a => `${a.applicationNumber} (${a.status}) — ${a.universityName || 'TBD'} / ${a.programName || 'TBD'}`);
-      lines.push(`Recent applications (reference only): ${refs.join('; ') || 'none'}.`);
-    } else {
-      lines.push(
-        'University names are withheld until counselling is completed; use generic guidance only for institution-specific questions.',
-      );
-    }
-    return lines.join(' ');
-  }
-
-  if (ctx.role === 'agent' && ctx.agentProfileId) {
-    const linked = await db.StudentProfile.findAll({
-      where: { agentProfileId: ctx.agentProfileId },
-      attributes: ['id'],
-    });
-    const studentIds = linked.map(s => s.id);
-    const [directApps, linkedStudents] = await Promise.all([
-      db.Application.count({ where: { agentId: ctx.agentProfileId } }),
-      Promise.resolve(studentIds.length),
-    ]);
-    const samples = await db.Application.findAll({
-      where: {
-        [Op.or]: [{ agentId: ctx.agentProfileId }, { studentId: { [Op.in]: studentIds } }],
-      },
-      attributes: ['applicationNumber', 'status'],
-      limit: 6,
-      order: [['updatedAt', 'DESC']],
-    });
-    const refs = samples.map(a => `${a.applicationNumber} (${a.status})`).join(', ');
-    return `Agent scope: applications directly assigned=${directApps}, linked students=${linkedStudents}. Sample refs: ${refs || 'none'}.`;
-  }
-
-  if (ctx.role === 'university' && ctx.universityId !== null && ctx.universityName) {
-    const scope = applicationScopeForUniversity(ctx.universityId, ctx.universityName);
-    const rows = (await db.Application.findAll({
-      attributes: ['status', [fn('COUNT', '*'), 'cnt']],
-      where: scope,
-      group: ['Application.status'],
-      raw: true,
-    })) as unknown as { status: string; cnt: string }[];
-    const parts = rows.map(r => `${r.status}:${r.cnt}`);
-    return `Institution application counts (your university only): ${parts.join(', ') || 'none'}.`;
-  }
-
-  return 'Platform context: limited profile data loaded for this role.';
-}
-
-export async function generateAssistantReply(input: {
-  user: { id: string; role: UserRole };
+async function completeChat(input: {
+  ctx: ChatUserContext;
   userMessage: string;
-  /** Last turns for continuity (oldest first) */
   priorTurns: { role: AssistantChatRole; content: string }[];
+  platformBlock?: string;
 }): Promise<string> {
-  const ctx = await buildChatUserContext(input.user);
   const embedding = await embedText(input.userMessage);
-  const hits = await searchSimilarKnowledge(embedding, ctx, { limit: 8 });
-  const snippets = sanitizeKnowledgeSnippets(hits, ctx);
+  const hits = await searchSimilarKnowledge(embedding, input.ctx, {
+    limit: 8,
+    minSimilarity: 0.38,
+    excludeRecommendationChunks: true,
+  });
+  const snippets = sanitizeKnowledgeSnippets(hits, input.ctx);
   const ragBlock = snippets.filter(s => s !== '[restricted]').join('\n---\n');
-  const platformBlock = await buildPlatformContext(ctx);
+  const platformBlock =
+    input.platformBlock ??
+    (input.ctx.userId === PUBLIC_EXPLORE_CTX.userId
+      ? 'Explore visitor (not signed in). No personal application, document, or payment data. Suggest signing in for account-specific status.'
+      : await buildPlatformDataContext(input.ctx));
 
-  const systemContent = `${SYSTEM_PROMPT}
+  const vagueNote =
+    isVagueFollowUp(input.userMessage) && input.priorTurns.length
+      ? `\n\nThe student sent a brief follow-up. Re-read the conversation and explain your previous answer more simply. Stay on their topic — do not switch to agent/counsellor workflows.`
+      : '';
 
-Platform context:
+  const systemContent = `${buildRoleSystemPrompt(input.ctx.role)}${vagueNote}
+
+Live database context (role-scoped):
 ${platformBlock}
 
-Knowledge snippets (retrieved; may be incomplete):
-${ragBlock || '(none)'}`;
+Knowledge snippets (FAQs, courses, deadlines — use when relevant):
+${ragBlock || '(none — answer from general student guidance and conversation history)'}`;
 
   const history: OpenAiChatMessage[] = input.priorTurns
     .filter(m => m.role === 'user' || m.role === 'assistant')
@@ -173,7 +178,7 @@ ${ragBlock || '(none)'}`;
   const res = await getClient().chat.completions.create({
     model: chatModel(),
     messages,
-    temperature: 0.25,
+    temperature: input.ctx.role === 'student' ? 0.35 : 0.25,
     max_tokens: 900,
   });
 
@@ -182,4 +187,38 @@ ${ragBlock || '(none)'}`;
     throw new Error('OpenAI returned an empty completion');
   }
   return text;
+}
+
+/** Anonymous Explore / marketing-site chat (no JWT). */
+export async function generatePublicStudentReply(input: {
+  userMessage: string;
+  priorTurns: { role: AssistantChatRole; content: string }[];
+  exploreHint?: string;
+}): Promise<string> {
+  const exploreBlock = input.exploreHint
+    ? `Explore form context from the visitor: ${input.exploreHint}`
+    : undefined;
+
+  return completeChat({
+    ctx: PUBLIC_EXPLORE_CTX,
+    userMessage: input.userMessage,
+    priorTurns: input.priorTurns,
+    platformBlock: exploreBlock
+      ? `Explore visitor (not signed in). No personal application, document, or payment data.\n${exploreBlock}`
+      : undefined,
+  });
+}
+
+export async function generateAssistantReply(input: {
+  user: { id: string; role: UserRole };
+  userMessage: string;
+  /** Last turns for continuity (oldest first) */
+  priorTurns: { role: AssistantChatRole; content: string }[];
+}): Promise<string> {
+  const ctx = await buildChatUserContext(input.user);
+  return completeChat({
+    ctx,
+    userMessage: input.userMessage,
+    priorTurns: input.priorTurns,
+  });
 }

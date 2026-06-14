@@ -59,12 +59,27 @@ function formatCommissionText(uniName: string, pct: number, slab: string | null)
 const STATIC_FAQ_CHUNKS: { chunkKey: string; text: string; access: KnowledgeAccess }[] = [
   {
     chunkKey: 'faq:platform-overview',
-    text: 'The Student Recruitment Platform helps students explore programs, submit applications, upload documents, and track status. Agents and counsellors assist with shortlisting. Universities review applications for their institution. For account-specific status, contact your counsellor or admin.',
+    text: 'The Enroll Student Recruitment Platform helps students explore programs abroad, submit applications, upload documents, and track status. Use Explore to map courses to your profile before applying. Agents and counsellors can help with shortlisting after you sign in.',
     access: accessGeneric(),
   },
   {
     chunkKey: 'faq:documents',
-    text: 'Typical documents include transcripts, passport, English test scores (e.g. IELTS), and supporting statements. Exact requirements depend on the program and institution. If unsure, ask your counsellor for a checklist.',
+    text: 'Typical documents include transcripts, passport, English test scores (e.g. IELTS, PTE, or TOEFL), and supporting statements. Exact requirements depend on the program and institution. Upload documents in your student dashboard or ask your counsellor for a checklist.',
+    access: accessGeneric(),
+  },
+  {
+    chunkKey: 'faq:ielts',
+    text: 'IELTS (or equivalent such as PTE, TOEFL, or Duolingo English Test) is often required for UK, Canada, Australia, and similar destinations. Typical overall scores range from 6.0 to 7.5 depending on level and program. Some foundation or pathway programs accept lower scores. Requirements vary by university and course — use Explore to see options for your profile, or ask your counsellor for program-specific rules.',
+    access: accessGeneric(),
+  },
+  {
+    chunkKey: 'faq:assistant-identity',
+    text: 'You are chatting with Enroll Assistant, the AI helper on the Enroll student platform. Enroll Assistant answers questions about studying abroad, English tests, documents, applications, deadlines, and how to use Explore. Enroll Assistant does not replace a human counsellor for final decisions.',
+    access: accessGeneric(),
+  },
+  {
+    chunkKey: 'faq:explore',
+    text: 'Explore lets students enter academic level, field of interest, target country, budget, and intake to get AI-mapped course suggestions. University names may stay hidden until counselling. After exploring, students can sign in to save progress, upload documents, and apply with Enroll.',
     access: accessGeneric(),
   },
 ];

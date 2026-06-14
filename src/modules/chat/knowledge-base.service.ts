@@ -117,6 +117,10 @@ export const upsertKnowledgeItem = async (input: UpsertKnowledgeInput): Promise<
 
 export type SearchKnowledgeOptions = {
   limit?: number;
+  /** Minimum cosine similarity (0–1) to include a hit in chat context */
+  minSimilarity?: number;
+  /** Exclude recommendation-index chunks (rec_*) — used by course-match API only */
+  excludeRecommendationChunks?: boolean;
 };
 
 const filterReplacements = (
@@ -150,6 +154,8 @@ export const searchSimilarKnowledge = async (
   options: SearchKnowledgeOptions = {},
 ): Promise<RagHit[]> => {
   const limit = Math.min(Math.max(options.limit ?? 8, 1), 24);
+  const minSimilarity = options.minSimilarity ?? 0.38;
+  const excludeRec = options.excludeRecommendationChunks !== false;
   const vec = vectorLiteral(queryEmbedding);
   const { roleJson, isStudent, counsellingDone, uniFilter, uniId } = filterReplacements(userContext);
   const kind = await getEmbeddingStorageKind();
@@ -176,6 +182,10 @@ export const searchSimilarKnowledge = async (
            OR k.university_id IS NULL
            OR k.university_id = :uniId
          )
+         AND (
+           :excludeRec::boolean = false
+           OR k.source_type NOT LIKE 'rec\\_%'
+         )
        ORDER BY k.embedding <=> :vec::vector
        LIMIT :limit`,
       {
@@ -186,22 +196,25 @@ export const searchSimilarKnowledge = async (
           counsellingDone,
           uniFilter,
           uniId,
+          excludeRec,
           limit,
         },
         type: QueryTypes.SELECT,
       },
     )) as Record<string, unknown>[];
 
-    return rows.map(r => ({
-      id: Number(r.id),
-      chunkKey: String(r.chunkKey),
-      contentText: String(r.contentText),
-      sourceType: String(r.sourceType),
-      sourceId: r.sourceId !== undefined && r.sourceId !== null ? String(r.sourceId) : null,
-      universityId: r.universityId !== undefined && r.universityId !== null ? Number(r.universityId) : null,
-      access: parseAccess(r.access),
-      similarity: Number(r.similarity),
-    }));
+    return rows
+      .map(r => ({
+        id: Number(r.id),
+        chunkKey: String(r.chunkKey),
+        contentText: String(r.contentText),
+        sourceType: String(r.sourceType),
+        sourceId: r.sourceId !== undefined && r.sourceId !== null ? String(r.sourceId) : null,
+        universityId: r.universityId !== undefined && r.universityId !== null ? Number(r.universityId) : null,
+        access: parseAccess(r.access),
+        similarity: Number(r.similarity),
+      }))
+      .filter(h => h.similarity >= minSimilarity);
   }
 
   const wide = (await db.sequelize.query(
@@ -224,6 +237,10 @@ export const searchSimilarKnowledge = async (
          OR k.university_id IS NULL
          OR k.university_id = :uniId
        )
+       AND (
+         :excludeRec::boolean = false
+         OR k.source_type NOT LIKE 'rec\\_%'
+       )
      LIMIT :cap`,
     {
       replacements: {
@@ -232,6 +249,7 @@ export const searchSimilarKnowledge = async (
         counsellingDone,
         uniFilter,
         uniId,
+        excludeRec,
         cap: JSONB_SCAN_CAP,
       },
       type: QueryTypes.SELECT,
@@ -245,6 +263,7 @@ export const searchSimilarKnowledge = async (
       return { r, similarity };
     })
     .sort((a, b) => b.similarity - a.similarity)
+    .filter(({ similarity }) => similarity >= minSimilarity)
     .slice(0, limit);
 
   return scored.map(({ r, similarity }) => ({
@@ -274,6 +293,142 @@ export const sanitizeKnowledgeSnippets = (hits: RagHit[], userContext: ChatUserC
     }
     return t;
   });
+};
+
+export type SearchRecommendationOptions = {
+  limit?: number;
+  sourceTypes?: string[];
+};
+
+const RECOMMENDATION_SOURCE_TYPES = ['rec_catalog', 'rec_scrape', 'rec_fee_range', 'rec_career', 'rec_commission'];
+
+const recommendationContextForAudience = (audience: 'public' | 'agent'): ChatUserContext => ({
+  userId: 'recommendation',
+  role: audience === 'agent' ? 'agent' : 'student',
+  agentProfileId: null,
+  universityId: null,
+  universityName: null,
+  studentProfileId: null,
+  counsellingCompletedAt: audience === 'public' ? null : new Date(),
+});
+
+/**
+ * Vector search scoped to recommendation chunks (rec_* source types).
+ * Public audience uses student role with counselling incomplete (excludes commission chunks).
+ */
+export const searchRecommendationKnowledge = async (
+  queryEmbedding: number[],
+  audience: 'public' | 'agent',
+  options: SearchRecommendationOptions = {},
+): Promise<RagHit[]> => {
+  const limit = Math.min(Math.max(options.limit ?? 12, 1), 24);
+  const sourceTypes = options.sourceTypes ?? RECOMMENDATION_SOURCE_TYPES;
+  const userContext = recommendationContextForAudience(audience);
+  const vec = vectorLiteral(queryEmbedding);
+  const { roleJson, isStudent, counsellingDone, uniFilter, uniId } = filterReplacements(userContext);
+  const sourceTypesJson = JSON.stringify(sourceTypes);
+  const kind = await getEmbeddingStorageKind();
+
+  const mapRow = (r: Record<string, unknown>, similarity: number): RagHit => ({
+    id: Number(r.id),
+    chunkKey: String(r.chunkKey),
+    contentText: String(r.contentText),
+    sourceType: String(r.sourceType),
+    sourceId: r.sourceId !== undefined && r.sourceId !== null ? String(r.sourceId) : null,
+    universityId: r.universityId !== undefined && r.universityId !== null ? Number(r.universityId) : null,
+    access: parseAccess(r.access),
+    similarity,
+  });
+
+  if (kind === 'vector') {
+    const rows = (await db.sequelize.query(
+      `SELECT k.id, k.chunk_key AS "chunkKey", k.content_text AS "contentText",
+              k.source_type AS "sourceType", k.source_id AS "sourceId",
+              k.university_id AS "universityId", k.access,
+              (1 - (k.embedding <=> :vec::vector)) AS similarity
+       FROM knowledge_base k
+       WHERE k.source_type = ANY(ARRAY(SELECT jsonb_array_elements_text(:sourceTypesJson::jsonb)))
+         AND (k.access->'roles') @> :roleJson::jsonb
+         AND (
+           :isStudent::boolean = false
+           OR COALESCE((k.access->'flags'->>'commission'), 'false') <> 'true'
+         )
+         AND (
+           :isStudent::boolean = false
+           OR :counsellingDone::boolean = true
+           OR COALESCE((k.access->'flags'->>'university_named'), 'false') <> 'true'
+           OR k.source_type IN ('rec_catalog', 'rec_scrape', 'rec_fee_range')
+         )
+         AND (
+           :uniFilter::boolean = false
+           OR k.university_id IS NULL
+           OR k.university_id = :uniId
+         )
+       ORDER BY k.embedding <=> :vec::vector
+       LIMIT :limit`,
+      {
+        replacements: {
+          vec,
+          sourceTypesJson,
+          roleJson,
+          isStudent,
+          counsellingDone,
+          uniFilter,
+          uniId,
+          limit,
+        },
+        type: QueryTypes.SELECT,
+      },
+    )) as Record<string, unknown>[];
+
+    return rows.map(r => mapRow(r, Number(r.similarity)));
+  }
+
+  const wide = (await db.sequelize.query(
+    `SELECT k.id, k.chunk_key AS "chunkKey", k.content_text AS "contentText",
+            k.source_type AS "sourceType", k.source_id AS "sourceId",
+            k.university_id AS "universityId", k.access, k.embedding AS "embeddingRaw"
+     FROM knowledge_base k
+     WHERE k.source_type = ANY(ARRAY(SELECT jsonb_array_elements_text(:sourceTypesJson::jsonb)))
+       AND (k.access->'roles') @> :roleJson::jsonb
+       AND (
+         :isStudent::boolean = false
+         OR COALESCE((k.access->'flags'->>'commission'), 'false') <> 'true'
+       )
+       AND (
+         :isStudent::boolean = false
+         OR :counsellingDone::boolean = true
+         OR COALESCE((k.access->'flags'->>'university_named'), 'false') <> 'true'
+         OR k.source_type IN ('rec_catalog', 'rec_scrape', 'rec_fee_range')
+       )
+       AND (
+         :uniFilter::boolean = false
+         OR k.university_id IS NULL
+         OR k.university_id = :uniId
+       )
+     LIMIT :cap`,
+    {
+      replacements: {
+        sourceTypesJson,
+        roleJson,
+        isStudent,
+        counsellingDone,
+        uniFilter,
+        uniId,
+        cap: JSONB_SCAN_CAP,
+      },
+      type: QueryTypes.SELECT,
+    },
+  )) as Record<string, unknown>[];
+
+  return wide
+    .map(r => {
+      const emb = parseEmbeddingFromDb(r.embeddingRaw);
+      const similarity = cosineSimilarity(queryEmbedding, emb);
+      return mapRow(r, similarity);
+    })
+    .sort((a, b) => b.similarity - a.similarity)
+    .slice(0, limit);
 };
 
 export const assertKnowledgeBaseReady = async (): Promise<void> => {
