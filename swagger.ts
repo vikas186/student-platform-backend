@@ -33,6 +33,8 @@ const swaggerDefinition = {
     },
     { name: 'Admin', description: 'Admin workspace — role `admin` only (`Bearer` token)' },
     { name: 'Chat', description: 'AI assistant — all authenticated roles (`Bearer` token)' },
+    { name: 'Recommendations', description: 'RAG course recommendations — public + agent pathways' },
+    { name: 'Scheduling', description: 'Google Calendar — counselling & mock interview booking' },
   ],
   components: {
     securitySchemes: {

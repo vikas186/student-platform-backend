@@ -22,6 +22,7 @@ export default (sequelize: Sequelize) => {
       StudentProfile.belongsTo(models.AgentProfile, { foreignKey: 'agentProfileId', as: 'linkedAgent', onDelete: 'SET NULL' });
       StudentProfile.hasMany(models.Application, { foreignKey: 'studentId', as: 'applications' });
       StudentProfile.hasMany(models.Document, { foreignKey: 'studentProfileId', as: 'documents', onDelete: 'CASCADE' });
+      StudentProfile.hasMany(models.Appointment, { foreignKey: 'studentProfileId', as: 'appointments', onDelete: 'CASCADE' });
     }
   }
 

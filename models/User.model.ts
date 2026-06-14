@@ -31,6 +31,8 @@ export default (sequelize: Sequelize) => {
       User.hasMany(models.ChatMessage, { foreignKey: 'receiverId', as: 'receivedMessages', onDelete: 'CASCADE' });
       User.hasMany(models.ChatSession, { foreignKey: 'userId', as: 'chatSessions', onDelete: 'CASCADE' });
       User.hasMany(models.ChatFeedback, { foreignKey: 'userId', as: 'chatFeedback', onDelete: 'CASCADE' });
+      User.hasOne(models.GoogleCalendarConnection, { foreignKey: 'userId', as: 'googleCalendarConnection', onDelete: 'CASCADE' });
+      User.hasMany(models.CounsellorAvailability, { foreignKey: 'adminUserId', as: 'counsellorAvailability', onDelete: 'CASCADE' });
     }
 
     async login(password: string): Promise<boolean> {

@@ -1,5 +1,16 @@
 import { Op } from 'sequelize';
 import { db } from '../config/database';
+import {
+  buildProgramsForUniversity,
+  mapDbCourse,
+  mapScrapedCourse,
+  namesMatch,
+  parseFeeNumber,
+  programsFromFeeRanges,
+  type PublicProgram,
+} from '../utils/catalogProgram.util';
+
+export type { PublicProgram } from '../utils/catalogProgram.util';
 
 const PUBLIC_UNIVERSITY_ATTRIBUTES = [
   'id',
@@ -22,173 +33,11 @@ const SCRAPED_PROGRAM_ATTRIBUTES = [
   'universityName',
 ] as const;
 
-const FEE_RANGE_PROGRAMS: Record<
-  string,
-  { courseName: string; degree: string; duration: string }
-> = {
-  ugBusinessUsdYear: {
-    courseName: 'Undergraduate Business Programs',
-    degree: 'Undergraduate',
-    duration: 'Per year (USD)',
-  },
-  ugStemUsdYear: {
-    courseName: 'Undergraduate STEM Programs',
-    degree: 'Undergraduate',
-    duration: 'Per year (USD)',
-  },
-  ugComputerScienceUsdYear: {
-    courseName: 'Undergraduate Computer Science Programs',
-    degree: 'Undergraduate',
-    duration: 'Per year (USD)',
-  },
-  pgBusinessUsdYear: {
-    courseName: 'Postgraduate Business Programs',
-    degree: 'Postgraduate',
-    duration: 'Per year (USD)',
-  },
-  pgStemUsdYear: {
-    courseName: 'Postgraduate STEM Programs',
-    degree: 'Postgraduate',
-    duration: 'Per year (USD)',
-  },
-  pgComputerScienceUsdYear: {
-    courseName: 'Postgraduate Computer Science Programs',
-    degree: 'Postgraduate',
-    duration: 'Per year (USD)',
-  },
-};
-
-export type PublicProgram = {
-  id: number | string;
-  courseName: string;
-  degree: string;
-  fee: number | null;
-  feeRange?: string | null;
-  duration: string;
-  source: 'course' | 'scrape' | 'fee_range';
-};
-
 export type PublicUniversitiesQuery = {
   search?: string;
   country?: string;
   page?: string | number;
   limit?: string | number;
-};
-
-const normalizeUniName = (value: string): string =>
-  value
-    .toLowerCase()
-    .replace(/\b(university|college|institute|of|the)\b/g, ' ')
-    .replace(/[^a-z0-9]/g, '');
-
-const namesMatch = (catalogName: string, scrapedName: string): boolean => {
-  const a = normalizeUniName(catalogName);
-  const b = normalizeUniName(scrapedName);
-  if (!a || !b) return false;
-  if (a === b) return true;
-  if (a.length >= 8 && b.length >= 8 && (a.includes(b) || b.includes(a))) return true;
-  return catalogName.toLowerCase().trim() === scrapedName.toLowerCase().trim();
-};
-
-const parseFeeNumber = (value: unknown): number | null => {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value !== 'string') return null;
-  const match = value.replace(/,/g, '').match(/\d+(?:\.\d+)?/);
-  return match ? Number(match[0]) : null;
-};
-
-const mapDbCourse = (course: {
-  id: number;
-  courseName: string;
-  degree: string;
-  fee: number;
-  duration: string;
-}): PublicProgram => ({
-  id: course.id,
-  courseName: course.courseName,
-  degree: course.degree,
-  fee: course.fee,
-  duration: course.duration,
-  source: 'course',
-});
-
-const mapScrapedCourse = (course: {
-  id: string;
-  courseName: string;
-  studyLevel: string | null;
-  tuitionFee: string | null;
-  duration: string | null;
-}): PublicProgram => ({
-  id: course.id,
-  courseName: course.courseName,
-  degree: course.studyLevel || 'Program',
-  fee: parseFeeNumber(course.tuitionFee),
-  feeRange: course.tuitionFee || null,
-  duration: course.duration || '—',
-  source: 'scrape',
-});
-
-const programsFromFeeRanges = (ranges: Record<string, unknown> | null): PublicProgram[] => {
-  if (!ranges) return [];
-
-  return Object.entries(FEE_RANGE_PROGRAMS)
-    .filter(([key]) => {
-      const value = ranges[key];
-      return value != null && String(value).trim() !== '';
-    })
-    .map(([key, meta]) => ({
-      id: `fee-${key}`,
-      courseName: meta.courseName,
-      degree: meta.degree,
-      fee: null,
-      feeRange: String(ranges[key]),
-      duration: meta.duration,
-      source: 'fee_range' as const,
-    }));
-};
-
-const dedupePrograms = (programs: PublicProgram[]): PublicProgram[] => {
-  const seen = new Set<string>();
-  const result: PublicProgram[] = [];
-
-  for (const program of programs) {
-    const key = `${program.courseName}::${program.degree}::${program.source}`.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    result.push(program);
-  }
-
-  return result;
-};
-
-const buildProgramsForUniversity = (
-  catalogName: string,
-  dbCourses: Array<{
-    id: number;
-    courseName: string;
-    degree: string;
-    fee: number;
-    duration: string;
-  }>,
-  scrapedCourses: Array<{
-    id: string;
-    courseName: string;
-    studyLevel: string | null;
-    tuitionFee: string | null;
-    duration: string | null;
-    universityName: string;
-  }>,
-  programFeeRanges: Record<string, unknown> | null,
-): PublicProgram[] => {
-  const fromDb = dbCourses.map(mapDbCourse);
-  const fromScrape = scrapedCourses
-    .filter(row => namesMatch(catalogName, row.universityName))
-    .map(mapScrapedCourse);
-
-  const namedPrograms = dedupePrograms([...fromDb, ...fromScrape]);
-  if (namedPrograms.length > 0) return namedPrograms;
-
-  return programsFromFeeRanges(programFeeRanges);
 };
 
 export const listPublicUniversitiesWithPrograms = async (query: PublicUniversitiesQuery) => {
@@ -212,38 +61,51 @@ export const listPublicUniversitiesWithPrograms = async (query: PublicUniversiti
     (where as Record<symbol, unknown>)[Op.and] = andClauses;
   }
 
-  const [{ rows, count }, scrapedCourses] = await Promise.all([
-    db.University.findAndCountAll({
-      where,
-      attributes: [...PUBLIC_UNIVERSITY_ATTRIBUTES],
-      include: [
-        {
-          model: db.Course,
-          as: 'courses',
-          attributes: [...PROGRAM_ATTRIBUTES],
-          required: false,
-        },
-      ],
-      order: [
-        ['name', 'ASC'],
-        [{ model: db.Course, as: 'courses' }, 'courseName', 'ASC'],
-      ],
-      limit,
-      offset,
-      distinct: true,
-    }),
-    db.ScrapedCourse.findAll({
-      where: {
-        recordStatus: 'cleaned',
-        cleaningStatus: { [Op.in]: ['high_quality', 'needs_review'] },
-        isDuplicate: false,
+  const { rows, count } = await db.University.findAndCountAll({
+    where,
+    attributes: [...PUBLIC_UNIVERSITY_ATTRIBUTES],
+    include: [
+      {
+        model: db.Course,
+        as: 'courses',
+        attributes: [...PROGRAM_ATTRIBUTES],
+        required: false,
       },
-      attributes: [...SCRAPED_PROGRAM_ATTRIBUTES],
-      order: [['universityName', 'ASC'], ['courseName', 'ASC']],
-    }),
-  ]);
+    ],
+    order: [
+      ['name', 'ASC'],
+      [{ model: db.Course, as: 'courses' }, 'courseName', 'ASC'],
+    ],
+    limit,
+    offset,
+    distinct: true,
+  });
 
-  const scrapedPlain = scrapedCourses.map(row =>
+  const pageNames = rows.map(row => (row.get('name') as string) || '');
+  const scrapedWhere: Record<string, unknown> = {
+    recordStatus: 'cleaned',
+    cleaningStatus: { [Op.in]: ['high_quality', 'needs_review'] },
+    isDuplicate: false,
+  };
+  if (pageNames.length) {
+    (scrapedWhere as Record<symbol, unknown>)[Op.or] = pageNames.map(name => ({
+      universityName: { [Op.iLike]: name },
+    }));
+  }
+
+  const scrapedRows =
+    pageNames.length > 0
+      ? await db.ScrapedCourse.findAll({
+          where: scrapedWhere,
+          attributes: [...SCRAPED_PROGRAM_ATTRIBUTES],
+          order: [
+            ['universityName', 'ASC'],
+            ['courseName', 'ASC'],
+          ],
+        })
+      : [];
+
+  const scrapedPlain = scrapedRows.map(row =>
     row.get({ plain: true }),
   ) as Array<{
     id: string;
@@ -294,3 +156,6 @@ export const listPublicUniversitiesWithPrograms = async (query: PublicUniversiti
 
   return { universities, page, limit, total: count };
 };
+
+// Re-export for tests / other modules
+export { mapDbCourse, mapScrapedCourse, namesMatch, parseFeeNumber, programsFromFeeRanges };

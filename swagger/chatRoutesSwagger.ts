@@ -1,5 +1,74 @@
 /**
  * @swagger
+ * /api/v1/chat/public/suggestions:
+ *   get:
+ *     tags: [Chat]
+ *     summary: Starter prompts for Explore chat (no auth)
+ *     parameters:
+ *       - in: query
+ *         name: audience
+ *         schema: { type: string, enum: [student, explore, agent], default: student }
+ *     responses:
+ *       200:
+ *         description: Suggestion chips for the public chat widget
+ */
+
+/**
+ * @swagger
+ * /api/v1/chat/public/message:
+ *   post:
+ *     tags: [Chat]
+ *     summary: Send a message on Explore without signing in (no auth)
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [message]
+ *             properties:
+ *               message: { type: string, maxLength: 8000 }
+ *               history:
+ *                 type: array
+ *                 description: Prior turns (oldest first). Alias supported via context.
+ *               context:
+ *                 oneOf:
+ *                   - type: array
+ *                     description: Prior turns when sent as context[]
+ *                   - type: object
+ *                     description: Explore profile hints + optional history
+ *                     properties:
+ *                       audience: { type: string, enum: [student, explore] }
+ *                       level: { type: string }
+ *                       field: { type: string }
+ *                       country: { type: string }
+ *                       budget: { type: string }
+ *                       intake: { type: string }
+ *                       history: { type: array }
+ *     responses:
+ *       200:
+ *         description: Assistant reply
+ */
+
+/**
+ * @swagger
+ * /api/v1/chat/suggestions:
+ *   get:
+ *     tags: [Chat]
+ *     summary: Starter prompts for signed-in chat (role-aware; agent gets partner prompts)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: audience
+ *         schema: { type: string, enum: [student, explore, agent] }
+ *         description: Optional override; defaults to student for students and agent for agents
+ *     responses:
+ *       200:
+ *         description: Suggestion chips for the chat widget
+ */
+
+/**
+ * @swagger
  * /api/v1/chat/message:
  *   post:
  *     tags: [Chat]

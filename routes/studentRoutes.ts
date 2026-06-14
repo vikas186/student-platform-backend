@@ -29,6 +29,20 @@ import {
   studentProfilePatchJoiSchema,
   universitiesQueryJoiSchema,
 } from '../validations/student.validation';
+import {
+  bookStudentAppointmentHandler,
+  cancelStudentAppointmentHandler,
+  getStudentFlowHandler,
+  listStudentAppointmentsHandler,
+  listStudentSlotsHandler,
+  rescheduleStudentAppointmentHandler,
+} from '../src/modules/scheduling/scheduling.controller';
+import {
+  appointmentIdParamJoiSchema,
+  bookAppointmentJoiSchema,
+  listSlotsJoiSchema,
+  rescheduleAppointmentJoiSchema,
+} from '../src/modules/scheduling/scheduling.validation';
 
 const studentRouter = Router();
 
@@ -99,6 +113,28 @@ studentRouter
   .get('/offer-letters/:offerLetterId', requirePermission('applications', 'view'), getOfferLetterByIdOrRef)
   .get('/documents', requirePermission('applications', 'view'), listDocuments)
   .post('/documents', requirePermission('applications', 'edit'), studentDocumentUpload.single('file'), uploadDocument)
-  .delete('/documents/:documentId', requirePermission('applications', 'edit'), deleteDocument);
+  .delete('/documents/:documentId', requirePermission('applications', 'edit'), deleteDocument)
+  .get('/scheduling/flow', getStudentFlowHandler)
+  .get(
+    '/scheduling/slots',
+    validateMiddleware(listSlotsJoiSchema as any),
+    listStudentSlotsHandler,
+  )
+  .post(
+    '/scheduling/appointments',
+    validateMiddleware(bookAppointmentJoiSchema as any),
+    bookStudentAppointmentHandler,
+  )
+  .get('/scheduling/appointments', listStudentAppointmentsHandler)
+  .patch(
+    '/scheduling/appointments/:appointmentId/cancel',
+    validateMiddleware(appointmentIdParamJoiSchema as any),
+    cancelStudentAppointmentHandler,
+  )
+  .patch(
+    '/scheduling/appointments/:appointmentId/reschedule',
+    validateMiddleware(rescheduleAppointmentJoiSchema as any),
+    rescheduleStudentAppointmentHandler,
+  );
 
 export default studentRouter;

@@ -20,4 +20,14 @@ This project uses raw SQL migrations (no Sequelize migrator).
 
    Or call **`POST /api/v1/admin/chat/knowledge/sync`** with an admin JWT.
 
-3. Legacy peer-to-peer chat rows (if any) live in **`peer_chat_messages`** after migration; AI chat uses **`chat_messages`**.
+   For **course recommendations RAG**, run **`npm run sync:recommendation-knowledge`** or **`POST /api/v1/admin/recommendations/knowledge/sync`** after catalog/scrape data changes.
+
+4. **Google Calendar scheduling** (counselling + mock interview):
+
+   ```bash
+   psql $DATABASE_URL -f migrations/009_google_calendar_scheduling.sql
+   ```
+
+   Or rely on `sequelize.sync({ alter: true })` on dev startup. Then admin connects Google via **`GET /api/v1/admin/google/auth-url`**, sets availability, and students book via **`/api/v1/student/scheduling/*`**.
+
+5. Legacy peer-to-peer chat rows (if any) live in **`peer_chat_messages`** after migration; AI chat uses **`chat_messages`**.

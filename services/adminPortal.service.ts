@@ -1851,6 +1851,11 @@ export const adminGlobalSearch = async (q: string) => {
 
 export const syncChatKnowledgeForAdmin = async () => syncKnowledgeBase();
 
+export const syncRecommendationKnowledgeForAdmin = async () => {
+  const { syncRecommendationKnowledgeBase } = await import('../src/modules/recommendations/recommendation-knowledge-sync.service');
+  return syncRecommendationKnowledgeBase();
+};
+
 export const patchStudentCounsellingForAdmin = async (studentProfileId: number, counsellingCompleted: boolean) => {
   const row = await db.StudentProfile.findByPk(studentProfileId);
   if (!row) {

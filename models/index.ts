@@ -32,6 +32,9 @@ import ScrapeFeeModel from './ScrapeFee.model';
 import ScrapeScholarshipModel from './ScrapeScholarship.model';
 import ScrapeRejectedPageModel from './ScrapeRejectedPage.model';
 import ScrapeAiMetaModel from './ScrapeAiMeta.model';
+import GoogleCalendarConnectionModel from './GoogleCalendarConnection.model';
+import CounsellorAvailabilityModel from './CounsellorAvailability.model';
+import AppointmentModel from './Appointment.model';
 
 interface Db {
   User: ReturnType<typeof UserModel>;
@@ -66,6 +69,9 @@ interface Db {
   ScrapeScholarship: ReturnType<typeof ScrapeScholarshipModel>;
   ScrapeRejectedPage: ReturnType<typeof ScrapeRejectedPageModel>;
   ScrapeAiMeta: ReturnType<typeof ScrapeAiMetaModel>;
+  GoogleCalendarConnection: ReturnType<typeof GoogleCalendarConnectionModel>;
+  CounsellorAvailability: ReturnType<typeof CounsellorAvailabilityModel>;
+  Appointment: ReturnType<typeof AppointmentModel>;
   sequelize: Sequelize;
   Sequelize: typeof Sequelize;
   [key: string]: any;
@@ -104,6 +110,9 @@ const db: Db = {
   ScrapeScholarship: ScrapeScholarshipModel(sequelize),
   ScrapeRejectedPage: ScrapeRejectedPageModel(sequelize),
   ScrapeAiMeta: ScrapeAiMetaModel(sequelize),
+  GoogleCalendarConnection: GoogleCalendarConnectionModel(sequelize),
+  CounsellorAvailability: CounsellorAvailabilityModel(sequelize),
+  Appointment: AppointmentModel(sequelize),
   sequelize,
   Sequelize,
 };

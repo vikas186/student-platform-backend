@@ -58,8 +58,25 @@ import {
   resetPermissionsMatrix,
   patchAgentSubscription,
   syncChatKnowledge,
+  syncRecommendationKnowledge,
   patchStudentCounselling,
 } from '../controller/adminController';
+import {
+  deleteGoogleConnectionHandler,
+  getAvailabilityHandler,
+  getGoogleAuthUrlHandler,
+  getGoogleConnectionHandler,
+  googleOAuthCallbackHandler,
+  listAdminAppointmentsHandler,
+  patchAdminAppointmentStatusHandler,
+  putAvailabilityHandler,
+} from '../src/modules/scheduling/scheduling.controller';
+import {
+  googleCallbackJoiSchema,
+  listAdminAppointmentsJoiSchema,
+  patchAppointmentStatusJoiSchema,
+  setAvailabilityJoiSchema,
+} from '../src/modules/scheduling/scheduling.validation';
 import {
   commissionSlabRichJoiSchema,
   createAdminUserJoiSchema,
@@ -98,6 +115,13 @@ const adminRouter = Router();
 
 /** Enroll UI calls `/api/v1/admin/login`; auth router also exposes `/api/v1/auth/admin/login`. */
 adminRouter.post('/login', validateMiddleware(loginJoiSchema), loginAdminUser);
+
+/** Google OAuth callback — public (no JWT) */
+adminRouter.get(
+  '/google/callback',
+  validateMiddleware(googleCallbackJoiSchema as any),
+  googleOAuthCallbackHandler,
+);
 
 adminRouter.use(jwtAuthMiddleware(['admin']));
 
@@ -253,11 +277,34 @@ adminRouter
   )
   .delete('/universities/:universityId', requirePermission('deadlines', 'delete'), deleteUniversity)
   .post('/chat/knowledge/sync', requirePermission('deadlines', 'edit'), syncChatKnowledge)
+  .post('/recommendations/knowledge/sync', requirePermission('deadlines', 'edit'), syncRecommendationKnowledge)
   .patch(
     '/students/:studentProfileId/counselling',
     requirePermission('users', 'edit'),
     validateMiddleware(patchStudentCounsellingJoiSchema),
     patchStudentCounselling,
+  )
+  .get('/google/auth-url', requirePermission('users', 'edit'), getGoogleAuthUrlHandler)
+  .get('/google/connection', requirePermission('users', 'view'), getGoogleConnectionHandler)
+  .delete('/google/connection', requirePermission('users', 'edit'), deleteGoogleConnectionHandler)
+  .put(
+    '/scheduling/availability',
+    requirePermission('users', 'edit'),
+    validateMiddleware(setAvailabilityJoiSchema as any),
+    putAvailabilityHandler,
+  )
+  .get('/scheduling/availability', requirePermission('users', 'view'), getAvailabilityHandler)
+  .get(
+    '/scheduling/appointments',
+    requirePermission('users', 'view'),
+    validateMiddleware(listAdminAppointmentsJoiSchema as any),
+    listAdminAppointmentsHandler,
+  )
+  .patch(
+    '/scheduling/appointments/:appointmentId/status',
+    requirePermission('users', 'edit'),
+    validateMiddleware(patchAppointmentStatusJoiSchema as any),
+    patchAdminAppointmentStatusHandler,
   );
 
 export default adminRouter;

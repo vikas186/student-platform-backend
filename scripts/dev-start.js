@@ -82,7 +82,14 @@ const waitForTcp = (host, port, maxMs = 90_000) =>
   });
 
 const runConcurrently = () => {
+  const nodeOpts = process.env.NODE_OPTIONS || '';
+  if (!nodeOpts.includes('max-old-space-size')) {
+    process.env.NODE_OPTIONS = `${nodeOpts} --max-old-space-size=4096`.trim();
+  }
+  process.env.TS_NODE_TRANSPILE_ONLY = process.env.TS_NODE_TRANSPILE_ONLY || 'true';
+
   console.log('[dev] Logs: [api]=server  [scraper]=Playwright worker  [enricher]=AI cleaning worker');
+  if (process.env.NODE_OPTIONS) console.log('[dev] NODE_OPTIONS:', process.env.NODE_OPTIONS);
   console.log('[dev] Stop all: Ctrl+C here, or run npm run dev:stop in another terminal');
   const cmd =
     'npx concurrently -k --kill-others-on-fail -t -p time ' +
