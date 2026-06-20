@@ -53,7 +53,7 @@ jobs:
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           port: ${{ secrets.DEPLOY_PORT || 22 }}
-          source: "dist,package.json,package-lock.json"
+          source: "dist,package.json,package-lock.json,ecosystem.config.cjs"
           target: ${{ secrets.DEPLOY_PATH }}
           strip_components: 0
 
@@ -66,11 +66,14 @@ jobs:
           port: ${{ secrets.DEPLOY_PORT || 22 }}
           script: |
             set -euo pipefail
+            DEPLOY_ENV="${{ github.event.inputs.environment || 'production' }}"
             cd "${{ secrets.DEPLOY_PATH }}"
+            mkdir -p config logs uploads debug raw
+            export PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
             npm ci --omit=dev
             if pm2 describe enroll-api >/dev/null 2>&1; then
-              pm2 restart enroll-api --update-env
+              pm2 restart ecosystem.config.cjs --env "$DEPLOY_ENV" --update-env
             else
-              NODE_ENV=production pm2 start dist/server.js --name enroll-api
+              pm2 start ecosystem.config.cjs --env "$DEPLOY_ENV"
             fi
             pm2 save
