@@ -1,9 +1,9 @@
 node_modules
 dist
 
-# Scrape debug artifacts
-debug/
-raw/
+# Scrape debug artifacts (repo root only — not src/modules/scrape/debug/)
+/debug/
+/raw/
 
 # Local secrets — never commit
 config/.env.development
