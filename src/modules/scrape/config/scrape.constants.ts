@@ -8,7 +8,7 @@ export const COURSE_CLEANING_DLQ = 'course_cleaning_dead_letter_queue';
 
 export const SCRAPE_USER_AGENT =
   process.env.SCRAPE_USER_AGENT ||
-  'EnrollPlatformBot/1.0 (+https://enroll.platform; course-research)';
+  'UniwizerPlatformBot/1.0 (+https://uniwizer.com; course-research)';
 
 export const SCRAPE_MAX_RETRIES = parseInt(process.env.SCRAPE_MAX_RETRIES || '3', 10);
 export const CLEAN_MAX_RETRIES = parseInt(

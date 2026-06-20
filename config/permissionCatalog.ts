@@ -117,7 +117,7 @@ export const buildFullAccessForCatalog = (): Record<string, Record<string, boole
   return o;
 };
 
-/** Default grants matching the standard Enroll admin matrix (university = no admin workspace access by default). */
+/** Default grants matching the standard Uniwizer admin matrix (university = no admin workspace access by default). */
 export const DEFAULT_PERMISSION_MATRIX: Record<UserRole, Record<string, Record<string, boolean>>> = {
   student: {
     applications: { view: true, create: true, edit: true, approve: false },

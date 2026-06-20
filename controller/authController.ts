@@ -6,6 +6,14 @@ import authService from '../services/auth.service';
 import dbServices from '../services/db.services';
 import AppError from '../utils/errorHandler';
 import { isUuid } from '../utils/isUuid';
+import { dispatchEmail, sendWelcomeEmail } from '../services/email.service';
+
+const dispatchWelcomeEmail = (user: Record<string, unknown>, role: 'student' | 'agent' | 'university' | 'admin') => {
+  const email = typeof user.email === 'string' ? user.email : '';
+  const name = typeof user.name === 'string' ? user.name : 'there';
+  if (!email) return;
+  dispatchEmail(() => sendWelcomeEmail({ to: email, name, role }), `welcome (${role})`);
+};
 
 const signup = catchAsyncError(async (req: Request, res: Response) => {
   const user = await authService.signupByRole(req.body);
@@ -16,6 +24,9 @@ const signup = catchAsyncError(async (req: Request, res: Response) => {
       : role === 'university'
         ? 'University account created successfully'
         : 'Student account created successfully';
+  if (role === 'agent' || role === 'university' || role === 'student') {
+    dispatchWelcomeEmail(user as Record<string, unknown>, role);
+  }
   res.status(201).json({
     success: true,
     message,
@@ -33,6 +44,7 @@ const signupUniversityUser = catchAsyncError(async (req: Request, res: Response)
     institutionName: req.body.institutionName,
     country: req.body.country,
   });
+  dispatchWelcomeEmail(user as Record<string, unknown>, 'university');
   res.status(201).json({
     success: true,
     message: 'University account created successfully',
@@ -42,6 +54,7 @@ const signupUniversityUser = catchAsyncError(async (req: Request, res: Response)
 
 const signupAdmin = catchAsyncError(async (req: Request, res: Response) => {
   const user = await authService.signupAdmin(req.body);
+  dispatchWelcomeEmail(user as Record<string, unknown>, 'admin');
   res.status(201).json({
     success: true,
     message: 'Admin account created successfully',
@@ -146,9 +159,11 @@ const forgotPassword = catchAsyncError(async (req: Request, res: Response) => {
 const resetPassword = catchAsyncError(async (req: Request, res: Response) => {
   const { password } = req.body;
   const user: any = req.user;
-
   const data = await authService.resetPasswordUpdateService(user?.id, password);
-
+  if (user?.resetTokenEntry) {
+    user.resetTokenEntry.used = true;
+    await user.resetTokenEntry.save();
+  }
   res.status(constant.msgCode.successCode).json({
     success: constant.msgType.successStatus,
     message: constant.msg.resetPassword,

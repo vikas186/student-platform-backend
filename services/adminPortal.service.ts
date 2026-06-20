@@ -81,7 +81,7 @@ export const listApplicationsForAdmin = async (query: {
     const resolved = normalizeApplicationStatusInput(query.status.trim());
     if (!resolved) {
       throw new AppError(
-        'Invalid status filter — use a backend value (e.g. under_review) or Enroll UI label (e.g. Review)',
+        'Invalid status filter — use a backend value (e.g. under_review) or Uniwizer UI label (e.g. Review)',
         400,
       );
     }
@@ -163,15 +163,18 @@ export const updateApplicationStatusForAdmin = async (
   if (!app) {
     throw new AppError('Application not found', 404);
   }
+  const previousStatus = app.status;
   app.status = status;
   await app.save();
+  const { notifyApplicationStatusChange } = await import('./application-email.service');
+  notifyApplicationStatusChange(app.id, previousStatus, status);
   return getApplicationForAdmin(app.id);
 };
 
 export const updateApplicationStatusFromUiForAdmin = async (idOrRef: string, uiStatus: string) => {
   const resolved = normalizeApplicationStatusInput(uiStatus);
   if (!resolved) {
-    throw new AppError('Invalid status — use an Enroll label (e.g. Review) or backend enum (e.g. under_review)', 400);
+    throw new AppError('Invalid status — use an Uniwizer label (e.g. Review) or backend enum (e.g. under_review)', 400);
   }
   return updateApplicationStatusForAdmin(idOrRef, resolved);
 };
@@ -514,7 +517,7 @@ export const patchCourseForAdmin = async (
 };
 
 /**
- * Matches Enroll admin "Add intake row" (free-text university) — creates university/course if needed.
+ * Matches Uniwizer admin "Add intake row" (free-text university) — creates university/course if needed.
  */
 export const createIntakeRowForAdmin = async (body: {
   universityName: string;

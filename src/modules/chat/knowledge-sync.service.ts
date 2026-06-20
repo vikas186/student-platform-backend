@@ -59,7 +59,7 @@ function formatCommissionText(uniName: string, pct: number, slab: string | null)
 const STATIC_FAQ_CHUNKS: { chunkKey: string; text: string; access: KnowledgeAccess }[] = [
   {
     chunkKey: 'faq:platform-overview',
-    text: 'The Enroll Student Recruitment Platform helps students explore programs abroad, submit applications, upload documents, and track status. Use Explore to map courses to your profile before applying. Agents and counsellors can help with shortlisting after you sign in.',
+    text: 'The Uniwizer Student Recruitment Platform helps students explore programs abroad, submit applications, upload documents, and track status. Use Explore to map courses to your profile before applying. Agents and counsellors can help with shortlisting after you sign in.',
     access: accessGeneric(),
   },
   {
@@ -74,12 +74,12 @@ const STATIC_FAQ_CHUNKS: { chunkKey: string; text: string; access: KnowledgeAcce
   },
   {
     chunkKey: 'faq:assistant-identity',
-    text: 'You are chatting with Enroll Assistant, the AI helper on the Enroll student platform. Enroll Assistant answers questions about studying abroad, English tests, documents, applications, deadlines, and how to use Explore. Enroll Assistant does not replace a human counsellor for final decisions.',
+    text: 'You are chatting with Uniwizer Assistant on the Uniwizer student platform. Uniwizer Assistant answers questions about studying abroad, English tests, documents, applications, deadlines, and how to use Explore. Uniwizer Assistant does not replace a human counsellor for final decisions.',
     access: accessGeneric(),
   },
   {
     chunkKey: 'faq:explore',
-    text: 'Explore lets students enter academic level, field of interest, target country, budget, and intake to get AI-mapped course suggestions. University names may stay hidden until counselling. After exploring, students can sign in to save progress, upload documents, and apply with Enroll.',
+    text: 'Explore lets students enter academic level, field of interest, target country, budget, and intake to get mapped course suggestions. University names may stay hidden until counselling. After exploring, students can sign in to save progress, upload documents, and apply with Uniwizer.',
     access: accessGeneric(),
   },
 ];

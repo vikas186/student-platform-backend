@@ -102,6 +102,24 @@ const changePasswordJoiSchema = {
   }),
 };
 
+const signupPassword = Joi.string().min(8).max(128).required();
+
+const forgotPasswordJoiSchema = {
+  body: Joi.object().keys({
+    email: Joi.string().email().required(),
+  }),
+};
+
+const resetPasswordJoiSchema = {
+  body: Joi.object().keys({
+    token: Joi.string().trim().min(10).required(),
+    password: signupPassword,
+    confirmPassword: Joi.string().valid(Joi.ref('password')).required().messages({
+      'any.only': 'confirmPassword must match password',
+    }),
+  }),
+};
+
 const refreshTokenJoiSchema = {
   body: Joi.object({
     refreshToken: Joi.string().trim().min(64).max(256),
@@ -112,8 +130,6 @@ const refreshTokenJoiSchema = {
       'object.missing': 'Either refreshToken or refresh_token is required',
     }),
 };
-
-const signupPassword = Joi.string().min(8).max(128).required();
 
 /** Single signup: `student` requires phone + targetCountries; `agent` requires agency + primary market. */
 const adminSignupJoiSchema = {
@@ -129,7 +145,7 @@ const adminSignupJoiSchema = {
 };
 
 /**
- * Dedicated university signup — matches Enroll UI (email, passwords, institution name, country).
+ * Dedicated university signup — matches Uniwizer UI (email, passwords, institution name, country).
  * Creates or links an institution row, then `User` + `UniversityProfile`.
  */
 const universitySignupJoiSchema = {
@@ -241,6 +257,8 @@ export {
   loginJoiSchema,
   getUsersJoiSchema,
   changePasswordJoiSchema,
+  forgotPasswordJoiSchema,
+  resetPasswordJoiSchema,
   referrRegisterJoiSchema,
   customerSignupJoiSchema,
   updateAdminProfileJoiSchema,

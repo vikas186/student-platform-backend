@@ -200,7 +200,7 @@ export const listUniversityApplications = async (
     const resolved = normalizeApplicationStatusInput(query.status.trim());
     if (!resolved) {
       throw new AppError(
-        'Invalid status filter — use a backend value (e.g. under_review) or Enroll UI label (e.g. Review)',
+        'Invalid status filter — use a backend value (e.g. under_review) or Uniwizer UI label (e.g. Review)',
         400,
       );
     }
@@ -348,7 +348,7 @@ export const patchUniversityApplicationStatus = async (userId: string, idOrRef: 
   const { universityId, universityName } = await universityScopeFromUser(userId);
   const resolved = normalizeApplicationStatusInput(uiOrBackendStatus);
   if (!resolved) {
-    throw new AppError('Invalid status — use an Enroll label (e.g. Review) or backend enum (e.g. under_review)', 400);
+    throw new AppError('Invalid status — use an Uniwizer label (e.g. Review) or backend enum (e.g. under_review)', 400);
   }
   if (resolved === 'draft') {
     throw new AppError('Cannot set status to draft from the university portal', 400);
@@ -360,8 +360,11 @@ export const patchUniversityApplicationStatus = async (userId: string, idOrRef: 
   if (!app) {
     throw new AppError('Application not found', 404);
   }
+  const previousStatus = app.status;
   app.status = resolved;
   await app.save();
+  const { notifyApplicationStatusChange } = await import('./application-email.service');
+  notifyApplicationStatusChange(app.id, previousStatus, resolved);
   return getApplicationForUniversity(userId, idOrRef);
 };
 

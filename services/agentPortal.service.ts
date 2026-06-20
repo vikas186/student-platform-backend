@@ -504,8 +504,11 @@ export const submitAgentApplication = async (agentProfileId: number, idOrRef: st
   if (!uni || !prog) {
     throw new AppError('University and program are required to submit', 400);
   }
+  const previousStatus = app.status;
   app.status = 'submitted';
   await app.save();
+  const { notifyApplicationStatusChange } = await import('./application-email.service');
+  notifyApplicationStatusChange(app.id, previousStatus, 'submitted');
   return getApplicationForAgent(agentProfileId, app.id);
 };
 

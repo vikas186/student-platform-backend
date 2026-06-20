@@ -131,6 +131,7 @@ export async function getPublicSuggestions(audience: ChatSuggestionAudience) {
 
 const defaultAudienceForRole = (role: UserRole): ChatSuggestionAudience => {
   if (role === 'agent') return 'agent';
+  if (role === 'admin') return 'admin';
   return 'student';
 };
 

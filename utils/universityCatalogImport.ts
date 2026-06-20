@@ -3,7 +3,7 @@ import path from 'path';
 import * as XLSX from 'xlsx';
 import { parseSimpleCsvLines } from './spreadsheetParse';
 
-/** Stored on `University.programFeeRanges` — matches Enroll USA fee matrix spreadsheet. */
+/** Stored on `University.programFeeRanges` — matches Uniwizer USA fee matrix spreadsheet. */
 export type ProgramFeeRangesPayload = {
   ugBusinessUsdYear: string | null;
   ugStemUsdYear: string | null;

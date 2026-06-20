@@ -33,6 +33,7 @@ export default (sequelize: Sequelize) => {
       User.hasMany(models.ChatFeedback, { foreignKey: 'userId', as: 'chatFeedback', onDelete: 'CASCADE' });
       User.hasOne(models.GoogleCalendarConnection, { foreignKey: 'userId', as: 'googleCalendarConnection', onDelete: 'CASCADE' });
       User.hasMany(models.CounsellorAvailability, { foreignKey: 'adminUserId', as: 'counsellorAvailability', onDelete: 'CASCADE' });
+      User.hasMany(models.VerificationSession, { foreignKey: 'userId', as: 'verificationSessions', onDelete: 'CASCADE' });
     }
 
     async login(password: string): Promise<boolean> {

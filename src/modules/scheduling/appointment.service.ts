@@ -12,6 +12,12 @@ import { isAnyGoogleCalendarConnected, resolveHostAdminUserId } from './google-o
 import { getHostAdminDetails, resolveHostAdminForSlots } from './host-admin.util';
 import { schedulingConfig } from './scheduling.config';
 import { generateAvailableSlots } from './slot.service';
+import {
+  dispatchEmail,
+  formatAppointmentWhen,
+  sendAppointmentCancelledEmail,
+  sendAppointmentConfirmationEmail,
+} from '../../../services/email.service';
 import type {
   AppointmentSummary,
   AvailabilitySlot,
@@ -256,7 +262,7 @@ export const bookAppointment = async (
   });
 
   const label = input.type === 'counselling' ? 'Counselling' : 'Mock interview';
-  const when = startsAt.toLocaleString('en-IN', { timeZone: timezone });
+  const when = formatAppointmentWhen(startsAt, timezone);
   await notifyUser(
     userId,
     `${label} scheduled for ${when}.${meetLink ? ` Join: ${meetLink}` : ''}`,
@@ -266,6 +272,29 @@ export const bookAppointment = async (
     hostAdminUserId,
     `${label} booked with ${student.name} for ${when}.`,
     'scheduling_booked',
+  );
+
+  dispatchEmail(
+    () =>
+      sendAppointmentConfirmationEmail({
+        to: student.email,
+        name: student.name,
+        sessionLabel: label,
+        whenLabel: when,
+        meetLink,
+      }),
+    'appointment confirmation (student)',
+  );
+  dispatchEmail(
+    () =>
+      sendAppointmentConfirmationEmail({
+        to: hostAdmin.email,
+        name: hostAdmin.name,
+        sessionLabel: `${label} with ${student.name}`,
+        whenLabel: when,
+        meetLink,
+      }),
+    'appointment confirmation (host)',
   );
 
   const hostDetails = await getHostAdminDetails(hostAdminUserId);
@@ -281,6 +310,11 @@ export const cancelAppointment = async (userId: string, appointmentId: string) =
     throw new AppError('Only scheduled appointments can be cancelled', 400);
   }
 
+  const student = await db.User.findByPk(row.studentUserId);
+  const hostAdmin = await db.User.findByPk(row.hostAdminUserId);
+  const label = row.type === 'counselling' ? 'Counselling' : 'Mock interview';
+  const when = formatAppointmentWhen(row.startsAt, row.timezone);
+
   if (row.googleEventId) {
     await deleteCalendarEvent(row.hostAdminUserId, row.googleEventId);
   }
@@ -290,6 +324,32 @@ export const cancelAppointment = async (userId: string, appointmentId: string) =
   await row.save();
 
   await notifyUser(userId, 'Your appointment was cancelled.', 'scheduling_cancelled');
+
+  if (student?.email) {
+    dispatchEmail(
+      () =>
+        sendAppointmentCancelledEmail({
+          to: student.email,
+          name: student.name,
+          sessionLabel: label,
+          whenLabel: when,
+        }),
+      'appointment cancelled (student)',
+    );
+  }
+  if (hostAdmin?.email) {
+    dispatchEmail(
+      () =>
+        sendAppointmentCancelledEmail({
+          to: hostAdmin.email,
+          name: hostAdmin.name,
+          sessionLabel: `${label} with ${student?.name ?? 'student'}`,
+          whenLabel: when,
+        }),
+      'appointment cancelled (host)',
+    );
+  }
+
   const hostDetails = await getHostAdminDetails(row.hostAdminUserId);
   return toSummary(row.get({ plain: true }) as AppointmentRow, hostDetails);
 };

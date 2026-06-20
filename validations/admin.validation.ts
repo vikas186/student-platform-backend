@@ -285,6 +285,22 @@ const patchStudentCounsellingJoiSchema = {
   }),
 };
 
+const sendPromotionEmailJoiSchema = {
+  body: Joi.object({
+    subject: Joi.string().trim().min(1).max(200).required(),
+    headline: Joi.string().trim().min(1).max(200).required(),
+    message: Joi.string().trim().min(1).max(8000).required(),
+    audience: Joi.string().valid('students', 'agents', 'all_users', 'test').required(),
+    ctaLabel: Joi.string().trim().max(80).optional().allow(null, ''),
+    ctaUrl: Joi.string().trim().uri().max(500).optional().allow(null, ''),
+    testEmail: Joi.when('audience', {
+      is: 'test',
+      then: Joi.string().email().required(),
+      otherwise: Joi.string().email().optional().allow(null, ''),
+    }),
+  }),
+};
+
 export {
   putPermissionsMatrixJoiSchema,
   listUsersQueryJoiSchema,
@@ -317,4 +333,5 @@ export {
   commissionSlabRichJoiSchema,
   patchAgentSubscriptionJoiSchema,
   patchStudentCounsellingJoiSchema,
+  sendPromotionEmailJoiSchema,
 };

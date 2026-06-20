@@ -1,4 +1,4 @@
-/** Document checklist labels aligned with Enroll university review UI (maps to `Document.type`). */
+/** Document checklist labels aligned with Uniwizer university review UI (maps to `Document.type`). */
 export const UNIVERSITY_DOCUMENT_CHECKLIST: { key: string; label: string }[] = [
   { key: 'academic_transcripts', label: 'Academic transcripts' },
   { key: 'statement_of_purpose', label: 'Statement of purpose (SOP)' },

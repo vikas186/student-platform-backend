@@ -12,14 +12,17 @@ import {
   changePassword,
   deleteUser,
   forgotPassword,
+  resetPassword,
 } from '../controller/authController';
-import { jwtAuthMiddleware } from '../middleware/jwtAuth';
+import { jwtAuthMiddleware, verifyJwtToken } from '../middleware/jwtAuth';
 import { requirePermission } from '../middleware/requirePermission';
 import validateMiddleware from '../middleware/validate';
 import {
   adminSignupJoiSchema,
+  forgotPasswordJoiSchema,
   loginJoiSchema,
   refreshTokenJoiSchema,
+  resetPasswordJoiSchema,
   roleBasedSignupJoiSchema,
   universitySignupJoiSchema,
 } from '../validations/auth.validation';
@@ -38,6 +41,7 @@ authRouter
   .post('/logout-all-devices', jwtAuthMiddleware(['all']), logoutAllDevices)
   .patch('/change-password', jwtAuthMiddleware(['all']), changePassword)
   .delete('/users/:userId', jwtAuthMiddleware(['admin']), requirePermission('users', 'delete'), deleteUser)
-  .post('/forgot-password', forgotPassword);
+  .post('/forgot-password', validateMiddleware(forgotPasswordJoiSchema), forgotPassword)
+  .post('/reset-password', validateMiddleware(resetPasswordJoiSchema), verifyJwtToken, resetPassword);
 
 export default authRouter;

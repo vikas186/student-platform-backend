@@ -9,6 +9,7 @@ import universityRouter from './universityRoutes';
 import chatRouter from '../src/modules/chat/chat.routes';
 import recommendationsRouter from '../src/modules/recommendations/recommendations.routes';
 import scrapeRouter from '../src/modules/scrape/scrape.routes';
+import noticesRouter from '../src/modules/notices/notices.routes';
 
 interface Route {
   path: string;
@@ -53,6 +54,10 @@ const defaultRoutes: Route[] = [
   {
     path: '/recommendations',
     route: recommendationsRouter,
+  },
+  {
+    path: '/notices',
+    route: noticesRouter,
   },
   {
     path: '/',

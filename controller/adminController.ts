@@ -3,6 +3,7 @@ import { catchAsyncError } from '../middleware/catchAsyncError';
 import constant from '../constant';
 import AppError from '../utils/errorHandler';
 import * as adminPortal from '../services/adminPortal.service';
+import { queuePromotionEmails } from '../services/promotion-email.service';
 import * as rolePermissions from '../services/rolePermissions.service';
 import { pickOptionalTrimmedString } from '../utils/requestFields';
 
@@ -548,5 +549,31 @@ export const patchStudentCounselling = catchAsyncError(async (req: Request, res:
     success: true,
     message: 'Student counselling flag updated',
     data: { studentProfile: row },
+  });
+});
+
+export const sendPromotionEmail = catchAsyncError(async (req: Request, res: Response) => {
+  const body = req.body as {
+    subject: string;
+    headline: string;
+    message: string;
+    audience: 'students' | 'agents' | 'all_users' | 'test';
+    ctaLabel?: string | null;
+    ctaUrl?: string | null;
+    testEmail?: string | null;
+  };
+  const result = await queuePromotionEmails({
+    subject: body.subject,
+    headline: body.headline,
+    message: body.message,
+    audience: body.audience,
+    ctaLabel: body.ctaLabel ?? null,
+    ctaUrl: body.ctaUrl ?? null,
+    testEmail: body.testEmail ?? null,
+  });
+  res.status(constant.msgCode.successCode).json({
+    success: true,
+    message: `Promotion email queued for ${result.queued} recipient(s)`,
+    data: result,
   });
 });

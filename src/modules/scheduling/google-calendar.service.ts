@@ -2,6 +2,7 @@ import { google } from 'googleapis';
 import { db } from '../../../config/database';
 import { getAuthenticatedClient } from './google-oauth.service';
 import type { AppointmentType } from '../../../models/Appointment.model';
+import { BRAND_NAME } from '../../../config/brand';
 
 const calendarApi = async (adminUserId: string) => {
   const auth = await getAuthenticatedClient(adminUserId);
@@ -46,8 +47,8 @@ export const createCalendarEvent = async (
   const { calendar, calendarId } = await calendarApi(input.adminUserId);
   const title =
     input.type === 'counselling'
-      ? `Enroll Counselling — ${input.studentName}`
-      : `Enroll Mock Interview — ${input.studentName}`;
+      ? `${BRAND_NAME} Counselling — ${input.studentName}`
+      : `${BRAND_NAME} Mock Interview — ${input.studentName}`;
 
   const res = await calendar.events.insert({
     calendarId,
@@ -55,13 +56,13 @@ export const createCalendarEvent = async (
     sendUpdates: 'all',
     requestBody: {
       summary: title,
-      description: `Scheduled via Enroll platform (${input.type.replace('_', ' ')}).`,
+      description: `Scheduled via ${BRAND_NAME} platform (${input.type.replace('_', ' ')}).`,
       start: { dateTime: input.startsAt.toISOString(), timeZone: input.timezone },
       end: { dateTime: input.endsAt.toISOString(), timeZone: input.timezone },
       attendees: [{ email: input.studentEmail }, { email: input.adminEmail }],
       conferenceData: {
         createRequest: {
-          requestId: `enroll-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+          requestId: `uniwizer-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
           conferenceSolutionKey: { type: 'hangoutsMeet' },
         },
       },

@@ -104,7 +104,7 @@
  *         description: UUID or APP-12345
  *   patch:
  *     tags: [University]
- *     summary: Update application status (Enroll label or backend enum)
+ *     summary: Update application status (Uniwizer label or backend enum)
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - in: path
@@ -163,6 +163,6 @@
  * /api/v1/university/application-status-options:
  *   get:
  *     tags: [University]
- *     summary: Backend status values with Enroll statusUi labels
+ *     summary: Backend status values with Uniwizer statusUi labels
  *     security: [{ bearerAuth: [] }]
  */

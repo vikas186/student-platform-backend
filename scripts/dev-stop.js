@@ -80,7 +80,7 @@ const cancelScrapeJobs = () => {
   spawnSync('npm', ['run', 'scrape:cancel'], { cwd: projectRoot, stdio: 'inherit', shell: true });
 };
 
-console.log('[dev:stop] Stopping Enroll dev stack...');
+console.log('[dev:stop] Stopping Uniwizer dev stack...');
 cancelScrapeJobs();
 killProjectNodeProcesses();
 freePort(API_PORT);

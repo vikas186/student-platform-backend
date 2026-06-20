@@ -35,6 +35,13 @@ import ScrapeAiMetaModel from './ScrapeAiMeta.model';
 import GoogleCalendarConnectionModel from './GoogleCalendarConnection.model';
 import CounsellorAvailabilityModel from './CounsellorAvailability.model';
 import AppointmentModel from './Appointment.model';
+import VerificationSessionModel from './VerificationSession.model';
+import PassportVerificationModel from './PassportVerification.model';
+import AcademicDocumentModel from './AcademicDocument.model';
+import BankStatementModel from './BankStatement.model';
+import ItrDocumentModel from './ItrDocument.model';
+import VerificationAuditLogModel from './VerificationAuditLog.model';
+import NoticeTickerItemModel from './NoticeTickerItem.model';
 
 interface Db {
   User: ReturnType<typeof UserModel>;
@@ -72,6 +79,13 @@ interface Db {
   GoogleCalendarConnection: ReturnType<typeof GoogleCalendarConnectionModel>;
   CounsellorAvailability: ReturnType<typeof CounsellorAvailabilityModel>;
   Appointment: ReturnType<typeof AppointmentModel>;
+  VerificationSession: ReturnType<typeof VerificationSessionModel>;
+  PassportVerification: ReturnType<typeof PassportVerificationModel>;
+  AcademicDocument: ReturnType<typeof AcademicDocumentModel>;
+  BankStatement: ReturnType<typeof BankStatementModel>;
+  ItrDocument: ReturnType<typeof ItrDocumentModel>;
+  VerificationAuditLog: ReturnType<typeof VerificationAuditLogModel>;
+  NoticeTickerItem: ReturnType<typeof NoticeTickerItemModel>;
   sequelize: Sequelize;
   Sequelize: typeof Sequelize;
   [key: string]: any;
@@ -113,6 +127,13 @@ const db: Db = {
   GoogleCalendarConnection: GoogleCalendarConnectionModel(sequelize),
   CounsellorAvailability: CounsellorAvailabilityModel(sequelize),
   Appointment: AppointmentModel(sequelize),
+  VerificationSession: VerificationSessionModel(sequelize),
+  PassportVerification: PassportVerificationModel(sequelize),
+  AcademicDocument: AcademicDocumentModel(sequelize),
+  BankStatement: BankStatementModel(sequelize),
+  ItrDocument: ItrDocumentModel(sequelize),
+  VerificationAuditLog: VerificationAuditLogModel(sequelize),
+  NoticeTickerItem: NoticeTickerItemModel(sequelize),
   sequelize,
   Sequelize,
 };

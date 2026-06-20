@@ -32,7 +32,7 @@ const upload = multer({
   },
 });
 
-/** Student portal: PDF / images only, max 1 MB (matches Enroll UI). */
+/** Student portal: PDF / images only, max 5 MB (verification docs + UI). */
 const studentDocStorage: StorageEngine = multer.diskStorage({
   destination: (_req, _file, cb) => {
     const uploadPath = 'uploads/student-documents/';
@@ -47,7 +47,7 @@ const studentDocStorage: StorageEngine = multer.diskStorage({
 
 const studentDocumentUpload = multer({
   storage: studentDocStorage,
-  limits: { fileSize: 1024 * 1024 },
+  limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     if (!/\.(pdf|jpg|jpeg|png)$/i.test(file.originalname)) {
       return cb(new multer.MulterError('LIMIT_UNEXPECTED_FILE', 'Only PDF, JPG, or PNG files are allowed.'));

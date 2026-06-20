@@ -1,6 +1,6 @@
 import { APPLICATION_STATUSES } from '../models/Application.model';
 
-/** Enroll admin UI labels (see student-platform-frontend `LIFECYCLE` + Rejected). */
+/** Uniwizer admin UI labels (see student-platform-frontend `LIFECYCLE` + Rejected). */
 export const ADMIN_UI_APPLICATION_STATUSES = [
   'Draft',
   'Submitted',

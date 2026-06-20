@@ -9,7 +9,7 @@
  *       Creates a new account based on `role`.
  *       - **student**: requires `fullName` and `targetCountries` (`phoneNumber` is optional; do not send agency fields).
  *       - **agent**: requires `fullName`, `agencyName` and `primaryMarket` (do not send `targetCountries`).
- *       - **university**: send **`institutionName`** + **`country`** (Enroll UI — finds or creates institution), **or** **`universityId`** + **`fullName`** (link existing institution). Same validation as `POST /auth/university/signup` when using institution fields.
+ *       - **university**: send **`institutionName`** + **`country`** (Uniwizer UI — finds or creates institution), **or** **`universityId`** + **`fullName`** (link existing institution). Same validation as `POST /auth/university/signup` when using institution fields.
  *     security: []
  *     requestBody:
  *       required: true
@@ -186,9 +186,9 @@
  *   post:
  *     tags:
  *       - Auth
- *     summary: University portal sign up (Enroll UI fields)
+ *     summary: University portal sign up (Uniwizer UI fields)
  *     description: |
- *       Matches the Enroll **University** signup form: **email**, **password**, **confirmPassword**,
+ *       Matches the Uniwizer **University** signup form: **email**, **password**, **confirmPassword**,
  *       **institutionName**, **country** (country / region).
  *       Finds an existing `University` by case-insensitive name + country or creates one, then creates
  *       `User` (role `university`, display name = institution name) + **`UniversityProfile`**.

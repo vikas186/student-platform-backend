@@ -9,11 +9,21 @@ import { globalResponse } from './utils/others';
 import ErrorMiddleware from './middleware/Error';
 import allRoutes from './routes/index';
 import { morgan, customFormat } from './utils/morganSettings';
+import { verifyDiditWebhook } from './middleware/verifyDiditWebhook';
+import { diditWebhookHandler } from './src/modules/didit/didit.controller';
 
 // Load environment variables
 
 // Initialize Express App
 const app: any = express();
+
+// Didit webhook — raw body required for HMAC verification (before express.json)
+app.post(
+  '/api/v1/didit/webhook',
+  express.raw({ type: 'application/json' }),
+  verifyDiditWebhook,
+  diditWebhookHandler,
+);
 
 // Middleware
 app.use(express.json());

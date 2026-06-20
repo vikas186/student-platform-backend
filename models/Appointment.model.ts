@@ -22,6 +22,8 @@ export default (sequelize: Sequelize) => {
     public notes!: string | null;
     public cancelledAt!: Date | null;
     public completedAt!: Date | null;
+    public reminder24hSentAt!: Date | null;
+    public reminder1hSentAt!: Date | null;
     public readonly createdAt!: Date;
     public readonly updatedAt!: Date;
 
@@ -69,6 +71,8 @@ export default (sequelize: Sequelize) => {
       notes: { type: DataTypes.TEXT, allowNull: true },
       cancelledAt: { type: DataTypes.DATE, allowNull: true, field: 'cancelled_at' },
       completedAt: { type: DataTypes.DATE, allowNull: true, field: 'completed_at' },
+      reminder24hSentAt: { type: DataTypes.DATE, allowNull: true, field: 'reminder_24h_sent_at' },
+      reminder1hSentAt: { type: DataTypes.DATE, allowNull: true, field: 'reminder_1h_sent_at' },
     },
     {
       sequelize,

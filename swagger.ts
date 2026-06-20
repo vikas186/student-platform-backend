@@ -50,7 +50,7 @@ const swaggerDefinition = {
         type: 'object',
         required: ['role', 'email', 'password', 'confirmPassword'],
         description:
-          'Public signup. **student**: `fullName`, `phoneNumber`, `targetCountries`. **agent**: `fullName`, `agencyName`, `primaryMarket`. **university**: either **`institutionName` + `country`** (Enroll UI — creates/links institution) **or** **`universityId` + `fullName`** (link existing institution). Do not send both modes.',
+          'Public signup. **student**: `fullName`, `phoneNumber`, `targetCountries`. **agent**: `fullName`, `agencyName`, `primaryMarket`. **university**: either **`institutionName` + `country`** (Uniwizer UI — creates/links institution) **or** **`universityId` + `fullName`** (link existing institution). Do not send both modes.',
         properties: {
           role: {
             type: 'string',

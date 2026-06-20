@@ -4,7 +4,26 @@ import { jwtAuthMiddleware } from '../middleware/jwtAuth';
 import { requirePermission } from '../middleware/requirePermission';
 import { adminUniversityCatalogUpload, adminUniversityCsvUpload, agentDocumentUpload } from '../middleware/multer';
 import validateMiddleware from '../middleware/validate';
-import { loginJoiSchema } from '../validations/auth.validation';
+import {
+  getAdminUserDocumentStatusHandler,
+  approveAdminVerificationHandler,
+  getAdminVerificationDetailHandler,
+  listAdminVerificationsHandler,
+  rejectAdminVerificationHandler,
+  requestAdminVerificationResubmissionHandler,
+} from '../src/modules/document-verification/document-verification.controller';
+import {
+  adminVerificationActionJoiSchema,
+  adminVerificationDetailParamsJoiSchema,
+  adminVerificationResubmitJoiSchema,
+  adminVerificationsListQueryJoiSchema,
+  adminUserDocumentStatusParamsJoiSchema,
+} from '../src/modules/document-verification/document-verification.validation';
+import {
+  listAdminNoticesHandler,
+  syncNoticesAiHandler,
+} from '../src/modules/notices/notice.controller';
+import { listAdminNoticesJoiSchema } from '../src/modules/notices/notice.validation';
 import {
   getDashboard,
   listUsers,
@@ -60,6 +79,7 @@ import {
   syncChatKnowledge,
   syncRecommendationKnowledge,
   patchStudentCounselling,
+  sendPromotionEmail,
 } from '../controller/adminController';
 import {
   deleteGoogleConnectionHandler,
@@ -101,6 +121,7 @@ import {
   listUsersQueryJoiSchema,
   patchAgentSubscriptionJoiSchema,
   patchStudentCounsellingJoiSchema,
+  sendPromotionEmailJoiSchema,
   patchApplicationStatusJoiSchema,
   patchApplicationStatusUiJoiSchema,
   patchCommissionJoiSchema,
@@ -110,10 +131,11 @@ import {
   patchUserRoleJoiSchema,
   putPermissionsMatrixJoiSchema,
 } from '../validations/admin.validation';
+import { loginJoiSchema } from '../validations/auth.validation';
 
 const adminRouter = Router();
 
-/** Enroll UI calls `/api/v1/admin/login`; auth router also exposes `/api/v1/auth/admin/login`. */
+/** Uniwizer UI calls `/api/v1/admin/login`; auth router also exposes `/api/v1/auth/admin/login`. */
 adminRouter.post('/login', validateMiddleware(loginJoiSchema), loginAdminUser);
 
 /** Google OAuth callback — public (no JWT) */
@@ -164,6 +186,12 @@ adminRouter
   .post('/users', requirePermission('users', 'create'), validateMiddleware(createAdminUserJoiSchema), createUser)
   .patch('/users/:userId/role', requirePermission('users', 'edit'), validateMiddleware(patchUserRoleJoiSchema), patchUserRole)
   .delete('/users/:userId', requirePermission('users', 'delete'), deleteUser)
+  .post(
+    '/emails/promotion',
+    requirePermission('users', 'edit'),
+    validateMiddleware(sendPromotionEmailJoiSchema),
+    sendPromotionEmail,
+  )
   .get(
     '/applications',
     requirePermission('applications', 'view'),
@@ -305,6 +333,53 @@ adminRouter
     requirePermission('users', 'edit'),
     validateMiddleware(patchAppointmentStatusJoiSchema as any),
     patchAdminAppointmentStatusHandler,
+  )
+  .get(
+    '/verifications',
+    requirePermission('users', 'view'),
+    validateMiddleware(adminVerificationsListQueryJoiSchema as any),
+    listAdminVerificationsHandler,
+  )
+  .get(
+    '/verifications/:id',
+    requirePermission('users', 'view'),
+    validateMiddleware(adminVerificationDetailParamsJoiSchema as any),
+    getAdminVerificationDetailHandler,
+  )
+  .post(
+    '/verifications/:id/approve',
+    requirePermission('users', 'edit'),
+    validateMiddleware({ ...adminVerificationDetailParamsJoiSchema, ...adminVerificationActionJoiSchema } as any),
+    approveAdminVerificationHandler,
+  )
+  .post(
+    '/verifications/:id/reject',
+    requirePermission('users', 'edit'),
+    validateMiddleware({ ...adminVerificationDetailParamsJoiSchema, ...adminVerificationActionJoiSchema } as any),
+    rejectAdminVerificationHandler,
+  )
+  .post(
+    '/verifications/:id/request-resubmission',
+    requirePermission('users', 'edit'),
+    validateMiddleware({ ...adminVerificationDetailParamsJoiSchema, ...adminVerificationResubmitJoiSchema } as any),
+    requestAdminVerificationResubmissionHandler,
+  )
+  .get(
+    '/users/:userId/document-status',
+    requirePermission('users', 'view'),
+    validateMiddleware(adminUserDocumentStatusParamsJoiSchema as any),
+    getAdminUserDocumentStatusHandler,
+  )
+  .get(
+    '/notices',
+    requirePermission('users', 'view'),
+    validateMiddleware(listAdminNoticesJoiSchema as any),
+    listAdminNoticesHandler,
+  )
+  .post(
+    '/notices/sync-ai',
+    requirePermission('users', 'edit'),
+    syncNoticesAiHandler,
   );
 
 export default adminRouter;

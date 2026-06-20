@@ -9,6 +9,11 @@ import {
 } from './token.service';
 import { db } from '../config/database';
 import { getPermissionMatrixSliceForRole } from './rolePermissions.service';
+import {
+  buildPasswordResetUrl,
+  dispatchEmail,
+  sendPasswordResetEmail,
+} from './email.service';
 
 type SignupStudentBody = {
   fullName: string;
@@ -100,7 +105,7 @@ type SignupByRoleBody = {
   country?: string;
 };
 
-/** Match Enroll UI: find by name+country or create institution row. */
+/** Match Uniwizer UI: find by name+country or create institution row. */
 const findOrCreateUniversityForSignup = async (institutionName: string, country: string) => {
   const name = institutionName.trim();
   const countryNorm = country.trim() || 'General';
@@ -422,12 +427,18 @@ const resetPasswordUpdateService = async (userId: any, password: any) => {
 };
 
 const resetPasswordService = async (email: any) => {
-  const user = await db.User.findOne({ where: { email } });
+  const normalized = String(email).trim().toLowerCase();
+  const user = await db.User.findOne({ where: { email: normalized } });
   if (!user) {
     throw new AppError('User not found', 400);
   }
 
-  const token = await generateToken(user);
+  await db.PasswordResetToken.update(
+    { used: true },
+    { where: { userId: user.id, used: false } },
+  );
+
+  const token = generateOpaqueRefreshToken();
   const expiresAt = new Date(Date.now() + 3600 * 1000);
 
   await db.PasswordResetToken.create({
@@ -436,9 +447,22 @@ const resetPasswordService = async (email: any) => {
     userId: user.id,
   });
 
-  const resetUrl = `${process.env.BACKEND_URL}/change-password?token=${token}`;
+  const resetUrl = buildPasswordResetUrl(token);
 
-  return { message: 'Reset password email sent', resetUrl };
+  dispatchEmail(
+    () =>
+      sendPasswordResetEmail({
+        to: user.email,
+        name: user.name,
+        resetUrl,
+      }),
+    'password reset',
+  );
+
+  return {
+    message: 'Reset password email sent',
+    ...(process.env.NODE_ENV === 'development' ? { resetUrl } : {}),
+  };
 };
 
 const generateRandomPassword = (length = 12) => {

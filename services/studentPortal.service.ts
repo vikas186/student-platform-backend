@@ -281,8 +281,11 @@ export const submitStudentApplication = async (studentProfileId: number, idOrRef
     app.country = uniCountry;
   }
 
+  const previousStatus = app.status;
   app.status = 'submitted';
   await app.save();
+  const { notifyApplicationStatusChange } = await import('./application-email.service');
+  notifyApplicationStatusChange(app.id, previousStatus, 'submitted');
   return app;
 };
 
@@ -305,7 +308,13 @@ export const listStudentDocuments = async (studentProfileId: number) => {
 export const createStudentDocument = async (
   studentProfileId: number,
   file: Express.Multer.File,
-  opts: { applicationRef?: string | null; documentType?: string; standalone?: boolean },
+  opts: {
+    applicationRef?: string | null;
+    documentType?: string;
+    standalone?: boolean;
+    userId?: string;
+    userEmail?: string | null;
+  },
 ) => {
   if (!file) throw new AppError('File is required', 400);
 
@@ -318,8 +327,6 @@ export const createStudentDocument = async (
     if (!app) throw new AppError('Application not found', 404);
     applicationId = app.id;
   } else if (!opts.standalone) {
-    // No explicit application: attach to this student's most recently updated application so
-    // uploads from the generic "documents" screen still show under an application when any exist.
     const latest = await db.Application.findOne({
       where: { studentId: studentProfileId },
       attributes: ['id'],
@@ -330,16 +337,44 @@ export const createStudentDocument = async (
     }
   }
 
+  const {
+    validateVerificationDocumentType,
+    processVerificationUpload,
+  } = await import('../src/modules/document-verification/document-verification.processor');
+  const {
+    isVerificationDocumentType,
+    normalizeDocumentType,
+  } = await import('../src/modules/document-verification/document-types');
+
+  const rawType = opts.documentType?.trim();
+  if (rawType && rawType !== 'general') {
+    validateVerificationDocumentType(rawType);
+  }
+  const normalizedType = normalizeDocumentType(rawType);
+
   const fileUrl = file.path.replace(/\\/g, '/');
-  return db.Document.create({
+  const doc = await db.Document.create({
     studentProfileId,
     applicationId,
     fileUrl,
     originalFileName: file.originalname,
-    type: (opts.documentType || 'general').slice(0, 64),
+    type: normalizedType.slice(0, 64),
     fileSize: file.size,
     status: 'pending',
   });
+
+  let verification: Awaited<ReturnType<typeof processVerificationUpload>> | null = null;
+  if (opts.userId && isVerificationDocumentType(normalizedType)) {
+    verification = await processVerificationUpload({
+      userId: opts.userId,
+      userEmail: opts.userEmail ?? null,
+      documentId: doc.id,
+      fileUrl,
+      documentType: normalizedType,
+    });
+  }
+
+  return { doc, verification };
 };
 
 /** Offer letters visible to the student (same application scope as the rest of the portal). */

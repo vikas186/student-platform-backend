@@ -32,13 +32,13 @@ export const postChatFeedbackJoiSchema = {
 
 export const getPublicSuggestionsJoiSchema = {
   query: Joi.object({
-    audience: Joi.string().valid('student', 'explore', 'agent').default('student'),
+    audience: Joi.string().valid('student', 'explore', 'agent', 'admin').default('student'),
   }),
 };
 
 export const getChatSuggestionsJoiSchema = {
   query: Joi.object({
-    audience: Joi.string().valid('student', 'explore', 'agent').optional(),
+    audience: Joi.string().valid('student', 'explore', 'agent', 'admin').optional(),
   }),
 };
 

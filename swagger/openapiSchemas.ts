@@ -39,7 +39,7 @@ export const openapiSchemas = {
     },
   },
 
-  /** `POST /auth/university/signup` — Enroll university signup (no `role` field). */
+  /** `POST /auth/university/signup` — Uniwizer university signup (no `role` field). */
   UniversitySignupRequest: {
     type: 'object',
     required: ['email', 'password', 'confirmPassword', 'institutionName', 'country'],

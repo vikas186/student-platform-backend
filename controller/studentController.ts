@@ -123,15 +123,19 @@ export const uploadDocument = catchAsyncError(async (req: Request, res: Response
     pickOptionalTrimmedString(body, ['standalone']) ??
     pickOptionalTrimmedString(query, ['standalone']);
   const standalone = standaloneRaw === 'true' || standaloneRaw === '1';
-  const doc = await studentPortal.createStudentDocument(pid, file, {
+  const user = req.user as { id?: string; email?: string };
+  const { doc, verification } = await studentPortal.createStudentDocument(pid, file, {
     applicationRef,
     documentType,
     standalone,
+    userId: user.id,
+    userEmail: user.email ?? null,
   });
   res.status(201).json({
     success: true,
     message: 'Document uploaded',
     data: doc,
+    verification: verification ?? null,
   });
 });
 

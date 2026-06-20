@@ -81,7 +81,7 @@ export type AgentPathway = {
 };
 
 export const RECOMMENDATION_DISCLAIMER =
-  'AI-generated suggestions based on available program data. Verify fees and entry requirements with a counsellor before applying.';
+  'Suggestions based on available program data. Verify fees and entry requirements with a counsellor before applying.';
 
 export const REC_SOURCE_TYPES = [
   'rec_catalog',

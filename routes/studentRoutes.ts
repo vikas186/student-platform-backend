@@ -38,6 +38,14 @@ import {
   rescheduleStudentAppointmentHandler,
 } from '../src/modules/scheduling/scheduling.controller';
 import {
+  createDiditSessionHandler,
+  getDiditStatusHandler,
+} from '../src/modules/didit/didit.controller';
+import {
+  getStudentDocumentStatusHandler,
+  listStudentVerificationsHandler,
+} from '../src/modules/document-verification/document-verification.controller';
+import {
   appointmentIdParamJoiSchema,
   bookAppointmentJoiSchema,
   listSlotsJoiSchema,
@@ -135,6 +143,10 @@ studentRouter
     '/scheduling/appointments/:appointmentId/reschedule',
     validateMiddleware(rescheduleAppointmentJoiSchema as any),
     rescheduleStudentAppointmentHandler,
-  );
+  )
+  .post('/verification/didit/session', createDiditSessionHandler)
+  .get('/verification/didit/status', getDiditStatusHandler)
+  .get('/document-status', requirePermission('applications', 'view'), getStudentDocumentStatusHandler)
+  .get('/verifications', requirePermission('applications', 'view'), listStudentVerificationsHandler);
 
 export default studentRouter;

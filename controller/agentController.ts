@@ -1,9 +1,43 @@
 import { Request, Response, NextFunction } from 'express';
 import constant from '../constant';
+import { db } from '../config/database';
 import { catchAsyncError } from '../middleware/catchAsyncError';
 import AppError from '../utils/errorHandler';
 import * as agentPortal from '../services/agentPortal.service';
 import { pickOptionalPositiveInt, pickOptionalTrimmedString } from '../utils/requestFields';
+import {
+  dispatchEmail,
+  sendAgentStudentCredentialsEmail,
+  sendWelcomeEmail,
+} from '../services/email.service';
+
+const notifyAgentCreatedStudent = async (
+  agentProfileId: number,
+  fullName: string,
+  email: string,
+  temporaryPassword?: string,
+) => {
+  const profile = await db.AgentProfile.findByPk(agentProfileId);
+  const agencyName = profile?.agencyName ?? null;
+  if (temporaryPassword) {
+    dispatchEmail(
+      () =>
+        sendAgentStudentCredentialsEmail({
+          to: email,
+          name: fullName,
+          email,
+          password: temporaryPassword,
+          agencyName,
+        }),
+      'agent student credentials',
+    );
+    return;
+  }
+  dispatchEmail(
+    () => sendWelcomeEmail({ to: email, name: fullName, role: 'student' }),
+    'agent student welcome',
+  );
+};
 
 const agentProfileIdFromReq = async (req: Request): Promise<number> => {
   const user: any = req.user;
@@ -98,6 +132,15 @@ export const exportApplicationsCsv = catchAsyncError(async (req: Request, res: R
 export const createApplication = catchAsyncError(async (req: Request, res: Response) => {
   const aid = await agentProfileIdFromReq(req);
   const result = await agentPortal.createAgentApplication(aid, req.body);
+  const studentBody = req.body?.student as { email?: string; fullName?: string } | undefined;
+  if (studentBody?.email && studentBody?.fullName) {
+    await notifyAgentCreatedStudent(
+      aid,
+      String(studentBody.fullName).trim(),
+      String(studentBody.email).trim().toLowerCase(),
+      result.temporaryPassword,
+    );
+  }
   const appJson = result.application.get({ plain: true }) as Record<string, unknown>;
   res.status(201).json({
     success: true,
@@ -155,6 +198,10 @@ export const deleteApplication = catchAsyncError(async (req: Request, res: Respo
 export const createStudent = catchAsyncError(async (req: Request, res: Response) => {
   const aid = await agentProfileIdFromReq(req);
   const result = await agentPortal.createStudentForAgent(aid, req.body);
+  const user = result.user as { email?: string; name?: string };
+  if (user.email && user.name) {
+    await notifyAgentCreatedStudent(aid, user.name, user.email, result.temporaryPassword);
+  }
   res.status(201).json({
     success: true,
     message: 'Student created',
