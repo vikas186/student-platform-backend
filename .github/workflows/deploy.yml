@@ -11,8 +11,6 @@ on:
         options:
           - staging
           - production
-  push:
-    branches: [main]
 
 concurrency:
   group: backend-deploy-${{ github.ref }}
@@ -21,12 +19,18 @@ concurrency:
 jobs:
   deploy:
     name: Deploy to server
-    if: github.event_name == 'workflow_dispatch' || vars.AUTO_DEPLOY == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'staging' }}
 
     steps:
+      - name: Verify deploy secrets
+        run: |
+          if [ -z "${{ secrets.DEPLOY_HOST }}" ] || [ -z "${{ secrets.DEPLOY_USER }}" ] || [ -z "${{ secrets.DEPLOY_SSH_KEY }}" ] || [ -z "${{ secrets.DEPLOY_PATH }}" ]; then
+            echo "Missing deploy secrets. Add DEPLOY_HOST, DEPLOY_USER, DEPLOY_SSH_KEY, and DEPLOY_PATH in GitHub repo settings."
+            exit 1
+          fi
+
       - name: Checkout
         uses: actions/checkout@v4
 
