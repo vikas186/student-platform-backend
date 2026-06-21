@@ -97,7 +97,7 @@ export const createPassportVerificationForUpload = async (input: {
     entityType: 'passport',
     entityId: row.id,
     action: 'ocr_processed',
-    notes: 'Passport uploaded; awaiting Didit verification',
+    notes: 'Passport uploaded; pending review',
     metadata: { documentId: input.documentId },
   });
   return row;

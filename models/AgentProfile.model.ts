@@ -5,22 +5,22 @@ export type AgentAgreementStatus = (typeof AGENT_AGREEMENT_STATUSES)[number];
 
 export default (sequelize: Sequelize) => {
   class AgentProfile extends Model {
-    public id!: number;
-    public userId!: string;
-    public agencyName!: string;
-    public primaryMarket?: string | null;
-    public logoUrl?: string | null;
-    public subscriptionPlanId?: number | null;
+    declare id: number;
+    declare userId: string;
+    declare agencyName: string;
+    declare primaryMarket: string | null;
+    declare logoUrl: string | null;
+    declare subscriptionPlanId: number | null;
     /** Onboarding partnership agreement workflow (mirrors `University.countersignedContractUrl`). */
-    public agreementStatus!: AgentAgreementStatus;
-    public signedAgreementUrl?: string | null;
-    public agreementSentAt?: Date | null;
-    public agreementUploadedAt?: Date | null;
-    public agreementApprovedAt?: Date | null;
-    public agreementApprovedByUserId?: string | null;
-    public agreementRejectionReason?: string | null;
-    public readonly createdAt!: Date;
-    public readonly updatedAt!: Date;
+    declare agreementStatus: AgentAgreementStatus;
+    declare signedAgreementUrl: string | null;
+    declare agreementSentAt: Date | null;
+    declare agreementUploadedAt: Date | null;
+    declare agreementApprovedAt: Date | null;
+    declare agreementApprovedByUserId: string | null;
+    declare agreementRejectionReason: string | null;
+    declare readonly createdAt: Date;
+    declare readonly updatedAt: Date;
 
     static associate(models: any) {
       AgentProfile.belongsTo(models.User, { foreignKey: 'userId', as: 'user', onDelete: 'CASCADE' });

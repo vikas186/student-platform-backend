@@ -37,7 +37,10 @@ export const resolveHostAdminForSlots = async (): Promise<string> => {
   const withAvailability = await db.CounsellorAvailability.findOne({
     order: [['updatedAt', 'DESC']],
   });
-  if (withAvailability) return withAvailability.adminUserId;
+  if (withAvailability) {
+    const adminUserId = withAvailability.getDataValue('adminUserId') as string;
+    if (adminUserId) return adminUserId;
+  }
 
   try {
     return await resolveHostAdminUserId();

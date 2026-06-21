@@ -11,6 +11,21 @@ import {
 
 const totalCells = totalPermissionCells();
 
+type PermissionRow = {
+  role: string;
+  moduleKey: string;
+  actionKey: string;
+  allowed: boolean;
+};
+
+/** Read DB row without Sequelize class-field shadowing. */
+const readPermissionRow = (row: InstanceType<typeof db.RolePermission>): PermissionRow => ({
+  role: String(row.getDataValue('role')),
+  moduleKey: String(row.getDataValue('moduleKey')),
+  actionKey: String(row.getDataValue('actionKey')),
+  allowed: Boolean(row.getDataValue('allowed')),
+});
+
 const flattenDefaults = () => {
   const rows: { role: UserRole; moduleKey: string; actionKey: string; allowed: boolean }[] = [];
   for (const role of MATRIX_ROLES) {
@@ -41,7 +56,7 @@ export const ensureAdminHasAllCatalogPermissions = async (): Promise<void> => {
         where: { role: 'admin', moduleKey: mod.moduleKey, actionKey: act.key },
         defaults: { allowed: true },
       });
-      if (!row.allowed) {
+      if (!row.getDataValue('allowed')) {
         await row.update({ allowed: true });
       }
     }
@@ -62,6 +77,27 @@ export const ensureUniversityPortalPermissions = async (): Promise<void> => {
       defaults: { allowed: true },
     });
     await row.update({ allowed: true });
+  }
+};
+
+/** Student + agent portal defaults — ensure catalog `true` cells stay granted (same pattern as university). */
+export const ensureStudentAndAgentDefaultPermissions = async (): Promise<void> => {
+  await seedRolePermissionsIfEmpty();
+  for (const role of ['student', 'agent'] as const) {
+    const defaults = DEFAULT_PERMISSION_MATRIX[role];
+    for (const mod of PERMISSION_CATALOG) {
+      for (const act of mod.actions) {
+        const allowed = Boolean(defaults[mod.moduleKey]?.[act.key]);
+        if (!allowed) continue;
+        const [row] = await db.RolePermission.findOrCreate({
+          where: { role, moduleKey: mod.moduleKey, actionKey: act.key },
+          defaults: { allowed: true },
+        });
+        if (!row.getDataValue('allowed')) {
+          await row.update({ allowed: true });
+        }
+      }
+    }
   }
 };
 
@@ -103,14 +139,7 @@ const loadFullMatrixFromDb = async (): Promise<Record<UserRole, Record<string, R
   const rows = await db.RolePermission.findAll({
     attributes: ['role', 'moduleKey', 'actionKey', 'allowed'],
   });
-  return rowsToMatrix(
-    rows.map(r => ({
-      role: r.role,
-      moduleKey: r.moduleKey,
-      actionKey: r.actionKey,
-      allowed: r.allowed,
-    })),
-  );
+  return rowsToMatrix(rows.map(readPermissionRow));
 };
 
 /**
@@ -169,9 +198,9 @@ export const getPermissionMatrixSliceForRole = async (
       slice[mod.moduleKey][act.key] = false;
     }
   }
-  for (const r of rows) {
+  for (const r of rows.map(readPermissionRow)) {
     if (slice[r.moduleKey] && r.actionKey in slice[r.moduleKey]) {
-      slice[r.moduleKey][r.actionKey] = Boolean(r.allowed);
+      slice[r.moduleKey][r.actionKey] = r.allowed;
     }
   }
   return slice;
@@ -182,12 +211,7 @@ export const getPermissionMatrixForAdmin = async () => {
   const rows = await db.RolePermission.findAll({
     attributes: ['role', 'moduleKey', 'actionKey', 'allowed'],
   });
-  const plain = rows.map(r => ({
-    role: r.role,
-    moduleKey: r.moduleKey,
-    actionKey: r.actionKey,
-    allowed: r.allowed,
-  }));
+  const plain = rows.map(readPermissionRow);
   const matrix = rowsToMatrix(plain);
   const summary = MATRIX_ROLES.map(role => {
     const granted = plain.filter(r => r.role === role && r.allowed).length;
@@ -252,5 +276,5 @@ export const roleHasPermission = async (
   const row = await db.RolePermission.findOne({
     where: { role, moduleKey, actionKey },
   });
-  return Boolean(row?.allowed);
+  return Boolean(row?.getDataValue('allowed'));
 };

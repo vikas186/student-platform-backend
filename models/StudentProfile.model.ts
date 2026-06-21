@@ -2,20 +2,20 @@ import { Model, DataTypes, Sequelize } from 'sequelize';
 
 export default (sequelize: Sequelize) => {
   class StudentProfile extends Model {
-    public id!: number;
-    public userId!: string;
-    public academicDetails?: Record<string, unknown> | null;
-    public preferredCountry?: string | null;
-    public targetCountries?: string[] | null;
-    public countryOfResidence?: string | null;
-    public highestEducation?: string | null;
-    public gradeGpa?: string | null;
+    declare id: number;
+    declare userId: string;
+    declare academicDetails: Record<string, unknown> | null;
+    declare preferredCountry: string | null;
+    declare targetCountries: string[] | null;
+    declare countryOfResidence: string | null;
+    declare highestEducation: string | null;
+    declare gradeGpa: string | null;
     /** Counsellor / agency this student is linked to — applications inherit this for the agent portal */
-    public agentProfileId?: number | null;
+    declare agentProfileId: number | null;
     /** When set, student chat/RAG may include concrete university names */
-    public counsellingCompletedAt?: Date | null;
-    public readonly createdAt!: Date;
-    public readonly updatedAt!: Date;
+    declare counsellingCompletedAt: Date | null;
+    declare readonly createdAt: Date;
+    declare readonly updatedAt: Date;
 
     static associate(models: any) {
       StudentProfile.belongsTo(models.User, { foreignKey: 'userId', as: 'user', onDelete: 'CASCADE' });

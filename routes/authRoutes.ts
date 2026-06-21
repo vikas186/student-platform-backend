@@ -35,7 +35,7 @@ authRouter
   .post('/university/login', validateMiddleware(loginJoiSchema), loginUniversityUser)
   .post('/admin/signup', validateMiddleware(adminSignupJoiSchema), signupAdmin)
   .post('/admin/login', validateMiddleware(loginJoiSchema), loginAdminUser)
-  .post('/login', loginUser)
+  .post('/login', validateMiddleware(loginJoiSchema), loginUser)
   .post('/refresh-token', validateMiddleware(refreshTokenJoiSchema), refreshAccessToken)
   .post('/logout', jwtAuthMiddleware(['all']), logoutUser)
   .post('/logout-all-devices', jwtAuthMiddleware(['all']), logoutAllDevices)

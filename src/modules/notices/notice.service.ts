@@ -1,4 +1,5 @@
 import { Op } from 'sequelize';
+import type { Model } from 'sequelize';
 import { db } from '../../../config/database';
 
 export type NoticeItemDto = {
@@ -15,31 +16,26 @@ export type NoticeItemDto = {
   updatedAt: string;
 };
 
-function toDto(row: {
-  id: number;
-  title: string;
-  source: string;
-  href?: string | null;
-  sourceUrl?: string | null;
-  generatedBy?: string;
-  expiresAt?: Date | null;
-  sortOrder: number;
-  isActive: boolean;
-  createdAt: Date;
-  updatedAt: Date;
-}): NoticeItemDto {
+function toIso(value: unknown): string | null {
+  if (value == null) return null;
+  const d = value instanceof Date ? value : new Date(String(value));
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+function toDto(row: Model): NoticeItemDto {
+  const p = row.get({ plain: true }) as Record<string, unknown>;
   return {
-    id: row.id,
-    title: row.title,
-    source: row.source,
-    href: row.href ?? null,
-    sourceUrl: row.sourceUrl ?? null,
-    generatedBy: row.generatedBy ?? 'ai',
-    expiresAt: row.expiresAt ? row.expiresAt.toISOString() : null,
-    sortOrder: row.sortOrder,
-    isActive: row.isActive,
-    createdAt: row.createdAt.toISOString(),
-    updatedAt: row.updatedAt.toISOString(),
+    id: Number(p.id),
+    title: String(p.title ?? ''),
+    source: String(p.source ?? ''),
+    href: p.href != null ? String(p.href) : null,
+    sourceUrl: p.sourceUrl != null ? String(p.sourceUrl) : null,
+    generatedBy: String(p.generatedBy ?? 'ai'),
+    expiresAt: toIso(p.expiresAt),
+    sortOrder: Number(p.sortOrder ?? 0),
+    isActive: Boolean(p.isActive),
+    createdAt: toIso(p.createdAt) ?? new Date().toISOString(),
+    updatedAt: toIso(p.updatedAt) ?? new Date().toISOString(),
   };
 }
 
@@ -51,7 +47,7 @@ export async function listActiveNotices(): Promise<NoticeItemDto[]> {
       ['id', 'ASC'],
     ],
   });
-  return rows.map(r => toDto(r as any));
+  return rows.map(r => toDto(r));
 }
 
 export async function listAdminNotices(query: {
@@ -87,7 +83,7 @@ export async function listAdminNotices(query: {
   });
 
   return {
-    data: rows.map(r => toDto(r as any)),
+    data: rows.map(r => toDto(r)),
     page,
     limit,
     total: count,

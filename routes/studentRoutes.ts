@@ -38,6 +38,14 @@ import {
   rescheduleStudentAppointmentHandler,
 } from '../src/modules/scheduling/scheduling.controller';
 import {
+  digilockerCallbackHandler,
+  disconnectDigilockerHandler,
+  getDigilockerAuthUrlHandler,
+  getDigilockerStatusHandler,
+  importDigilockerDocumentHandler,
+  listDigilockerDocumentsHandler,
+} from '../src/modules/digilocker/digilocker.controller';
+import {
   createDiditSessionHandler,
   getDiditStatusHandler,
 } from '../src/modules/didit/didit.controller';
@@ -73,6 +81,9 @@ studentRouter.get(
   requirePermission('applications', 'view'),
   getUniversity,
 );
+
+/** DigiLocker OAuth callback — no JWT; validated via signed state. */
+studentRouter.get('/digilocker/callback', digilockerCallbackHandler);
 
 studentRouter.use(jwtAuthMiddleware(['student']));
 
@@ -147,6 +158,11 @@ studentRouter
   .post('/verification/didit/session', createDiditSessionHandler)
   .get('/verification/didit/status', getDiditStatusHandler)
   .get('/document-status', requirePermission('applications', 'view'), getStudentDocumentStatusHandler)
-  .get('/verifications', requirePermission('applications', 'view'), listStudentVerificationsHandler);
+  .get('/verifications', requirePermission('applications', 'view'), listStudentVerificationsHandler)
+  .get('/digilocker/status', requirePermission('applications', 'view'), getDigilockerStatusHandler)
+  .get('/digilocker/auth-url', requirePermission('applications', 'edit'), getDigilockerAuthUrlHandler)
+  .get('/digilocker/documents', requirePermission('applications', 'view'), listDigilockerDocumentsHandler)
+  .post('/digilocker/import', requirePermission('applications', 'edit'), importDigilockerDocumentHandler)
+  .delete('/digilocker/disconnect', requirePermission('applications', 'edit'), disconnectDigilockerHandler);
 
 export default studentRouter;

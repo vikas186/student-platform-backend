@@ -8,24 +8,24 @@ export type AppointmentStatus = (typeof APPOINTMENT_STATUSES)[number];
 
 export default (sequelize: Sequelize) => {
   class Appointment extends Model {
-    public id!: string;
-    public studentProfileId!: number;
-    public studentUserId!: string;
-    public hostAdminUserId!: string;
-    public type!: AppointmentType;
-    public status!: AppointmentStatus;
-    public startsAt!: Date;
-    public endsAt!: Date;
-    public timezone!: string;
-    public googleEventId!: string | null;
-    public meetLink!: string | null;
-    public notes!: string | null;
-    public cancelledAt!: Date | null;
-    public completedAt!: Date | null;
-    public reminder24hSentAt!: Date | null;
-    public reminder1hSentAt!: Date | null;
-    public readonly createdAt!: Date;
-    public readonly updatedAt!: Date;
+    declare id: string;
+    declare studentProfileId: number;
+    declare studentUserId: string;
+    declare hostAdminUserId: string;
+    declare type: AppointmentType;
+    declare status: AppointmentStatus;
+    declare startsAt: Date;
+    declare endsAt: Date;
+    declare timezone: string;
+    declare googleEventId: string | null;
+    declare meetLink: string | null;
+    declare notes: string | null;
+    declare cancelledAt: Date | null;
+    declare completedAt: Date | null;
+    declare reminder24hSentAt: Date | null;
+    declare reminder1hSentAt: Date | null;
+    declare readonly createdAt: Date;
+    declare readonly updatedAt: Date;
 
     static associate(models: any) {
       Appointment.belongsTo(models.StudentProfile, {

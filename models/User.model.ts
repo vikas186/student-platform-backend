@@ -6,17 +6,23 @@ const saltRounds: number = parseInt(process.env.BCRYPT_SALTROUNDS as string, 10)
 export const USER_ROLES = ['student', 'agent', 'admin', 'university'] as const;
 export type UserRole = (typeof USER_ROLES)[number];
 
+/** Read password hash without class-field shadowing (Sequelize + TypeScript). */
+export function readPasswordHash(user: Model): string | null {
+  const hash = user.getDataValue('password');
+  return typeof hash === 'string' && hash.length > 0 ? hash : null;
+}
+
 export default (sequelize: Sequelize) => {
   class User extends Model {
-    public id!: string;
-    public name!: string;
-    public email!: string;
-    public password!: string;
-    public role!: UserRole;
-    public phone?: string | null;
-    public status!: boolean;
-    public readonly createdAt!: Date;
-    public readonly updatedAt!: Date;
+    declare id: string;
+    declare name: string;
+    declare email: string;
+    declare password: string;
+    declare role: UserRole;
+    declare phone: string | null;
+    declare status: boolean;
+    declare readonly createdAt: Date;
+    declare readonly updatedAt: Date;
 
     static associate(models: any) {
       User.hasOne(models.StudentProfile, { foreignKey: 'userId', as: 'studentProfile', onDelete: 'CASCADE' });
@@ -37,7 +43,14 @@ export default (sequelize: Sequelize) => {
     }
 
     async login(password: string): Promise<boolean> {
-      return bcrypt.compare(password, this.password);
+      const plain = typeof password === 'string' ? password : '';
+      const hash = readPasswordHash(this);
+      if (!plain || !hash) return false;
+      try {
+        return await bcrypt.compare(plain, hash);
+      } catch {
+        return false;
+      }
     }
 
     toSafeObject(): Record<string, unknown> {
@@ -89,14 +102,15 @@ export default (sequelize: Sequelize) => {
       indexes: [{ unique: true, fields: ['email'] }],
       hooks: {
         beforeCreate: async (user: User) => {
-          if (user.password) {
-            user.password = await bcrypt.hash(user.password, saltRounds);
-          }
+          const plain = String(user.getDataValue('password') || '').trim();
+          if (!plain) throw new Error('Password is required');
+          user.setDataValue('password', await bcrypt.hash(plain, saltRounds));
         },
         beforeUpdate: async (user: User) => {
-          if (user.changed('password')) {
-            user.password = await bcrypt.hash(user.password as string, saltRounds);
-          }
+          if (!user.changed('password')) return;
+          const plain = String(user.getDataValue('password') || '').trim();
+          if (!plain) throw new Error('Password is required');
+          user.setDataValue('password', await bcrypt.hash(plain, saltRounds));
         },
       },
     },

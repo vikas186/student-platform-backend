@@ -2,15 +2,15 @@ import { Model, DataTypes, Sequelize } from 'sequelize';
 
 export default (sequelize: Sequelize) => {
   class Token extends Model {
-    public id!: number;
+    declare id: number;
     /** Access (Bearer) JWT — stored for session validation */
-    public token!: string;
+    declare token: string;
     /** Opaque refresh token; issued at login, reused until expiry */
-    public refreshToken?: string | null;
-    public refreshExpiresAt?: Date | null;
-    public userId!: string;
-    public readonly createdAt!: Date;
-    public readonly updatedAt!: Date;
+    declare refreshToken: string | null;
+    declare refreshExpiresAt: Date | null;
+    declare userId: string;
+    declare readonly createdAt: Date;
+    declare readonly updatedAt: Date;
 
     static associate(models: any) {
       Token.belongsTo(models.User, { foreignKey: 'userId', onDelete: 'CASCADE' });

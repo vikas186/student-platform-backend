@@ -2,14 +2,14 @@ import { Model, DataTypes, Sequelize } from 'sequelize';
 
 export default (sequelize: Sequelize) => {
   class CounsellorAvailability extends Model {
-    public id!: number;
-    public adminUserId!: string;
-    public dayOfWeek!: number;
-    public startTime!: string;
-    public endTime!: string;
-    public timezone!: string;
-    public readonly createdAt!: Date;
-    public readonly updatedAt!: Date;
+    declare id: number;
+    declare adminUserId: string;
+    declare dayOfWeek: number;
+    declare startTime: string;
+    declare endTime: string;
+    declare timezone: string;
+    declare readonly createdAt: Date;
+    declare readonly updatedAt: Date;
 
     static associate(models: any) {
       CounsellorAvailability.belongsTo(models.User, { foreignKey: 'adminUserId', as: 'admin', onDelete: 'CASCADE' });

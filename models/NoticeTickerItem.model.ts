@@ -2,18 +2,18 @@ import { Model, DataTypes, Sequelize } from 'sequelize';
 
 export default (sequelize: Sequelize) => {
   class NoticeTickerItem extends Model {
-    public id!: number;
-    public title!: string;
-    public source!: string;
-    public href?: string | null;
-    public externalId?: string | null;
-    public sourceUrl?: string | null;
-    public generatedBy!: string;
-    public expiresAt?: Date | null;
-    public sortOrder!: number;
-    public isActive!: boolean;
-    public readonly createdAt!: Date;
-    public readonly updatedAt!: Date;
+    declare id: number;
+    declare title: string;
+    declare source: string;
+    declare href: string | null;
+    declare externalId: string | null;
+    declare sourceUrl: string | null;
+    declare generatedBy: string;
+    declare expiresAt: Date | null;
+    declare sortOrder: number;
+    declare isActive: boolean;
+    declare readonly createdAt: Date;
+    declare readonly updatedAt: Date;
   }
 
   NoticeTickerItem.init(

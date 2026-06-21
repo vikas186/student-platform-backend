@@ -3,13 +3,13 @@ import { USER_ROLES } from './User.model';
 
 export default (sequelize: Sequelize) => {
   class RolePermission extends Model {
-    public id!: number;
-    public role!: (typeof USER_ROLES)[number];
-    public moduleKey!: string;
-    public actionKey!: string;
-    public allowed!: boolean;
-    public readonly createdAt!: Date;
-    public readonly updatedAt!: Date;
+    declare id: number;
+    declare role: (typeof USER_ROLES)[number];
+    declare moduleKey: string;
+    declare actionKey: string;
+    declare allowed: boolean;
+    declare readonly createdAt: Date;
+    declare readonly updatedAt: Date;
   }
 
   RolePermission.init(

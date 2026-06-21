@@ -1,0 +1,309 @@
+import crypto from 'crypto';
+import axios from 'axios';
+import fs from 'fs';
+import path from 'path';
+import jwt from 'jsonwebtoken';
+import { db } from '../../../config/database';
+import AppError from '../../../utils/errorHandler';
+import { encryptToken, decryptToken } from '../scheduling/token-crypto.util';
+import {
+  assertDigilockerConfigured,
+  digilockerConfig,
+  isDigilockerConfigured,
+} from './digilocker.config';
+import type { DigiLockerIssuedDocument, DigiLockerOAuthState } from './digilocker.types';
+
+const oauthSecret = () => process.env.JWT_SECRET_KEY || 'default_secret_key';
+
+const base64UrlEncode = (buf: Buffer): string =>
+  buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+const createCodeVerifier = (): string =>
+  base64UrlEncode(crypto.randomBytes(48)).slice(0, 64);
+
+const createCodeChallenge = (verifier: string): string =>
+  base64UrlEncode(crypto.createHash('sha256').update(verifier).digest());
+
+export const createDigilockerOAuthState = (
+  userId: string,
+  applicationId: string,
+  codeVerifier: string,
+): string =>
+  jwt.sign(
+    { userId, applicationId, purpose: 'digilocker', codeVerifier } satisfies DigiLockerOAuthState,
+    oauthSecret(),
+    { expiresIn: '15m' },
+  );
+
+export const verifyDigilockerOAuthState = (state: string): DigiLockerOAuthState => {
+  try {
+    const decoded = jwt.verify(state, oauthSecret()) as DigiLockerOAuthState;
+    if (decoded.purpose !== 'digilocker' || !decoded.userId || !decoded.applicationId) {
+      throw new Error('invalid state');
+    }
+    if (!decoded.codeVerifier) throw new Error('missing verifier');
+    return decoded;
+  } catch {
+    throw new AppError('Invalid or expired DigiLocker OAuth state', 400);
+  }
+};
+
+export const getDigilockerAuthUrl = (userId: string, applicationId: string): string => {
+  assertDigilockerConfigured();
+  const cfg = digilockerConfig();
+  const codeVerifier = createCodeVerifier();
+  const state = createDigilockerOAuthState(userId, applicationId, codeVerifier);
+  const params = new URLSearchParams({
+    response_type: 'code',
+    client_id: cfg.clientId,
+    redirect_uri: cfg.redirectUri,
+    state,
+    scope: cfg.scope,
+    code_challenge: createCodeChallenge(codeVerifier),
+    code_challenge_method: 'S256',
+  });
+  return `${cfg.authUrl}?${params.toString()}`;
+};
+
+const exchangeAuthorizationCode = async (code: string, codeVerifier: string) => {
+  const cfg = digilockerConfig();
+  const body = new URLSearchParams({
+    grant_type: 'authorization_code',
+    code,
+    client_id: cfg.clientId,
+    client_secret: cfg.clientSecret,
+    redirect_uri: cfg.redirectUri,
+    code_verifier: codeVerifier,
+  });
+  const { data } = await axios.post(cfg.tokenUrl, body.toString(), {
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    timeout: 30_000,
+  });
+  return data as {
+    access_token?: string;
+    refresh_token?: string;
+    expires_in?: number;
+    scope?: string;
+    id_token?: string;
+  };
+};
+
+const parseIdTokenName = (idToken: string | undefined): string | null => {
+  if (!idToken) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(idToken.split('.')[1] ?? '', 'base64url').toString('utf8'));
+    const name = payload?.name ?? payload?.given_name;
+    return typeof name === 'string' && name.trim() ? name.trim() : null;
+  } catch {
+    return null;
+  }
+};
+
+export const handleDigilockerOAuthCallback = async (code: string, state: string) => {
+  const { userId, applicationId, codeVerifier } = verifyDigilockerOAuthState(state);
+  const tokens = await exchangeAuthorizationCode(code, codeVerifier);
+  if (!tokens.access_token) {
+    throw new AppError('DigiLocker did not return an access token', 502);
+  }
+
+  const expiresAt =
+    typeof tokens.expires_in === 'number'
+      ? new Date(Date.now() + tokens.expires_in * 1000)
+      : null;
+
+  await db.DigiLockerConnection.upsert({
+    userId,
+    digilockerName: parseIdTokenName(tokens.id_token),
+    accessTokenEnc: encryptToken(tokens.access_token),
+    refreshTokenEnc: tokens.refresh_token ? encryptToken(tokens.refresh_token) : null,
+    accessTokenExpiresAt: expiresAt,
+    scopes: tokens.scope ?? digilockerConfig().scope,
+    connectedAt: new Date(),
+  });
+
+  return { userId, applicationId };
+};
+
+const getValidAccessToken = async (userId: string): Promise<string> => {
+  const row = await db.DigiLockerConnection.findByPk(userId);
+  if (!row) throw new AppError('DigiLocker is not connected for this account', 400);
+
+  const accessToken = decryptToken(row.getDataValue('accessTokenEnc'));
+  const expiresAt = row.getDataValue('accessTokenExpiresAt') as Date | null;
+  if (expiresAt && expiresAt.getTime() > Date.now() + 60_000) {
+    return accessToken;
+  }
+
+  const refreshEnc = row.getDataValue('refreshTokenEnc') as string | null;
+  if (!refreshEnc) return accessToken;
+
+  const cfg = digilockerConfig();
+  const body = new URLSearchParams({
+    grant_type: 'refresh_token',
+    refresh_token: decryptToken(refreshEnc),
+    client_id: cfg.clientId,
+    client_secret: cfg.clientSecret,
+  });
+  const { data } = await axios.post(cfg.tokenUrl, body.toString(), {
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    timeout: 30_000,
+  });
+  if (!data?.access_token) throw new AppError('Could not refresh DigiLocker token', 502);
+
+  const nextExpires =
+    typeof data.expires_in === 'number'
+      ? new Date(Date.now() + data.expires_in * 1000)
+      : null;
+
+  await row.update({
+    accessTokenEnc: encryptToken(data.access_token),
+    refreshTokenEnc: data.refresh_token ? encryptToken(data.refresh_token) : refreshEnc,
+    accessTokenExpiresAt: nextExpires,
+  });
+
+  return data.access_token as string;
+};
+
+export const getDigilockerConnectionStatus = async (userId: string) => {
+  const configured = isDigilockerConfigured();
+  const row = await db.DigiLockerConnection.findByPk(userId);
+  if (!row) {
+    return {
+      configured,
+      connected: false,
+      digilockerName: null,
+      connectedAt: null,
+    };
+  }
+  return {
+    configured,
+    connected: true,
+    digilockerName: (row.getDataValue('digilockerName') as string | null) ?? null,
+    connectedAt: row.getDataValue('connectedAt')?.toISOString?.() ?? null,
+  };
+};
+
+export const disconnectDigilocker = async (userId: string): Promise<void> => {
+  await db.DigiLockerConnection.destroy({ where: { userId } });
+};
+
+export const listDigilockerIssuedDocuments = async (userId: string): Promise<DigiLockerIssuedDocument[]> => {
+  assertDigilockerConfigured();
+  const token = await getValidAccessToken(userId);
+  const cfg = digilockerConfig();
+  const { data } = await axios.get(`${cfg.apiBase}/2/files/issued`, {
+    headers: { Authorization: `Bearer ${token}` },
+    timeout: 30_000,
+  });
+
+  const items = Array.isArray(data?.items) ? data.items : Array.isArray(data) ? data : [];
+  return items
+    .filter((item: Record<string, unknown>) => typeof item.uri === 'string' && item.uri.trim())
+    .map((item: Record<string, unknown>) => ({
+      name: String(item.name ?? item.description ?? 'Document'),
+      type: String(item.type ?? 'file'),
+      size: String(item.size ?? ''),
+      date: String(item.date ?? ''),
+      mime: (item.mime as string | string[]) ?? 'application/pdf',
+      uri: String(item.uri),
+      doctype: String(item.doctype ?? ''),
+      description: String(item.description ?? item.name ?? 'Document'),
+      issuerid: String(item.issuerid ?? ''),
+      issuer: String(item.issuer ?? ''),
+    }));
+};
+
+export const mapDigilockerDocType = (doctype: string, description: string): string => {
+  const code = doctype.trim().toUpperCase();
+  const desc = description.toLowerCase();
+  if (code === 'HSCER' || desc.includes('12th') || desc.includes('class xii')) return '12th_marksheet';
+  if (code === 'SSCER' || desc.includes('10th') || desc.includes('class x')) return '10th_marksheet';
+  if (code === 'DGCER' || desc.includes('degree')) return 'degree_certificate';
+  if (desc.includes('transcript')) return 'transcript';
+  if (desc.includes('diploma')) return 'diploma';
+  if (desc.includes('passport')) return 'passport';
+  if (desc.includes('bank')) return 'bank_statement';
+  if (desc.includes('income tax') || desc.includes('itr')) return 'itr';
+  return 'general';
+};
+
+const verifyHmac = (fileBuf: Buffer, hmacHeader: string | undefined): void => {
+  if (!hmacHeader) return;
+  const cfg = digilockerConfig();
+  const computed = crypto.createHmac('sha256', cfg.clientSecret).update(fileBuf).digest('base64');
+  if (computed !== hmacHeader) {
+    throw new AppError('DigiLocker file integrity check failed', 502);
+  }
+};
+
+export const downloadDigilockerFile = async (
+  userId: string,
+  uri: string,
+): Promise<{ buffer: Buffer; mime: string; fileName: string }> => {
+  const token = await getValidAccessToken(userId);
+  const cfg = digilockerConfig();
+  const { data, headers } = await axios.get(`${cfg.apiBase}/1/file/uri`, {
+    headers: { Authorization: `Bearer ${token}` },
+    params: { uri },
+    responseType: 'arraybuffer',
+    timeout: 60_000,
+  });
+  const buffer = Buffer.from(data);
+  verifyHmac(buffer, headers.hmac as string | undefined);
+  const mime = String(headers['content-type'] ?? 'application/pdf');
+  const ext = mime.includes('pdf') ? '.pdf' : mime.includes('png') ? '.png' : '.jpg';
+  const safeUri = uri.replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 48);
+  return { buffer, mime, fileName: `digilocker-${safeUri}${ext}` };
+};
+
+export const importDigilockerDocumentForStudent = async (input: {
+  userId: string;
+  studentProfileId: number;
+  applicationId: string;
+  uri: string;
+  documentType?: string | null;
+}) => {
+  const issued = await listDigilockerIssuedDocuments(input.userId);
+  const meta = issued.find(d => d.uri === input.uri);
+  if (!meta) throw new AppError('Document not found in your DigiLocker account', 404);
+
+  const { buffer, mime, fileName } = await downloadDigilockerFile(input.userId, input.uri);
+  const uploadDir = path.join('uploads', 'student-documents');
+  fs.mkdirSync(uploadDir, { recursive: true });
+  const storedName = `${Date.now()}-digilocker-${Math.random().toString(36).slice(2, 10)}${path.extname(fileName)}`;
+  const absolutePath = path.join(uploadDir, storedName);
+  fs.writeFileSync(absolutePath, buffer);
+
+  const documentType =
+    input.documentType?.trim() ||
+    mapDigilockerDocType(meta.doctype, meta.description || meta.name);
+
+  const { attachVerifiedStudentDocument } = await import('../../../services/studentPortal.service');
+  const doc = await attachVerifiedStudentDocument(input.studentProfileId, {
+    applicationId: input.applicationId,
+    fileUrl: absolutePath.replace(/\\/g, '/'),
+    originalFileName: meta.description?.trim() || meta.name?.trim() || fileName,
+    documentType,
+    fileSize: buffer.length,
+    verificationSource: 'digilocker',
+    verificationMeta: {
+      uri: meta.uri,
+      doctype: meta.doctype,
+      issuer: meta.issuer,
+      mime,
+    },
+  });
+
+  return doc;
+};
+
+export const digilockerFrontendRedirect = (
+  applicationId: string,
+  ok: boolean,
+  message?: string,
+): string => {
+  const cfg = digilockerConfig();
+  const params = new URLSearchParams({ digilocker: ok ? 'connected' : 'error' });
+  if (message) params.set('digilocker_msg', message.slice(0, 200));
+  return `${cfg.frontendUrl}/student/applications/${encodeURIComponent(applicationId)}?${params}`;
+};

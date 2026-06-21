@@ -243,16 +243,18 @@ const createAuthSession = async (user: InstanceType<typeof db.User>) => {
     token,
     refreshToken,
     refreshExpiresAt,
-    userId: user.id,
+    userId: user.getDataValue('id') as string,
   });
 
   const safe = user.toSafeObject() as Record<string, unknown>;
-  const permissions = await getPermissionMatrixSliceForRole(user.role as UserRole);
+  const role = user.getDataValue('role') as UserRole;
+  const permissions = await getPermissionMatrixSliceForRole(role);
   return { token, refreshToken, user: { ...safe, permissions } };
 };
 
 const loginService = async (email: any, password: any) => {
-  const user = await db.User.findOne({ where: { email } });
+  const normalized = String(email).trim().toLowerCase();
+  const user = await db.User.findOne({ where: { email: normalized } });
   if (!user || !(await user.login(password))) {
     throw new AppError('Invalid email or password', 400);
   }
@@ -358,8 +360,8 @@ const refreshSessionService = async (refreshToken: string) => {
     throw new AppError('Invalid or expired refresh token', 401);
   }
 
-  const user = await db.User.findByPk(session.userId);
-  if (!user || !user.status) {
+  const user = await db.User.findByPk(session.getDataValue('userId') as string);
+  if (!user || !user.getDataValue('status')) {
     throw new AppError('Invalid or expired refresh token', 401);
   }
 
@@ -373,7 +375,8 @@ const refreshSessionService = async (refreshToken: string) => {
   });
 
   const safe = user.toSafeObject() as Record<string, unknown>;
-  const permissions = await getPermissionMatrixSliceForRole(user.role as UserRole);
+  const role = user.getDataValue('role') as UserRole;
+  const permissions = await getPermissionMatrixSliceForRole(role);
   return { token: newAccess, refreshToken: trimmed, user: { ...safe, permissions } };
 };
 
@@ -381,7 +384,7 @@ const logoutUserService = async (userId: any, token: any) => {
   if (!token) throw new AppError('Token is required for logout', 400);
 
   const session = await resolveSessionForBearer(token);
-  if (!session || session.userId !== userId) {
+  if (!session || session.getDataValue('userId') !== userId) {
     throw new AppError('Token not found or already invalidated', 400);
   }
 

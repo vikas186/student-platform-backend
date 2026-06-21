@@ -42,6 +42,7 @@ import BankStatementModel from './BankStatement.model';
 import ItrDocumentModel from './ItrDocument.model';
 import VerificationAuditLogModel from './VerificationAuditLog.model';
 import NoticeTickerItemModel from './NoticeTickerItem.model';
+import DigiLockerConnectionModel from './DigiLockerConnection.model';
 
 interface Db {
   User: ReturnType<typeof UserModel>;
@@ -86,6 +87,7 @@ interface Db {
   ItrDocument: ReturnType<typeof ItrDocumentModel>;
   VerificationAuditLog: ReturnType<typeof VerificationAuditLogModel>;
   NoticeTickerItem: ReturnType<typeof NoticeTickerItemModel>;
+  DigiLockerConnection: ReturnType<typeof DigiLockerConnectionModel>;
   sequelize: Sequelize;
   Sequelize: typeof Sequelize;
   [key: string]: any;
@@ -134,6 +136,7 @@ const db: Db = {
   ItrDocument: ItrDocumentModel(sequelize),
   VerificationAuditLog: VerificationAuditLogModel(sequelize),
   NoticeTickerItem: NoticeTickerItemModel(sequelize),
+  DigiLockerConnection: DigiLockerConnectionModel(sequelize),
   sequelize,
   Sequelize,
 };

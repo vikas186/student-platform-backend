@@ -11,7 +11,9 @@ const getStudentProfileIdFromReq = async (req: Request): Promise<number> => {
   const user: any = req.user;
   const profile = await db.StudentProfile.findOne({ where: { userId: user.id } });
   if (!profile) throw new AppError('Student profile not found', 404);
-  return profile.id;
+  const id = profile.getDataValue('id') as number;
+  if (!Number.isFinite(id)) throw new AppError('Student profile not found', 404);
+  return id;
 };
 
 export const getStudentProfile = catchAsyncError(async (req: Request, res: Response) => {

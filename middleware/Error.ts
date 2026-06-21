@@ -27,8 +27,14 @@ const ErrorMiddleware = async (err: any, req: any, res: any, next: any): Promise
       message = err.parent.message;
     }
   } else if (err.name === 'SequelizeConnectionError' || err.name === 'SequelizeConnectionRefusedError') {
-    statusCode = 503; // Service Unavailable
+    statusCode = 503;
     message = 'Database connection failed. Please try again later.';
+  } else if (
+    typeof err.message === 'string' &&
+    (err.message.includes('data and hash arguments required') || err.message.includes('Invalid salt'))
+  ) {
+    statusCode = 400;
+    message = 'Invalid email or password';
   }
 
   // Prepare response

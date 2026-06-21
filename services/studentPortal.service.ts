@@ -146,7 +146,7 @@ export const updateStudentPortalProfile = async (userId: string, body: Record<st
       profile.agentProfileId = n;
       await db.Application.update(
         { agentId: n },
-        { where: { studentId: profile.id, agentId: null } },
+        { where: { studentId: profile.getDataValue('id') as number, agentId: null } },
       );
     }
   }
@@ -236,7 +236,7 @@ export const updateStudentApplication = async (
   body: { universityName?: string | null; programName?: string | null; notes?: string | null; country?: string | null },
 ) => {
   const app = await getStudentApplication(studentProfileId, idOrRef);
-  if (app.status !== 'draft') {
+  if (app.getDataValue('status') !== 'draft') {
     throw new AppError('Only draft applications can be edited', 400);
   }
   if (body.universityName !== undefined) app.universityName = body.universityName?.trim() || null;
@@ -260,11 +260,11 @@ export const updateStudentApplication = async (
 
 export const submitStudentApplication = async (studentProfileId: number, idOrRef: string) => {
   const app = await getStudentApplication(studentProfileId, idOrRef);
-  if (app.status !== 'draft') {
+  if (app.getDataValue('status') !== 'draft') {
     throw new AppError('Application is not a draft', 400);
   }
-  const uni = app.universityName?.trim();
-  const prog = app.programName?.trim();
+  const uni = app.getDataValue('universityName')?.trim?.() ?? String(app.universityName ?? '').trim();
+  const prog = app.getDataValue('programName')?.trim?.() ?? String(app.programName ?? '').trim();
   if (!uni || !prog) {
     throw new AppError('University and program are required to submit', 400);
   }
@@ -291,7 +291,7 @@ export const submitStudentApplication = async (studentProfileId: number, idOrRef
 
 export const deleteStudentApplication = async (studentProfileId: number, idOrRef: string) => {
   const app = await getStudentApplication(studentProfileId, idOrRef);
-  if (app.status !== 'draft') {
+  if (app.getDataValue('status') !== 'draft') {
     throw new AppError('Only draft applications can be deleted', 400);
   }
   await app.destroy();
@@ -375,6 +375,44 @@ export const createStudentDocument = async (
   }
 
   return { doc, verification };
+};
+
+/** Attach a pre-verified document (e.g. imported from DigiLocker). */
+export const attachVerifiedStudentDocument = async (
+  studentProfileId: number,
+  opts: {
+    applicationId: string;
+    fileUrl: string;
+    originalFileName: string;
+    documentType: string;
+    fileSize: number;
+    verificationSource?: string;
+    verificationMeta?: Record<string, unknown>;
+  },
+) => {
+  const app = await db.Application.findOne({
+    where: applicationLookupWhere(studentProfileId, opts.applicationId),
+  });
+  if (!app) throw new AppError('Application not found', 404);
+
+  const { validateVerificationDocumentType } = await import(
+    '../src/modules/document-verification/document-verification.processor'
+  );
+  const { normalizeDocumentType } = await import('../src/modules/document-verification/document-types');
+  validateVerificationDocumentType(opts.documentType);
+  const normalizedType = normalizeDocumentType(opts.documentType);
+
+  const doc = await db.Document.create({
+    studentProfileId,
+    applicationId: app.getDataValue('id'),
+    fileUrl: opts.fileUrl,
+    originalFileName: opts.originalFileName.slice(0, 255),
+    type: normalizedType.slice(0, 64),
+    fileSize: opts.fileSize,
+    status: 'verified',
+  });
+
+  return doc.get({ plain: true });
 };
 
 /** Offer letters visible to the student (same application scope as the rest of the portal). */

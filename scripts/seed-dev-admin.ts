@@ -22,11 +22,11 @@ async function main() {
       status: true,
     });
     console.log(`Created admin: ${DEV_ADMIN_EMAIL}`);
-  } else if (user.role !== 'admin') {
-    throw new Error(`${DEV_ADMIN_EMAIL} exists but role is "${user.role}", not admin`);
+  } else if (user.get('role') !== 'admin') {
+    throw new Error(`${DEV_ADMIN_EMAIL} exists but role is "${String(user.get('role'))}", not admin`);
   } else {
-    user.password = DEV_ADMIN_PASSWORD;
-    user.status = true;
+    user.set('password', DEV_ADMIN_PASSWORD);
+    user.set('status', true);
     await user.save();
     console.log(`Reset password for admin: ${DEV_ADMIN_EMAIL}`);
   }

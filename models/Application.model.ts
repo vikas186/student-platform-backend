@@ -15,24 +15,24 @@ export const APPLICATION_STATUSES = [
 
 export default (sequelize: Sequelize) => {
   class Application extends Model {
-    public id!: string;
-    public studentId!: number;
-    public agentId?: number | null;
-    public courseId?: number | null;
-    public universityName?: string | null;
-    public programName?: string | null;
-    public notes?: string | null;
-    public country?: string | null;
+    declare id: string;
+    declare studentId: number;
+    declare agentId: number | null;
+    declare courseId: number | null;
+    declare universityName: string | null;
+    declare programName: string | null;
+    declare notes: string | null;
+    declare country: string | null;
     /** Unique display reference, e.g. APP-10241 (assigned by DB sequence on create) */
-    public applicationNumber!: string;
+    declare applicationNumber: string;
     /** Agent portal: optional projected commission for UI tables */
-    public commissionAmount?: unknown;
-    public commissionSlab?: string | null;
+    declare commissionAmount: unknown;
+    declare commissionSlab: string | null;
     /** Multi-step wizard / UI-only payload (steps 1–4, draft fields) */
-    public metadata?: Record<string, unknown> | null;
-    public status!: (typeof APPLICATION_STATUSES)[number];
-    public readonly createdAt!: Date;
-    public readonly updatedAt!: Date;
+    declare metadata: Record<string, unknown> | null;
+    declare status: (typeof APPLICATION_STATUSES)[number];
+    declare readonly createdAt: Date;
+    declare readonly updatedAt: Date;
 
     static associate(models: any) {
       Application.belongsTo(models.StudentProfile, { foreignKey: 'studentId', as: 'studentProfile' });

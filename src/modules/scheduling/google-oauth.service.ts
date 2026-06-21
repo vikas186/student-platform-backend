@@ -167,7 +167,10 @@ export const resolveHostAdminUserId = async (explicitAdminUserId?: string | null
   }
 
   const any = await db.GoogleCalendarConnection.findOne({ order: [['connectedAt', 'DESC']] });
-  if (any) return any.userId;
+  if (any) {
+    const userId = any.getDataValue('userId') as string;
+    if (userId) return userId;
+  }
 
   throw new AppError('No admin has connected Google Calendar yet', 503);
 };

@@ -41,6 +41,7 @@
     "test:scrape:idp": "cross-env NODE_ENV=development ts-node scripts/test-scrape-idp.ts",
     "test:scrape:aecc": "cross-env NODE_ENV=development ts-node scripts/test-scrape-aecc.ts",
     "seed:admin": "cross-env NODE_ENV=development ts-node scripts/seed-dev-admin.ts",
+    "repair:passwords": "cross-env NODE_ENV=development ts-node scripts/repair-user-passwords.ts",
     "test:email": "cross-env NODE_ENV=development ts-node scripts/test-brevo-email.ts",
     "migrate:verification": "cross-env NODE_ENV=development ts-node scripts/apply-verification-migration.ts",
     "migrate:notices": "cross-env NODE_ENV=development ts-node scripts/apply-notice-migration.ts",

@@ -13,10 +13,8 @@ import { parseAcademicText, academicHasRequiredFields } from './ocr/parsers/acad
 import { parseBankText, isStatementWithinDays } from './ocr/parsers/bank.parser';
 import { parseItrText } from './ocr/parsers/itr.parser';
 import { hashFile, createPassportVerificationForUpload } from './passport.service';
-import { createDiditSessionForUser } from '../didit/didit.service';
 import { namesMatch, isValidPan } from './validation/name-matcher';
 import { getVerifiedPassportName } from './passport.service';
-import { linkPassportToDiditSession } from './passport.service';
 
 export type VerificationUploadResult = {
   verificationUrl?: string | null;
@@ -42,20 +40,8 @@ export const processVerificationUpload = async (input: {
       fileUrl: input.fileUrl,
     });
 
-    const didit = await createDiditSessionForUser(input.userId, input.userEmail, {
-      passportVerificationId: passportRow.id,
-    });
-
-    await linkPassportToDiditSession(
-      passportRow.id,
-      didit.internalSessionId,
-      didit.diditSessionId,
-      didit.verificationUrl,
-    );
-
     return {
       pipeline,
-      verificationUrl: didit.verificationUrl,
       passportVerificationId: passportRow.id,
       registryId: `passport:${passportRow.id}`,
     };
