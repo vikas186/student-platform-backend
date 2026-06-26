@@ -10,6 +10,7 @@ export const listActiveNoticesHandler = catchAsyncError(async (_req: Request, re
 });
 
 export const listAdminNoticesHandler = catchAsyncError(async (req: Request, res: Response) => {
+  await noticeService.purgeNoticesOlderThanRetention();
   const q = req.query as Record<string, string>;
   const result = await noticeService.listAdminNotices({
     q: q.q,

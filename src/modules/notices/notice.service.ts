@@ -2,6 +2,31 @@ import { Op } from 'sequelize';
 import type { Model } from 'sequelize';
 import { db } from '../../../config/database';
 
+/** Notices older than this are permanently deleted (default 3 days). */
+export function getNoticeRetentionDays(): number {
+  return Math.max(
+    1,
+    parseInt(
+      process.env.NOTICE_RETENTION_DAYS ||
+        process.env.NOTICE_AI_RETENTION_DAYS ||
+        '3',
+      10,
+    ),
+  );
+}
+
+export function noticeRetentionCutoff(): Date {
+  return new Date(Date.now() - getNoticeRetentionDays() * 24 * 60 * 60 * 1000);
+}
+
+/** Hard-delete ticker items older than the retention window. */
+export async function purgeNoticesOlderThanRetention(): Promise<number> {
+  const cutoff = noticeRetentionCutoff();
+  return db.NoticeTickerItem.destroy({
+    where: { createdAt: { [Op.lt]: cutoff } },
+  });
+}
+
 export type NoticeItemDto = {
   id: number;
   title: string;
@@ -40,8 +65,12 @@ function toDto(row: Model): NoticeItemDto {
 }
 
 export async function listActiveNotices(): Promise<NoticeItemDto[]> {
+  const cutoff = noticeRetentionCutoff();
   const rows = await db.NoticeTickerItem.findAll({
-    where: { isActive: true },
+    where: {
+      isActive: true,
+      createdAt: { [Op.gte]: cutoff },
+    },
     order: [
       ['sortOrder', 'ASC'],
       ['id', 'ASC'],
@@ -60,7 +89,10 @@ export async function listAdminNotices(query: {
   const limit = Math.min(100, Math.max(1, query.limit ?? 50));
   const offset = (page - 1) * limit;
 
-  const where: Record<string, unknown> = {};
+  const cutoff = noticeRetentionCutoff();
+  const where: Record<string, unknown> = {
+    createdAt: { [Op.gte]: cutoff },
+  };
   if (!query.includeInactive) {
     where.isActive = true;
   }

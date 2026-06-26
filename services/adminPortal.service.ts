@@ -211,10 +211,14 @@ export const listUniversitiesForAdmin = async (query?: {
 
   const universities = await Promise.all(
     rows.map(async uni => {
-      const plain = uni.get({ plain: true }) as Record<string, unknown>;
-      const scope = applicationScopeForUniversity(uni.id, uni.name);
+      const plain = uni.get({ plain: true }) as {
+        id: number;
+        name: string;
+        [key: string]: unknown;
+      };
+      const scope = applicationScopeForUniversity(plain.id, plain.name);
       const [programsCount, applicantsCount, offersCount] = await Promise.all([
-        db.Course.count({ where: { universityId: uni.id } }),
+        db.Course.count({ where: { universityId: plain.id } }),
         db.Application.count({
           where: { [Op.and]: [scope, { status: { [Op.ne]: 'draft' } }] },
         }),

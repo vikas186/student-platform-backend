@@ -1,6 +1,7 @@
 import { Op } from 'sequelize';
 import Parser from 'rss-parser';
 import { db } from '../../../config/database';
+import { getNoticeRetentionDays, purgeNoticesOlderThanRetention } from './notice.service';
 import { getOpenAiClient, rateLimitAi, scrapeAiModel } from '../scrape/enrichment/openai.client';
 
 const TICKER_CATEGORIES = [
@@ -98,7 +99,7 @@ function maxActive(): number {
 }
 
 function retentionDays(): number {
-  return Math.max(1, parseInt(process.env.NOTICE_AI_RETENTION_DAYS || '30', 10));
+  return getNoticeRetentionDays();
 }
 
 function isRelevant(text: string): boolean {
@@ -217,17 +218,14 @@ async function refreshSortOrderByRecency() {
 
 async function deactivateExpiredAndExcess(): Promise<number> {
   const now = new Date();
-  const cutoff = new Date(now.getTime() - retentionDays() * 24 * 60 * 60 * 1000);
+  const deleted = await purgeNoticesOlderThanRetention();
 
   const [expiredCount] = await db.NoticeTickerItem.update(
     { isActive: false },
     {
       where: {
         isActive: true,
-        [Op.or]: [
-          { expiresAt: { [Op.lt]: now } },
-          { createdAt: { [Op.lt]: cutoff } },
-        ],
+        expiresAt: { [Op.lt]: now },
       },
     },
   );
@@ -249,7 +247,7 @@ async function deactivateExpiredAndExcess(): Promise<number> {
     );
   }
 
-  return expiredCount + Math.max(0, excess);
+  return deleted + expiredCount + Math.max(0, excess);
 }
 
 export async function syncNoticesFromAi(): Promise<NoticeAiSyncResult> {

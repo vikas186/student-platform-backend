@@ -2,19 +2,19 @@ import { Model, DataTypes, Sequelize } from 'sequelize';
 
 export default (sequelize: Sequelize) => {
   class University extends Model {
-    public id!: number;
-    public name!: string;
-    public country!: string;
-    public status!: boolean;
-    public agreementPackageReference!: string | null;
-    public agreementDispatchedAt!: Date | null;
-    public countersignedContractUrl!: string | null;
-    public countersignedUploadedAt!: Date | null;
-    public countersignedVerifiedAt!: Date | null;
+    declare id: number;
+    declare name: string;
+    declare country: string;
+    declare status: boolean;
+    declare agreementPackageReference: string | null;
+    declare agreementDispatchedAt: Date | null;
+    declare countersignedContractUrl: string | null;
+    declare countersignedUploadedAt: Date | null;
+    declare countersignedVerifiedAt: Date | null;
     /** USA-style fee matrix from admin catalog upload (UG/PG × Business, STEM, CS). */
-    public programFeeRanges!: Record<string, unknown> | null;
-    public readonly createdAt!: Date;
-    public readonly updatedAt!: Date;
+    declare programFeeRanges: Record<string, unknown> | null;
+    declare readonly createdAt: Date;
+    declare readonly updatedAt: Date;
 
     static associate(models: any) {
       University.hasMany(models.Course, { foreignKey: 'universityId', as: 'courses', onDelete: 'CASCADE' });

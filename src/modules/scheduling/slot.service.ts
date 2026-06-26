@@ -2,7 +2,11 @@ import { Op } from 'sequelize';
 import { db } from '../../../config/database';
 import { schedulingConfig } from './scheduling.config';
 import { queryFreeBusy } from './google-calendar.service';
-import type { AvailabilitySlot, AvailabilityWindowInput } from './scheduling.types';
+import type {
+  AvailabilityDateWindowInput,
+  AvailabilitySlot,
+  AvailabilityWindowInput,
+} from './scheduling.types';
 import {
   formatDateInZone,
   getDayOfWeekInZone,
@@ -22,6 +26,55 @@ const parseTimeParts = (time: string): { h: number; m: number } => {
 
 const overlaps = (aStart: Date, aEnd: Date, bStart: Date, bEnd: Date): boolean =>
   aStart < bEnd && aEnd > bStart;
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+const normalizeAvailabilityDate = (value: string): string => {
+  const trimmed = value.trim();
+  if (!ISO_DATE.test(trimmed)) {
+    throw new AppError(`Invalid date "${value}" — use YYYY-MM-DD`, 400);
+  }
+  return trimmed;
+};
+
+const appendSlotsForCalendarDate = (
+  currentDate: string,
+  w: { startTime: string; endTime: string },
+  tz: string,
+  from: Date,
+  to: Date,
+  now: Date,
+  slotMs: number,
+  candidates: AvailabilitySlot[],
+) => {
+  const startParts = parseTimeParts(w.startTime);
+  const endParts = parseTimeParts(w.endTime);
+  const windowStart = localTimeInZoneToUtc(
+    currentDate,
+    `${String(startParts.h).padStart(2, '0')}:${String(startParts.m).padStart(2, '0')}`,
+    tz,
+  );
+  const windowEnd = localTimeInZoneToUtc(
+    currentDate,
+    `${String(endParts.h).padStart(2, '0')}:${String(endParts.m).padStart(2, '0')}`,
+    tz,
+  );
+
+  let slotStart = new Date(windowStart);
+  while (slotStart.getTime() + slotMs <= windowEnd.getTime()) {
+    const slotEnd = new Date(slotStart.getTime() + slotMs);
+    if (slotStart >= from && slotEnd <= to && slotStart > now) {
+      candidates.push({
+        startsAt: slotStart.toISOString(),
+        endsAt: slotEnd.toISOString(),
+        timezone: tz,
+        durationMinutes: schedulingConfig().slotMinutes,
+        method: 'Google Meet',
+      });
+    }
+    slotStart = new Date(slotStart.getTime() + slotMs);
+  }
+};
 
 export const getAvailabilityForAdmin = async (adminUserId: string) => {
   const rows = await db.CounsellorAvailability.findAll({
@@ -44,13 +97,43 @@ export const getAvailabilityForAdmin = async (adminUserId: string) => {
   });
 };
 
+export const getAvailabilityDatesForAdmin = async (adminUserId: string) => {
+  const rows = await db.CounsellorAvailabilityDate.findAll({
+    where: { adminUserId },
+    order: [['availabilityDate', 'ASC']],
+  });
+  return rows.map(r => {
+    const p = r.get({ plain: true }) as {
+      availabilityDate: string;
+      startTime: unknown;
+      endTime: unknown;
+      timezone: string;
+    };
+    return {
+      date: String(p.availabilityDate).slice(0, 10),
+      startTime: formatAvailabilityTime(p.startTime),
+      endTime: formatAvailabilityTime(p.endTime),
+      timezone: p.timezone,
+    };
+  });
+};
+
 export const getAvailabilityBundleForAdmin = async (adminUserId: string) => {
-  const windows = await getAvailabilityForAdmin(adminUserId);
-  const timezone = windows[0]?.timezone || schedulingConfig().timezone;
+  const [windows, dates] = await Promise.all([
+    getAvailabilityForAdmin(adminUserId),
+    getAvailabilityDatesForAdmin(adminUserId),
+  ]);
+  const timezone =
+    windows[0]?.timezone || dates[0]?.timezone || schedulingConfig().timezone;
   return {
     timezone,
     windows: windows.map(({ dayOfWeek, startTime, endTime }) => ({
       dayOfWeek,
+      startTime,
+      endTime,
+    })),
+    dates: dates.map(({ date, startTime, endTime }) => ({
+      date,
       startTime,
       endTime,
     })),
@@ -61,29 +144,73 @@ export const setAvailabilityForAdmin = async (
   adminUserId: string,
   windows: AvailabilityWindowInput[],
   timezone?: string,
+  dates: AvailabilityDateWindowInput[] = [],
 ) => {
   const tz = timezone || schedulingConfig().timezone;
+  const normalizedWindows = windows.map(w => ({
+    dayOfWeek: w.dayOfWeek,
+    startTime: formatAvailabilityTime(w.startTime),
+    endTime: formatAvailabilityTime(w.endTime),
+  }));
+  const normalizedDates = dates.map(d => ({
+    date: normalizeAvailabilityDate(d.date),
+    startTime: formatAvailabilityTime(d.startTime),
+    endTime: formatAvailabilityTime(d.endTime),
+  }));
 
-  for (const w of windows) {
-    const startTime = formatAvailabilityTime(w.startTime);
-    const endTime = formatAvailabilityTime(w.endTime);
-    if (!isValidAvailabilityWindow(startTime, endTime)) {
+  if (normalizedWindows.length === 0 && normalizedDates.length === 0) {
+    throw new AppError('Enable at least one weekday or add a specific date with a time window.', 400);
+  }
+
+  for (const w of normalizedWindows) {
+    if (!isValidAvailabilityWindow(w.startTime, w.endTime)) {
       throw new AppError(
-        `End time must be after start time for day ${w.dayOfWeek} (${startTime} – ${endTime})`,
+        `End time must be after start time for day ${w.dayOfWeek} (${w.startTime} – ${w.endTime})`,
         400,
       );
     }
   }
 
+  for (const d of normalizedDates) {
+    if (!isValidAvailabilityWindow(d.startTime, d.endTime)) {
+      throw new AppError(
+        `End time must be after start time for ${d.date} (${d.startTime} – ${d.endTime})`,
+        400,
+      );
+    }
+  }
+
+  const seenDates = new Set<string>();
+  for (const d of normalizedDates) {
+    if (seenDates.has(d.date)) {
+      throw new AppError(`Duplicate availability for ${d.date}`, 400);
+    }
+    seenDates.add(d.date);
+  }
+
   await db.sequelize.transaction(async t => {
     await db.CounsellorAvailability.destroy({ where: { adminUserId }, transaction: t });
-    for (const w of windows) {
+    for (const w of normalizedWindows) {
       await db.CounsellorAvailability.create(
         {
           adminUserId,
           dayOfWeek: w.dayOfWeek,
-          startTime: formatAvailabilityTime(w.startTime),
-          endTime: formatAvailabilityTime(w.endTime),
+          startTime: w.startTime,
+          endTime: w.endTime,
+          timezone: tz,
+        },
+        { transaction: t },
+      );
+    }
+
+    await db.CounsellorAvailabilityDate.destroy({ where: { adminUserId }, transaction: t });
+    for (const d of normalizedDates) {
+      await db.CounsellorAvailabilityDate.create(
+        {
+          adminUserId,
+          availabilityDate: d.date,
+          startTime: d.startTime,
+          endTime: d.endTime,
           timezone: tz,
         },
         { transaction: t },
@@ -98,55 +225,56 @@ export const generateAvailableSlots = async (
   from: Date,
   to: Date,
 ): Promise<AvailabilitySlot[]> => {
-  const windows = await getAvailabilityForAdmin(adminUserId);
-  if (!windows.length) {
+  const [windows, dateWindows] = await Promise.all([
+    getAvailabilityForAdmin(adminUserId),
+    getAvailabilityDatesForAdmin(adminUserId),
+  ]);
+  if (!windows.length && !dateWindows.length) {
     return [];
   }
 
   const slotMs = schedulingConfig().slotMinutes * 60_000;
   const candidates: AvailabilitySlot[] = [];
-  const tz = windows[0]?.timezone || schedulingConfig().timezone;
+  const tz =
+    windows[0]?.timezone || dateWindows[0]?.timezone || schedulingConfig().timezone;
   const now = new Date();
+  const dateOverrideByDay = new Map(
+    dateWindows.map(d => [d.date, { startTime: d.startTime, endTime: d.endTime }]),
+  );
 
   let currentDate = formatDateInZone(from, tz);
   const endDate = formatDateInZone(to, tz);
 
   while (currentDate <= endDate) {
-    const dow = getDayOfWeekInZone(currentDate, tz);
-    const dayWindows = windows.filter(w => w.dayOfWeek === dow);
-
-    for (const w of dayWindows) {
-      const startParts = parseTimeParts(w.startTime);
-      const endParts = parseTimeParts(w.endTime);
-      const windowStart = localTimeInZoneToUtc(
+    const dateOverride = dateOverrideByDay.get(currentDate);
+    if (dateOverride) {
+      appendSlotsForCalendarDate(
         currentDate,
-        `${String(startParts.h).padStart(2, '0')}:${String(startParts.m).padStart(2, '0')}`,
+        dateOverride,
         tz,
+        from,
+        to,
+        now,
+        slotMs,
+        candidates,
       );
-      const windowEnd = localTimeInZoneToUtc(
-        currentDate,
-        `${String(endParts.h).padStart(2, '0')}:${String(endParts.m).padStart(2, '0')}`,
-        tz,
-      );
-
-      let slotStart = new Date(windowStart);
-      while (slotStart.getTime() + slotMs <= windowEnd.getTime()) {
-        const slotEnd = new Date(slotStart.getTime() + slotMs);
-        if (slotStart >= from && slotEnd <= to && slotStart > now) {
-          candidates.push({
-            startsAt: slotStart.toISOString(),
-            endsAt: slotEnd.toISOString(),
-            timezone: tz,
-            durationMinutes: schedulingConfig().slotMinutes,
-            method: 'Google Meet',
-          });
-        }
-        slotStart = new Date(slotStart.getTime() + slotMs);
+    } else {
+      const dow = getDayOfWeekInZone(currentDate, tz);
+      const dayWindows = windows.filter(w => w.dayOfWeek === dow);
+      for (const w of dayWindows) {
+        appendSlotsForCalendarDate(currentDate, w, tz, from, to, now, slotMs, candidates);
       }
     }
 
     currentDate = nextCalendarDateInZone(currentDate, tz);
   }
+
+  const seenStarts = new Set<string>();
+  const uniqueCandidates = candidates.filter(slot => {
+    if (seenStarts.has(slot.startsAt)) return false;
+    seenStarts.add(slot.startsAt);
+    return true;
+  });
 
   const rangeStart = new Date(from);
   const rangeEnd = new Date(to);
@@ -171,7 +299,7 @@ export const generateAvailableSlots = async (
     })),
   ];
 
-  return candidates.filter(slot => {
+  return uniqueCandidates.filter(slot => {
     const s = new Date(slot.startsAt);
     const e = new Date(slot.endsAt);
     return !busyBlocks.some(b => overlaps(s, e, b.start, b.end));

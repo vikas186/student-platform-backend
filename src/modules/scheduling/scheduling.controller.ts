@@ -85,9 +85,15 @@ export const putAvailabilityHandler = catchAsyncError(async (req: Request, res: 
   const userId = adminUser(req);
   const body = req.body as {
     timezone?: string;
-    windows: { dayOfWeek: number; startTime: string; endTime: string }[];
+    windows?: { dayOfWeek: number; startTime: string; endTime: string }[];
+    dates?: { date: string; startTime: string; endTime: string }[];
   };
-  const data = await setAvailabilityForAdmin(userId, body.windows, body.timezone);
+  const data = await setAvailabilityForAdmin(
+    userId,
+    body.windows ?? [],
+    body.timezone,
+    body.dates ?? [],
+  );
   res.status(constant.msgCode.successCode).json({
     success: true,
     message: 'Availability saved',

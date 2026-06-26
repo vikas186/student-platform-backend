@@ -2,12 +2,12 @@ import { Model, DataTypes, Sequelize } from 'sequelize';
 
 export default (sequelize: Sequelize) => {
   class UniversityProfile extends Model {
-    public id!: number;
-    public userId!: string;
-    public universityId!: number;
-    public jobTitle!: string | null;
-    public readonly createdAt!: Date;
-    public readonly updatedAt!: Date;
+    declare id: number;
+    declare userId: string;
+    declare universityId: number;
+    declare jobTitle: string | null;
+    declare readonly createdAt: Date;
+    declare readonly updatedAt: Date;
 
     static associate(models: any) {
       UniversityProfile.belongsTo(models.User, { foreignKey: 'userId', as: 'user', onDelete: 'CASCADE' });

@@ -50,3 +50,9 @@ export type AvailabilityWindowInput = {
   startTime: string;
   endTime: string;
 };
+
+export type AvailabilityDateWindowInput = {
+  date: string;
+  startTime: string;
+  endTime: string;
+};

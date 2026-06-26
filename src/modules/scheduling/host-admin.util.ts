@@ -28,8 +28,11 @@ export const getHostAdminDetails = async (adminUserId: string): Promise<HostAdmi
 export const resolveHostAdminForSlots = async (): Promise<string> => {
   const defaultId = schedulingConfig().defaultCounsellorAdminUserId;
   if (defaultId) {
-    const hasAvailability = await db.CounsellorAvailability.count({ where: { adminUserId: defaultId } });
-    if (hasAvailability > 0) return defaultId;
+    const [weeklyCount, dateCount] = await Promise.all([
+      db.CounsellorAvailability.count({ where: { adminUserId: defaultId } }),
+      db.CounsellorAvailabilityDate.count({ where: { adminUserId: defaultId } }),
+    ]);
+    if (weeklyCount > 0 || dateCount > 0) return defaultId;
     const conn = await db.GoogleCalendarConnection.findByPk(defaultId);
     if (conn) return defaultId;
   }
@@ -39,6 +42,14 @@ export const resolveHostAdminForSlots = async (): Promise<string> => {
   });
   if (withAvailability) {
     const adminUserId = withAvailability.getDataValue('adminUserId') as string;
+    if (adminUserId) return adminUserId;
+  }
+
+  const withDateAvailability = await db.CounsellorAvailabilityDate.findOne({
+    order: [['updatedAt', 'DESC']],
+  });
+  if (withDateAvailability) {
+    const adminUserId = withDateAvailability.getDataValue('adminUserId') as string;
     if (adminUserId) return adminUserId;
   }
 
