@@ -28,10 +28,10 @@ const sequelizeOptions: any = {
     underscored: true,
   },
   pool: {
-    max: parseInt(POOL_MAX as string, 10),
-    min: parseInt(POOL_MIN as string, 10),
-    acquire: parseInt(POOL_ACQUIRE as string, 10),
-    idle: parseInt(POOL_IDLE as string, 10),
+    max: Number(process.env.POOL_MAX ?? 10),
+    min: Number(process.env.POOL_MIN ?? 0),
+    acquire: Number(process.env.POOL_ACQUIRE ?? 30000),
+    idle: Number(process.env.POOL_IDLE ?? 10000),
   },
 };
 
