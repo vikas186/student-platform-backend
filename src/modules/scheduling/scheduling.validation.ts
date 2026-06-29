@@ -16,8 +16,20 @@ export const setAvailabilityJoiSchema = {
             .required(),
         }),
       )
-      .min(1)
-      .required(),
+      .optional(),
+    dates: Joi.array()
+      .items(
+        Joi.object({
+          date: Joi.string().trim().required(),
+          startTime: Joi.string()
+            .pattern(/^\d{2}:\d{2}$/)
+            .required(),
+          endTime: Joi.string()
+            .pattern(/^\d{2}:\d{2}$/)
+            .required(),
+        }),
+      )
+      .optional(),
   }),
 };
 
