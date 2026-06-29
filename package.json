@@ -57,7 +57,8 @@
     "sync:notices": "cross-env NODE_ENV=development ts-node scripts/sync-notices-ai.ts",
     "prod:sync:notices": "cross-env NODE_ENV=production ts-node scripts/sync-notices-ai.ts",
     "migrate:all": "npm run migrate:chatbot && npm run migrate:scrape && npm run migrate:verification && npm run migrate:notices && npm run migrate:notice-ai && npm run sync:chat-knowledge && npm run sync:notices",
-    "prod:migrate:all": "npm run prod:migrate:chatbot && npm run prod:migrate:scrape && npm run prod:migrate:verification && npm run prod:migrate:notices && npm run prod:migrate:notice-ai && npm run prod:sync:chat-knowledge && npm run prod:sync:notices"
+    "prod:migrate:all": "npm run prod:migrate:chatbot && npm run prod:migrate:scrape && npm run prod:migrate:verification && npm run prod:migrate:notices && npm run prod:migrate:notice-ai && npm run prod:sync:chat-knowledge && npm run prod:sync:notices",
+    "prod:create-admin": "cross-env NODE_ENV=production ts-node scripts/create-admin.ts"
   },
   "author": "",
   "license": "ISC",
