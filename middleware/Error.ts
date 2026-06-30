@@ -1,5 +1,6 @@
 import constant from '../constant';
 import { db } from '../models';
+import { requestContextStore } from './requestContext.middleware';
 
 interface ErrorWithStack extends Error {
   stack?: string;
@@ -15,6 +16,11 @@ const ErrorMiddleware = async (err: any, req: any, res: any, next: any): Promise
   // Default error properties
   let statusCode = err.statusCode || constant.msgCode.internalServerError;
   let message = err.message || constant.msg.internalServerError;
+
+  const store = requestContextStore.getStore();
+  if (store) {
+    (store as any).errorMessage = message;
+  }
 
   // Database error handling
   if (err.name === 'SequelizeValidationError' || err.name === 'SequelizeUniqueConstraintError') {

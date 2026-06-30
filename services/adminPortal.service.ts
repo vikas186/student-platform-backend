@@ -20,6 +20,7 @@ import {
   findCatalogHeaderRowIndex,
   readCatalogSpreadsheetToMatrix,
   rowToFeeRanges,
+  parseCommissionValue,
 } from '../utils/universityCatalogImport';
 import { syncKnowledgeBase } from '../src/modules/chat/knowledge-sync.service';
 
@@ -391,6 +392,12 @@ export const importUniversityCatalogFileForAdmin = async (file: Express.Multer.F
   const headerRow = (matrix[headerIdx] ?? []).map(c => String(c));
   const colIndex = buildColumnIndexMap(headerRow);
 
+  const debugInfo = {
+    headerRow,
+    colIndex,
+    firstRows: [] as any[],
+  };
+
   if (colIndex.university == null || colIndex.country == null) {
     throw new AppError(
       'Could not find University and Country columns. First sheet must include headers such as University, Country, and UG/PG fee columns.',
@@ -409,6 +416,9 @@ export const importUniversityCatalogFileForAdmin = async (file: Express.Multer.F
     }
 
     const parsed = rowToFeeRanges(row.map(c => String(c ?? '')), colIndex);
+    if (r <= headerIdx + 5) {
+      debugInfo.firstRows.push({ rowIndex: r, row, parsed });
+    }
     if (!parsed) {
       rowErrors.push({ line: r + 1, message: 'Missing university name or country' });
       continue;
@@ -424,7 +434,7 @@ export const importUniversityCatalogFileForAdmin = async (file: Express.Multer.F
     });
 
     if (!uni) {
-      await db.University.create({
+      uni = await db.University.create({
         name: parsed.name.trim(),
         country: (parsed.country.trim() || 'General').slice(0, 200),
         status: true,
@@ -435,6 +445,42 @@ export const importUniversityCatalogFileForAdmin = async (file: Express.Multer.F
       await uni.update({ programFeeRanges: parsed.ranges });
       updated += 1;
     }
+
+    if (parsed.commission) {
+      const pct = parseCommissionValue(parsed.commission);
+      if (pct !== null) {
+        const commission = await db.Commission.findOne({
+          where: { universityId: uni.id },
+        });
+        const slabDetails = JSON.stringify({
+          partnerCommissionPercent: pct,
+          rates: {},
+          source: 'catalog-import',
+        });
+        if (commission) {
+          await commission.update({
+            percentage: pct,
+            slabDetails,
+          });
+        } else {
+          await db.Commission.create({
+            universityId: uni.id,
+            percentage: pct,
+            slabDetails,
+          });
+        }
+      }
+    }
+  }
+
+  try {
+    fs.writeFileSync(
+      path.join(__dirname, '..', 'debug_import.json'),
+      JSON.stringify(debugInfo, null, 2),
+      'utf8'
+    );
+  } catch {
+    /* ignore */
   }
 
   try {
@@ -1882,3 +1928,94 @@ export const getRolesMetadataForAdmin = () => ({
     university: 'Institution portal user',
   },
 });
+
+export const listActivityLogsForAdmin = async (query: {
+  page?: string | number;
+  limit?: string | number;
+  search?: string;
+  role?: string;
+  userId?: string;
+  module?: string;
+  action?: string;
+  status?: string;
+  method?: string;
+  startDate?: string;
+  endDate?: string;
+}) => {
+  const page = Math.max(1, Number(query.page) || 1);
+  const limit = Math.min(200, Math.max(1, Number(query.limit) || 50));
+  const offset = (page - 1) * limit;
+
+  const andParts: any[] = [];
+
+  // Global search
+  if (query.search?.trim()) {
+    const q = `%${query.search.trim()}%`;
+    andParts.push({
+      [Op.or]: [
+        { fullName: { [Op.iLike]: q } },
+        { email: { [Op.iLike]: q } },
+        { activity: { [Op.iLike]: q } },
+        { endpoint: { [Op.iLike]: q } },
+        { entityName: { [Op.iLike]: q } },
+        { ipAddress: { [Op.iLike]: q } },
+      ],
+    });
+  }
+
+  // Filter by role
+  if (query.role && query.role !== 'all') {
+    andParts.push({ role: query.role });
+  }
+
+  // Filter by user ID
+  if (query.userId && query.userId !== 'all') {
+    andParts.push({ userId: query.userId });
+  }
+
+  // Filter by module
+  if (query.module && query.module !== 'all') {
+    andParts.push({ module: query.module });
+  }
+
+  // Filter by action
+  if (query.action && query.action !== 'all') {
+    andParts.push({ action: query.action });
+  }
+
+  // Filter by status
+  if (query.status && query.status !== 'all') {
+    andParts.push({ status: query.status });
+  }
+
+  // Filter by HTTP method
+  if (query.method && query.method !== 'all') {
+    andParts.push({ method: query.method.toUpperCase() });
+  }
+
+  // Filter by date range
+  if (query.startDate) {
+    andParts.push({
+      createdAt: { [Op.gte]: new Date(query.startDate) },
+    });
+  }
+  if (query.endDate) {
+    const end = new Date(query.endDate);
+    end.setHours(23, 59, 59, 999);
+    andParts.push({
+      createdAt: { [Op.lte]: end },
+    });
+  }
+
+  const where = andParts.length ? { [Op.and]: andParts } : {};
+
+  const { rows, count } = await db.ActivityLog.findAndCountAll({
+    where,
+    include: [{ model: db.User, as: 'user', attributes: ['id', 'name', 'email', 'role'] }],
+    order: [['createdAt', 'DESC']],
+    limit,
+    offset,
+  });
+
+  return { data: rows, page, limit, total: count };
+};

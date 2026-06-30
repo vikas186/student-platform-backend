@@ -11,11 +11,15 @@ import allRoutes from './routes/index';
 import { morgan, customFormat } from './utils/morganSettings';
 import { verifyDiditWebhook } from './middleware/verifyDiditWebhook';
 import { diditWebhookHandler } from './src/modules/didit/didit.controller';
+import auditMiddleware from './middleware/audit.middleware';
+import { requestContextMiddleware } from './middleware/requestContext.middleware';
 
 // Load environment variables
 
 // Initialize Express App
 const app: any = express();
+
+app.use(requestContextMiddleware);
 
 // Didit webhook — raw body required for HMAC verification (before express.json)
 app.post(
@@ -31,6 +35,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(cors({ origin: '*' }));
 app.use(morgan(customFormat)); // Logging
 app.use(globalResponse); // Global response formatting
+app.use(auditMiddleware);
 
 // Swagger
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDoc));

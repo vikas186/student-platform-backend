@@ -38,6 +38,38 @@ const sequelizeOptions: any = {
 const sequelize = new Sequelize(DB_NAME as string, DB_USERNAME as string, DB_PASSWORD as string, sequelizeOptions);
 
 import { db } from '../models';
+import { addEntityChange } from '../middleware/requestContext.middleware';
+
+sequelize.addHook('beforeUpdate', (instance: any) => {
+  try {
+    // Avoid logging ActivityLog itself to prevent infinite loops
+    if (instance.constructor.name === 'ActivityLog') return;
+
+    addEntityChange({
+      entityType: instance.constructor.name,
+      entityId: String(instance.id || ''),
+      previousData: { ...instance._previousDataValues },
+      newData: { ...instance.dataValues },
+    });
+  } catch (err) {
+    console.error('[Sequelize Hook] beforeUpdate error:', err);
+  }
+});
+
+sequelize.addHook('beforeDestroy', (instance: any) => {
+  try {
+    if (instance.constructor.name === 'ActivityLog') return;
+
+    addEntityChange({
+      entityType: instance.constructor.name,
+      entityId: String(instance.id || ''),
+      previousData: { ...instance.dataValues },
+      newData: null,
+    });
+  } catch (err) {
+    console.error('[Sequelize Hook] beforeDestroy error:', err);
+  }
+});
 
 /**
  * `sync({ alter: true })` does not reliably change `applications.id` from INTEGER to UUID.

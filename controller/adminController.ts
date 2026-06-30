@@ -577,3 +577,12 @@ export const sendPromotionEmail = catchAsyncError(async (req: Request, res: Resp
     data: result,
   });
 });
+
+export const listActivityLogs = catchAsyncError(async (req: Request, res: Response) => {
+  const result = await adminPortal.listActivityLogsForAdmin(req.query as any);
+  res.status(constant.msgCode.successCode).json({
+    success: true,
+    message: 'Activity logs fetched',
+    ...result,
+  });
+});

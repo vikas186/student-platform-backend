@@ -1,0 +1,172 @@
+{
+  "headerRow": [
+    "University",
+    "Country",
+    "UG – Business Fees (USD/year)",
+    "UG – STEM Fees (USD/year)",
+    "UG – Computer Science Fees (USD/year)",
+    "PG – Business Fees (USD/year)",
+    "PG – STEM Fees (USD/year)",
+    "PG – Computer Science Fees (USD/year)",
+    "Scholarships (Typical)",
+    "Intakes",
+    "Application Deadlines"
+  ],
+  "colIndex": {
+    "university": 0,
+    "country": 1,
+    "ugBusinessUsdYear": 2,
+    "ugStemUsdYear": 3,
+    "ugComputerScienceUsdYear": 4,
+    "pgBusinessUsdYear": 5,
+    "pgStemUsdYear": 6,
+    "pgComputerScienceUsdYear": 7
+  },
+  "firstRows": [
+    {
+      "rowIndex": 1,
+      "row": [
+        "UNIVERSITY",
+        "USA",
+        "$18,000 – $38,000",
+        "$20,000 – $42,000",
+        "$22,000 – $45,000",
+        "$22,000 – $45,000",
+        "$25,000 – $50,000",
+        "$28,000 – $55,000",
+        "Merit-based scholarships; departmental awards; assistantships (PG/STEM)",
+        "Fall (Aug/Sep), Spring (Jan), Summer (limited)",
+        "Fall: Nov–March | Spring: Aug–Oct"
+      ],
+      "parsed": {
+        "name": "UNIVERSITY",
+        "country": "USA",
+        "commission": null,
+        "ranges": {
+          "ugBusinessUsdYear": "$18,000 – $38,000",
+          "ugStemUsdYear": "$20,000 – $42,000",
+          "ugComputerScienceUsdYear": "$22,000 – $45,000",
+          "pgBusinessUsdYear": "$22,000 – $45,000",
+          "pgStemUsdYear": "$25,000 – $50,000",
+          "pgComputerScienceUsdYear": "$28,000 – $55,000"
+        }
+      }
+    },
+    {
+      "rowIndex": 2,
+      "row": [
+        "Arizona State University",
+        "USA",
+        "$18,000 – $38,000",
+        "$20,000 – $42,000",
+        "$22,000 – $45,000",
+        "$22,000 – $45,000",
+        "$25,000 – $50,000",
+        "$28,000 – $55,000",
+        "Merit-based scholarships; departmental awards; assistantships (PG/STEM)",
+        "Fall (Aug/Sep), Spring (Jan), Summer (limited)",
+        "Fall: Nov–March | Spring: Aug–Oct"
+      ],
+      "parsed": {
+        "name": "Arizona State University",
+        "country": "USA",
+        "commission": null,
+        "ranges": {
+          "ugBusinessUsdYear": "$18,000 – $38,000",
+          "ugStemUsdYear": "$20,000 – $42,000",
+          "ugComputerScienceUsdYear": "$22,000 – $45,000",
+          "pgBusinessUsdYear": "$22,000 – $45,000",
+          "pgStemUsdYear": "$25,000 – $50,000",
+          "pgComputerScienceUsdYear": "$28,000 – $55,000"
+        }
+      }
+    },
+    {
+      "rowIndex": 3,
+      "row": [
+        "Auburn University Montgomery",
+        "USA",
+        "$18,000 – $38,000",
+        "$20,000 – $42,000",
+        "$22,000 – $45,000",
+        "$22,000 – $45,000",
+        "$25,000 – $50,000",
+        "$28,000 – $55,000",
+        "Merit-based scholarships; departmental awards; assistantships (PG/STEM)",
+        "Fall (Aug/Sep), Spring (Jan), Summer (limited)",
+        "Fall: Nov–March | Spring: Aug–Oct"
+      ],
+      "parsed": {
+        "name": "Auburn University Montgomery",
+        "country": "USA",
+        "commission": null,
+        "ranges": {
+          "ugBusinessUsdYear": "$18,000 – $38,000",
+          "ugStemUsdYear": "$20,000 – $42,000",
+          "ugComputerScienceUsdYear": "$22,000 – $45,000",
+          "pgBusinessUsdYear": "$22,000 – $45,000",
+          "pgStemUsdYear": "$25,000 – $50,000",
+          "pgComputerScienceUsdYear": "$28,000 – $55,000"
+        }
+      }
+    },
+    {
+      "rowIndex": 4,
+      "row": [
+        "Avila University",
+        "USA",
+        "$18,000 – $38,000",
+        "$20,000 – $42,000",
+        "$22,000 – $45,000",
+        "$22,000 – $45,000",
+        "$25,000 – $50,000",
+        "$28,000 – $55,000",
+        "Merit-based scholarships; departmental awards; assistantships (PG/STEM)",
+        "Fall (Aug/Sep), Spring (Jan), Summer (limited)",
+        "Fall: Nov–March | Spring: Aug–Oct"
+      ],
+      "parsed": {
+        "name": "Avila University",
+        "country": "USA",
+        "commission": null,
+        "ranges": {
+          "ugBusinessUsdYear": "$18,000 – $38,000",
+          "ugStemUsdYear": "$20,000 – $42,000",
+          "ugComputerScienceUsdYear": "$22,000 – $45,000",
+          "pgBusinessUsdYear": "$22,000 – $45,000",
+          "pgStemUsdYear": "$25,000 – $50,000",
+          "pgComputerScienceUsdYear": "$28,000 – $55,000"
+        }
+      }
+    },
+    {
+      "rowIndex": 5,
+      "row": [
+        "Arkansas State University",
+        "USA",
+        "$18,000 – $38,000",
+        "$20,000 – $42,000",
+        "$22,000 – $45,000",
+        "$22,000 – $45,000",
+        "$25,000 – $50,000",
+        "$28,000 – $55,000",
+        "Merit-based scholarships; departmental awards; assistantships (PG/STEM)",
+        "Fall (Aug/Sep), Spring (Jan), Summer (limited)",
+        "Fall: Nov–March | Spring: Aug–Oct"
+      ],
+      "parsed": {
+        "name": "Arkansas State University",
+        "country": "USA",
+        "commission": null,
+        "ranges": {
+          "ugBusinessUsdYear": "$18,000 – $38,000",
+          "ugStemUsdYear": "$20,000 – $42,000",
+          "ugComputerScienceUsdYear": "$22,000 – $45,000",
+          "pgBusinessUsdYear": "$22,000 – $45,000",
+          "pgStemUsdYear": "$25,000 – $50,000",
+          "pgComputerScienceUsdYear": "$28,000 – $55,000"
+        }
+      }
+    }
+  ]
+}

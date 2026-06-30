@@ -80,6 +80,7 @@ import {
   syncRecommendationKnowledge,
   patchStudentCounselling,
   sendPromotionEmail,
+  listActivityLogs,
 } from '../controller/adminController';
 import {
   deleteGoogleConnectionHandler,
@@ -380,6 +381,10 @@ adminRouter
     '/notices/sync-ai',
     requirePermission('users', 'edit'),
     syncNoticesAiHandler,
+  )
+  .get(
+    '/activity-logs',
+    listActivityLogs,
   );
 
 export default adminRouter;
