@@ -176,6 +176,31 @@ export function parseCommissionValue(val: string | null | undefined): number | n
   if (!val) return null;
   const str = String(val).trim();
   if (!str) return null;
+
+  // 1. Try to find all percentage patterns like "17%", "12.5%"
+  const percentMatches = [...str.matchAll(/(\d+(?:\.\d+)?)\s*%/g)];
+  if (percentMatches.length > 0) {
+    const percentages = percentMatches
+      .map(m => parseFloat(m[1]))
+      .filter(p => !Number.isNaN(p) && p > 0);
+    if (percentages.length > 0) {
+      // Return the first valid percentage found
+      return percentages[0];
+    }
+  }
+  // 2. Try to look for flat fee patterns like "2000 USD", "$800", "USD 1500"
+  const hasFlatFee =
+    /\b\d+\s*(?:usd|gbp|eur|cad|aud|inr|\$)\b/i.test(str) ||
+    /(?:usd|gbp|eur|cad|aud|inr|\$|£|€)\s*\d+/i.test(str) ||
+    /flat\b/i.test(str) ||
+    /fee\b/i.test(str);
+
+  if (hasFlatFee) {
+    // Return 0 so a database row gets created, keeping the raw format text.
+    return 0;
+  }
+
+  // 3. Fallback to original parseFloat-based logic
   const clean = str.replace(/%/g, '').trim();
   const num = parseFloat(clean);
   if (Number.isNaN(num) || num <= 0) return null;

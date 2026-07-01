@@ -456,6 +456,7 @@ export const importUniversityCatalogFileForAdmin = async (file: Express.Multer.F
           partnerCommissionPercent: pct,
           rates: {},
           source: 'catalog-import',
+          rawFormat: parsed.commission.trim(),
         });
         if (commission) {
           await commission.update({

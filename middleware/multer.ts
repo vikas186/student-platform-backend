@@ -145,8 +145,8 @@ const universityContractUpload = multer({
   storage: universityContractStorage,
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
-    if (!/\.pdf$/i.test(file.originalname)) {
-      return cb(new multer.MulterError('LIMIT_UNEXPECTED_FILE', 'Only PDF files are allowed.'));
+    if (!/\.(pdf|doc|docx)$/i.test(file.originalname)) {
+      return cb(new multer.MulterError('LIMIT_UNEXPECTED_FILE', 'Only PDF, DOC, and DOCX files are allowed.'));
     }
     cb(null, true);
   },
