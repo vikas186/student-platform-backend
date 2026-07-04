@@ -75,17 +75,28 @@ const exchangeAuthorizationCode = async (code: string, codeVerifier: string) => 
     redirect_uri: cfg.redirectUri,
     code_verifier: codeVerifier,
   });
-  const { data } = await axios.post(cfg.tokenUrl, body.toString(), {
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    timeout: 30_000,
-  });
-  return data as {
-    access_token?: string;
-    refresh_token?: string;
-    expires_in?: number;
-    scope?: string;
-    id_token?: string;
-  };
+  try {
+    const { data } = await axios.post(cfg.tokenUrl, body.toString(), {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      timeout: 30_000,
+    });
+    return data as {
+      access_token?: string;
+      refresh_token?: string;
+      expires_in?: number;
+      scope?: string;
+      id_token?: string;
+    };
+  } catch (err: any) {
+    console.error('DigiLocker Token Exchange Error details:', {
+      url: cfg.tokenUrl,
+      status: err.response?.status,
+      statusText: err.response?.statusText,
+      data: err.response?.data ? String(err.response.data) : undefined,
+      message: err.message,
+    });
+    throw err;
+  }
 };
 
 const parseIdTokenName = (idToken: string | undefined): string | null => {
@@ -191,26 +202,37 @@ export const listDigilockerIssuedDocuments = async (userId: string): Promise<Dig
   assertDigilockerConfigured();
   const token = await getValidAccessToken(userId);
   const cfg = digilockerConfig();
-  const { data } = await axios.get(`${cfg.apiBase}/2/files/issued`, {
-    headers: { Authorization: `Bearer ${token}` },
-    timeout: 30_000,
-  });
-
-  const items = Array.isArray(data?.items) ? data.items : Array.isArray(data) ? data : [];
-  return items
-    .filter((item: Record<string, unknown>) => typeof item.uri === 'string' && item.uri.trim())
-    .map((item: Record<string, unknown>) => ({
-      name: String(item.name ?? item.description ?? 'Document'),
-      type: String(item.type ?? 'file'),
-      size: String(item.size ?? ''),
-      date: String(item.date ?? ''),
-      mime: (item.mime as string | string[]) ?? 'application/pdf',
-      uri: String(item.uri),
-      doctype: String(item.doctype ?? ''),
-      description: String(item.description ?? item.name ?? 'Document'),
-      issuerid: String(item.issuerid ?? ''),
-      issuer: String(item.issuer ?? ''),
-    }));
+  try {
+    const { data } = await axios.get(`${cfg.apiBase}/2/files/issued`, {
+      headers: { Authorization: `Bearer ${token}` },
+      timeout: 30_000,
+    });
+ 
+    const items = Array.isArray(data?.items) ? data.items : Array.isArray(data) ? data : [];
+    return items
+      .filter((item: Record<string, unknown>) => typeof item.uri === 'string' && item.uri.trim())
+      .map((item: Record<string, unknown>) => ({
+        name: String(item.name ?? item.description ?? 'Document'),
+        type: String(item.type ?? 'file'),
+        size: String(item.size ?? ''),
+        date: String(item.date ?? ''),
+        mime: (item.mime as string | string[]) ?? 'application/pdf',
+        uri: String(item.uri),
+        doctype: String(item.doctype ?? ''),
+        description: String(item.description ?? item.name ?? 'Document'),
+        issuerid: String(item.issuerid ?? ''),
+        issuer: String(item.issuer ?? ''),
+      }));
+  } catch (err: any) {
+    console.error('DigiLocker List Issued Documents Error details:', {
+      url: `${cfg.apiBase}/2/files/issued`,
+      status: err.response?.status,
+      statusText: err.response?.statusText,
+      data: err.response?.data,
+      message: err.message,
+    });
+    throw err;
+  }
 };
 
 export const mapDigilockerDocType = (doctype: string, description: string): string => {
@@ -242,18 +264,30 @@ export const downloadDigilockerFile = async (
 ): Promise<{ buffer: Buffer; mime: string; fileName: string }> => {
   const token = await getValidAccessToken(userId);
   const cfg = digilockerConfig();
-  const { data, headers } = await axios.get(`${cfg.apiBase}/1/file/uri`, {
-    headers: { Authorization: `Bearer ${token}` },
-    params: { uri },
-    responseType: 'arraybuffer',
-    timeout: 60_000,
-  });
-  const buffer = Buffer.from(data);
-  verifyHmac(buffer, headers.hmac as string | undefined);
-  const mime = String(headers['content-type'] ?? 'application/pdf');
-  const ext = mime.includes('pdf') ? '.pdf' : mime.includes('png') ? '.png' : '.jpg';
-  const safeUri = uri.replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 48);
-  return { buffer, mime, fileName: `digilocker-${safeUri}${ext}` };
+  try {
+    const { data, headers } = await axios.get(`${cfg.apiBase}/1/file/uri`, {
+      headers: { Authorization: `Bearer ${token}` },
+      params: { uri },
+      responseType: 'arraybuffer',
+      timeout: 60_000,
+    });
+    const buffer = Buffer.from(data);
+    verifyHmac(buffer, headers.hmac as string | undefined);
+    const mime = String(headers['content-type'] ?? 'application/pdf');
+    const ext = mime.includes('pdf') ? '.pdf' : mime.includes('png') ? '.png' : '.jpg';
+    const safeUri = uri.replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 48);
+    return { buffer, mime, fileName: `digilocker-${safeUri}${ext}` };
+  } catch (err: any) {
+    console.error('DigiLocker Download File Error details:', {
+      url: `${cfg.apiBase}/1/file/uri`,
+      uri,
+      status: err.response?.status,
+      statusText: err.response?.statusText,
+      data: err.response?.data ? String(err.response.data) : undefined,
+      message: err.message,
+    });
+    throw err;
+  }
 };
 
 export const importDigilockerDocumentForStudent = async (input: {

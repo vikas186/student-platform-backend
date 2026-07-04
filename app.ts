@@ -1,6 +1,7 @@
 // Environment & Config
 import dotenv from 'dotenv';
 dotenv.config({ path: `config/.env.${process.env.NODE_ENV}` });
+import path from 'path';
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import swaggerUi from 'swagger-ui-express';
@@ -45,7 +46,7 @@ app.use('/api/v1', allRoutes);
 app.get('/', (req: Request, res: Response) => res.json({ success: true, message: 'Server is Running' }));
 
 // Static Files
-app.use(express.static(__dirname));
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 // 404 and Error Handling
 app.use('*', (req: Request, res: Response, next: NextFunction) => {
