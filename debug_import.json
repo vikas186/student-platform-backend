@@ -2,25 +2,57 @@
   "headerRow": [
     "University",
     "Country",
-    "Commission"
+    "Commission",
+    "Offer Rate",
+    "Deposit Rate",
+    "Visa Rate",
+    "Enrolled Rate",
+    "UG - Business Fees",
+    "UG - Stem Fees",
+    "UG - Computer Science Fees",
+    "PG - Business Fees",
+    "PG - Stem Fees",
+    "PG - Computer Science Fees"
   ],
   "colIndex": {
     "university": 0,
     "country": 1,
-    "commission": 2
+    "commission": 2,
+    "offerRate": 3,
+    "depositRate": 4,
+    "visaRate": 5,
+    "enrolledRate": 6,
+    "ugBusinessUsdYear": 7,
+    "ugStemUsdYear": 8,
+    "ugComputerScienceUsdYear": 9,
+    "pgBusinessUsdYear": 10,
+    "pgStemUsdYear": 11,
+    "pgComputerScienceUsdYear": 12
   },
   "firstRows": [
     {
       "rowIndex": 1,
       "row": [
-        "Ascencia International September/October 2026",
-        "United Kingdom",
+        "Curtin University - Singapore",
+        "",
+        "10%",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
         ""
       ],
       "parsed": {
-        "name": "Ascencia International September/October 2026",
+        "name": "Curtin University - Singapore",
         "country": "United Kingdom",
-        "commission": null,
+        "commission": "10%",
+        "rates": {},
         "ranges": {
           "ugBusinessUsdYear": null,
           "ugStemUsdYear": null,
@@ -34,23 +66,59 @@
     {
       "rowIndex": 2,
       "row": [
+        "Management Development Institute of Singapore (MDIS)",
         "",
-        "United Kingdom",
-        "12%"
+        "2400 USD",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
       ],
-      "parsed": null
+      "parsed": {
+        "name": "Management Development Institute of Singapore (MDIS)",
+        "country": "United Kingdom",
+        "commission": "2400 USD",
+        "rates": {},
+        "ranges": {
+          "ugBusinessUsdYear": null,
+          "ugStemUsdYear": null,
+          "ugComputerScienceUsdYear": null,
+          "pgBusinessUsdYear": null,
+          "pgStemUsdYear": null,
+          "pgComputerScienceUsdYear": null
+        }
+      }
     },
     {
       "rowIndex": 3,
       "row": [
-        "GBS Malta September/October 2026",
-        "United Kingdom",
+        "Nanyang Institute of Management",
+        "",
+        "12%",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
         ""
       ],
       "parsed": {
-        "name": "GBS Malta September/October 2026",
+        "name": "Nanyang Institute of Management",
         "country": "United Kingdom",
-        "commission": null,
+        "commission": "12%",
+        "rates": {},
         "ranges": {
           "ugBusinessUsdYear": null,
           "ugStemUsdYear": null,
@@ -64,23 +132,59 @@
     {
       "rowIndex": 4,
       "row": [
+        "PSB Academy",
         "",
-        "United Kingdom",
-        "16%"
+        "10%",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
       ],
-      "parsed": null
+      "parsed": {
+        "name": "PSB Academy",
+        "country": "United Kingdom",
+        "commission": "10%",
+        "rates": {},
+        "ranges": {
+          "ugBusinessUsdYear": null,
+          "ugStemUsdYear": null,
+          "ugComputerScienceUsdYear": null,
+          "pgBusinessUsdYear": null,
+          "pgStemUsdYear": null,
+          "pgComputerScienceUsdYear": null
+        }
+      }
     },
     {
       "rowIndex": 5,
       "row": [
-        "Global College Malta September/October 2026",
-        "United Kingdom",
+        "S P Jain - Singapore",
+        "",
+        "3450 AUD for UG, 3600 AUD for PG",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
         ""
       ],
       "parsed": {
-        "name": "Global College Malta September/October 2026",
+        "name": "S P Jain - Singapore",
         "country": "United Kingdom",
-        "commission": null,
+        "commission": "3450 AUD for UG, 3600 AUD for PG",
+        "rates": {},
         "ranges": {
           "ugBusinessUsdYear": null,
           "ugStemUsdYear": null,

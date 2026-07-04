@@ -44,7 +44,12 @@ export function mapCatalogColumn(header: string): keyof ProgramFeeRangesPayload 
       h === 'name' ||
       h === 'universityname' ||
       h === 'institutionname') &&
-    !h.includes('fee')
+    !h.includes('fee') &&
+    !h.includes('no') &&
+    !h.includes('serial') &&
+    !h.includes('index') &&
+    !h.includes('id') &&
+    !h.includes('number')
   ) {
     return 'university';
   }
@@ -138,7 +143,7 @@ The columns of the CSV must be exactly:
 Instructions:
 1. Extract every university/college/institution mentioned.
 2. For each university:
-   - "University": Extract the clean name of the university (do not include course/program details).
+   - "University": Extract the clean, full name of the university (e.g. "Canterbury Christ Church University"). Do NOT extract the serial number, row index, or number (like "1", "2", "3") as the university name.
    - "Country": Identify the country (e.g. "United Kingdom", "United States", "Malta", "Germany", etc.). If not mentioned, default to "United Kingdom" if it appears to be a UK institution, or leave empty.
    - "Commission": Extract the general agent commission value or text (e.g. "15%", "2000 USD", "3000 euros ( NO SOP/ NO LOR )", "8% first year").
    - "Offer Rate": Extract any milestone payout specifically for the Offer letter stage if mentioned (e.g. "500 USD", "$800", or leave empty if not specified).
@@ -147,7 +152,11 @@ Instructions:
    - "Enrolled Rate": Extract any milestone payout for the Enrollment stage (e.g. "1000 USD", "$1500", or leave empty).
    - Extract any tuition fee details for undergraduate (UG) and postgraduate (PG) categories if present in the text, otherwise leave empty.
 3. Format as a valid CSV, enclosing values in double quotes if they contain commas or special characters.
-4. Return ONLY the valid CSV data. Do not include markdown code block formatting (such as \`\`\`csv ... \`\`\`), explanation, or other text.`;
+4. Return ONLY the valid CSV data. Do not include markdown code block formatting (such as \`\`\`csv ... \`\`\`), explanation, or other text.
+
+IMPORTANT:
+- Every row in the CSV must have a real university name under the "University" column.
+- Under NO circumstances should the "University" column contain a single number, index, or serial number (e.g., "1", "2", "3", "S.No."). If the source text has a serial number next to the university, discard the serial number and extract ONLY the name of the university.`;
 
   const response = await openai.chat.completions.create({
     model: process.env.OPENAI_CHAT_MODEL || 'gpt-4o-mini',
