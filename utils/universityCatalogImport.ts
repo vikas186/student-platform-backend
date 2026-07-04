@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import * as XLSX from 'xlsx';
+import OpenAI from 'openai';
 import { parseSimpleCsvLines } from './spreadsheetParse';
 
 /** Stored on `University.programFeeRanges` — matches Uniwizer USA fee matrix spreadsheet. */
@@ -109,6 +110,43 @@ export function findCatalogHeaderRowIndex(matrix: string[][]): number {
   return 0;
 }
 
+async function convertPdfToCsvUsingOpenAi(pdfText: string): Promise<string> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey?.trim()) {
+    throw new Error('OPENAI_API_KEY is not configured on the server. Cannot parse PDF without OpenAI API key.');
+  }
+
+  const openai = new OpenAI({ apiKey });
+  
+  const systemPrompt = `You are an expert data parsing assistant.
+Convert the following unstructured text extracted from a university catalog PDF into a clean CSV format.
+The columns of the CSV must be exactly:
+"University","Country","Commission","UG - Business Fees","UG - Stem Fees","UG - Computer Science Fees","PG - Business Fees","PG - Stem Fees","PG - Computer Science Fees"
+
+Instructions:
+1. Extract every university/college/institution mentioned.
+2. For each university:
+   - "University": Extract the clean name of the university (do not include course/program details).
+   - "Country": Identify the country (e.g. "United Kingdom", "United States", "Malta", "Germany", etc.). If not mentioned, default to "United Kingdom" if it appears to be a UK institution, or leave empty.
+   - "Commission": Extract the agent commission value (e.g. "15%", "2000 USD", "3000 euros ( NO SOP/ NO LOR )", "8% first year").
+   - Extract any tuition fee details for undergraduate (UG) and postgraduate (PG) categories if present in the text, otherwise leave empty.
+3. Format as a valid CSV, enclosing values in double quotes if they contain commas or special characters.
+4. Return ONLY the valid CSV data. Do not include markdown code block formatting (such as \`\`\`csv ... \`\`\`), explanation, or other text.`;
+
+  const response = await openai.chat.completions.create({
+    model: process.env.OPENAI_CHAT_MODEL || 'gpt-4o-mini',
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: pdfText }
+    ],
+    temperature: 0.1,
+  });
+
+  let csvContent = response.choices[0]?.message?.content || '';
+  csvContent = csvContent.replace(/^```[a-z]*\n/, '').replace(/\n```$/, '').trim();
+  return csvContent;
+}
+
 export async function readCatalogSpreadsheetToMatrix(filePath: string): Promise<string[][]> {
   const ext = path.extname(filePath).toLowerCase();
   if (ext === '.csv') {
@@ -138,77 +176,12 @@ export async function readCatalogSpreadsheetToMatrix(filePath: string): Promise<
     const dataBuffer = fs.readFileSync(filePath);
     const data = await pdfParse(dataBuffer);
     const text = data.text || '';
-    const lines = text.split('\n').map((l: string) => l.trim()).filter(Boolean);
-
-    const entryStrings: string[] = [];
-    let currentEntryStr = '';
-
-    for (const line of lines) {
-      const isNewEntry = /^\s*\d+\b/.test(line);
-      if (isNewEntry) {
-        if (currentEntryStr) {
-          entryStrings.push(currentEntryStr);
-        }
-        currentEntryStr = line;
-      } else {
-        if (currentEntryStr) {
-          currentEntryStr += ' ' + line;
-        } else {
-          if (line.toLowerCase().includes('university')) {
-            entryStrings.push(line);
-          }
-        }
-      }
-    }
-    if (currentEntryStr) {
-      entryStrings.push(currentEntryStr);
-    }
-
-    const matrix: string[][] = [
-      ['University', 'Country', 'Commission']
-    ];
-
-    const commissionStartRegex = /(commission|1\s*-\s*\d+|1\s+(?:to|tp)\s+\d+|\d+(?:\.\d+)?%\s*(?:-|for|plus|–|—|onwards)?|\d+(?:\.\d+)?\s*%\s*-\s*one student)/i;
-
-    const campusKeywords = [
-      'london', 'birmingham', 'bristol', 'guildford', 'leeds', 'manchester',
-      'nottingham', 'canterbury', 'canary', 'poole', 'dorset', 'england',
-      'bath', 'liverpool', 'ealing', 'brentford', 'scotland', 'wales',
-      'swansea', 'carmarthen', 'cardiff', 'edinburgh', 'sunderland',
-      'all campus', 'main campus', 'campus'
-    ];
-
-    for (const entry of entryStrings) {
-      if (/^\s*\d+/.test(entry)) {
-        const cleanStr = entry.replace(/^\s*\d+\s+/, '');
-        const match = cleanStr.match(commissionStartRegex);
-        if (match && match.index !== undefined) {
-          const uniAndCampus = cleanStr.substring(0, match.index).trim();
-          const commission = cleanStr.substring(match.index).trim();
-
-          let uniName = uniAndCampus;
-          let lowerUniAndCampus = uniAndCampus.toLowerCase();
-          let splitIdx = -1;
-          for (const kw of campusKeywords) {
-            const idx = lowerUniAndCampus.indexOf(kw);
-            if (idx !== -1 && (splitIdx === -1 || idx < splitIdx)) {
-              const prevChar = idx > 0 ? lowerUniAndCampus[idx - 1] : '';
-              if (!prevChar || /[^a-z0-9]/.test(prevChar)) {
-                splitIdx = idx;
-              }
-            }
-          }
-          if (splitIdx > 2) {
-            uniName = uniAndCampus.substring(0, splitIdx).replace(/[,/-\s]+$/, '').trim();
-          }
-
-          matrix.push([uniName, 'United Kingdom', commission]);
-        } else {
-          matrix.push([cleanStr, 'United Kingdom', '']);
-        }
-      }
-    }
-    return matrix;
+    
+    // Convert PDF text to clean CSV content using OpenAI
+    const csvContent = await convertPdfToCsvUsingOpenAi(text);
+    
+    // Parse the generated CSV text into a matrix
+    return parseSimpleCsvLines(csvContent);
   }
   throw new Error(`Unsupported catalog file format: ${ext}`);
 }
