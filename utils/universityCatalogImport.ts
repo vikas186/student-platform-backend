@@ -30,7 +30,7 @@ export function normalizeCatalogHeader(header: string): string {
 /**
  * Maps Excel/CSV column titles (e.g. "UG – Business Fees (USD/year)") to payload keys.
  */
-export function mapCatalogColumn(header: string): keyof ProgramFeeRangesPayload | 'university' | 'country' | 'commission' | null {
+export function mapCatalogColumn(header: string): keyof ProgramFeeRangesPayload | 'university' | 'country' | 'commission' | 'offerRate' | 'depositRate' | 'visaRate' | 'enrolledRate' | null {
   const h = normalizeCatalogHeader(header)
     .toLowerCase()
     .replace(/[\u2013\u2014]/g, '-')
@@ -64,6 +64,18 @@ export function mapCatalogColumn(header: string): keyof ProgramFeeRangesPayload 
     h.includes('comission')
   ) {
     return 'commission';
+  }
+  if (h.includes('offer')) {
+    return 'offerRate';
+  }
+  if (h.includes('deposit')) {
+    return 'depositRate';
+  }
+  if (h.includes('visa')) {
+    return 'visaRate';
+  }
+  if (h.includes('enrolled') || h.includes('enrollment')) {
+    return 'enrolledRate';
   }
   const hasUg = /\bug\b/.test(h) || h.includes('undergraduate');
   const hasPg = /\bpg\b/.test(h) || h.includes('postgraduate') || h.includes('post grad');
@@ -121,14 +133,18 @@ async function convertPdfToCsvUsingOpenAi(pdfText: string): Promise<string> {
   const systemPrompt = `You are an expert data parsing assistant.
 Convert the following unstructured text extracted from a university catalog PDF into a clean CSV format.
 The columns of the CSV must be exactly:
-"University","Country","Commission","UG - Business Fees","UG - Stem Fees","UG - Computer Science Fees","PG - Business Fees","PG - Stem Fees","PG - Computer Science Fees"
+"University","Country","Commission","Offer Rate","Deposit Rate","Visa Rate","Enrolled Rate","UG - Business Fees","UG - Stem Fees","UG - Computer Science Fees","PG - Business Fees","PG - Stem Fees","PG - Computer Science Fees"
 
 Instructions:
 1. Extract every university/college/institution mentioned.
 2. For each university:
    - "University": Extract the clean name of the university (do not include course/program details).
    - "Country": Identify the country (e.g. "United Kingdom", "United States", "Malta", "Germany", etc.). If not mentioned, default to "United Kingdom" if it appears to be a UK institution, or leave empty.
-   - "Commission": Extract the agent commission value (e.g. "15%", "2000 USD", "3000 euros ( NO SOP/ NO LOR )", "8% first year").
+   - "Commission": Extract the general agent commission value or text (e.g. "15%", "2000 USD", "3000 euros ( NO SOP/ NO LOR )", "8% first year").
+   - "Offer Rate": Extract any milestone payout specifically for the Offer letter stage if mentioned (e.g. "500 USD", "$800", or leave empty if not specified).
+   - "Deposit Rate": Extract any milestone payout for the Deposit paid stage (e.g. "1000 USD", "$1000", or leave empty).
+   - "Visa Rate": Extract any milestone payout for the Visa received stage (e.g. "500 USD", "$500", or leave empty).
+   - "Enrolled Rate": Extract any milestone payout for the Enrollment stage (e.g. "1000 USD", "$1500", or leave empty).
    - Extract any tuition fee details for undergraduate (UG) and postgraduate (PG) categories if present in the text, otherwise leave empty.
 3. Format as a valid CSV, enclosing values in double quotes if they contain commas or special characters.
 4. Return ONLY the valid CSV data. Do not include markdown code block formatting (such as \`\`\`csv ... \`\`\`), explanation, or other text.`;
@@ -187,9 +203,9 @@ export async function readCatalogSpreadsheetToMatrix(filePath: string): Promise<
 }
 
 export function buildColumnIndexMap(headerRow: string[]): Partial<
-  Record<'university' | 'country' | 'commission' | keyof ProgramFeeRangesPayload, number>
+  Record<'university' | 'country' | 'commission' | 'offerRate' | 'depositRate' | 'visaRate' | 'enrolledRate' | keyof ProgramFeeRangesPayload, number>
 > {
-  const colIndex: Partial<Record<'university' | 'country' | 'commission' | keyof ProgramFeeRangesPayload, number>> = {};
+  const colIndex: Partial<Record<'university' | 'country' | 'commission' | 'offerRate' | 'depositRate' | 'visaRate' | 'enrolledRate' | keyof ProgramFeeRangesPayload, number>> = {};
   headerRow.forEach((cell, idx) => {
     const key = mapCatalogColumn(String(cell));
     if (key && colIndex[key] === undefined) {
@@ -201,10 +217,21 @@ export function buildColumnIndexMap(headerRow: string[]): Partial<
 
 export function rowToFeeRanges(
   row: string[],
-  colIndex: Partial<Record<'university' | 'country' | 'commission' | keyof ProgramFeeRangesPayload, number>>,
-): { name: string; country: string; commission: string | null; ranges: ProgramFeeRangesPayload } | null {
-  const cell = (key: keyof typeof colIndex): string => {
-    const i = colIndex[key];
+  colIndex: Partial<
+    Record<
+      'university' | 'country' | 'commission' | 'offerRate' | 'depositRate' | 'visaRate' | 'enrolledRate' | keyof ProgramFeeRangesPayload,
+      number
+    >
+  >,
+): {
+  name: string;
+  country: string;
+  commission: string | null;
+  rates: Record<string, number>;
+  ranges: ProgramFeeRangesPayload;
+} | null {
+  const cell = (key: string): string => {
+    const i = (colIndex as any)[key];
     if (i === undefined) {
       return '';
     }
@@ -222,14 +249,33 @@ export function rowToFeeRanges(
 
   const commission = cell('commission');
 
+  // Parse structured milestone rates
+  const rates: Record<string, number> = {};
+  const milestoneKeys: { key: 'offerRate' | 'depositRate' | 'visaRate' | 'enrolledRate'; label: string }[] = [
+    { key: 'offerRate', label: 'Offer' },
+    { key: 'depositRate', label: 'Deposit' },
+    { key: 'visaRate', label: 'Visa' },
+    { key: 'enrolledRate', label: 'Enrolled' },
+  ];
+
+  for (const item of milestoneKeys) {
+    const val = cell(item.key);
+    if (val) {
+      const num = parseFloat(val.replace(/[^\d.]/g, ''));
+      if (!Number.isNaN(num)) {
+        rates[item.label] = num;
+      }
+    }
+  }
+
   const ranges = emptyRanges();
   (Object.keys(ranges) as (keyof ProgramFeeRangesPayload)[]).forEach(k => {
-    const idx = colIndex[k];
+    const idx = (colIndex as any)[k];
     const v = idx === undefined ? '' : String(row[idx] ?? '').trim();
     ranges[k] = v || null;
   });
 
-  return { name, country, commission: commission || null, ranges };
+  return { name, country, commission: commission || null, rates, ranges };
 }
 
 export function parseCommissionValue(val: string | null | undefined): number | null {

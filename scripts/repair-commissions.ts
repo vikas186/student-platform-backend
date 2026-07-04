@@ -81,38 +81,34 @@ async function repair() {
 
         totalProcessed++;
 
-        if (parsed.commission) {
-          const pct = parseCommissionValue(parsed.commission);
-          if (pct !== null) {
-            const slabDetails = JSON.stringify({
-              partnerCommissionPercent: pct,
-              rates: {},
-              source: 'catalog-repair',
-              rawFormat: parsed.commission.trim(),
-            });
+        if (parsed.commission || Object.keys(parsed.rates).length > 0) {
+          const pct = parseCommissionValue(parsed.commission) ?? 0;
+          const slabDetails = JSON.stringify({
+            partnerCommissionPercent: pct,
+            rates: parsed.rates,
+            source: 'catalog-repair',
+            rawFormat: parsed.commission ? parsed.commission.trim() : '',
+          });
 
-            const existingComm = await db.Commission.findOne({
-              where: { universityId: uni.id }
-            });
+          const existingComm = await db.Commission.findOne({
+            where: { universityId: uni.id }
+          });
 
-            if (existingComm) {
-              await existingComm.update({
-                percentage: pct,
-                slabDetails,
-              });
-              totalCommissionsUpdated++;
-              console.log(`Updated commission for "${uni.name}" to ${pct}%`);
-            } else {
-              await db.Commission.create({
-                universityId: uni.id,
-                percentage: pct,
-                slabDetails,
-              });
-              totalCommissionsCreated++;
-              console.log(`Created commission for "${uni.name}": ${pct}%`);
-            }
+          if (existingComm) {
+            await existingComm.update({
+              percentage: pct,
+              slabDetails,
+            });
+            totalCommissionsUpdated++;
+            console.log(`Updated commission for "${uni.name}" to ${pct}%`);
           } else {
-            console.log(`Commission value invalid/could not parse for "${uni.name}": "${parsed.commission}"`);
+            await db.Commission.create({
+              universityId: uni.id,
+              percentage: pct,
+              slabDetails,
+            });
+            totalCommissionsCreated++;
+            console.log(`Created commission for "${uni.name}": ${pct}%`);
           }
         }
       }

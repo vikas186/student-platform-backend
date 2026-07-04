@@ -461,30 +461,28 @@ export const importUniversityCatalogFileForAdmin = async (file: Express.Multer.F
       updated += 1;
     }
 
-    if (parsed.commission) {
-      const pct = parseCommissionValue(parsed.commission);
-      if (pct !== null) {
-        const commission = await db.Commission.findOne({
-          where: { universityId: uni.id },
+    if (parsed.commission || Object.keys(parsed.rates).length > 0) {
+      const pct = parseCommissionValue(parsed.commission) ?? 0;
+      const commission = await db.Commission.findOne({
+        where: { universityId: uni.id },
+      });
+      const slabDetails = JSON.stringify({
+        partnerCommissionPercent: pct,
+        rates: parsed.rates,
+        source: 'catalog-import',
+        rawFormat: parsed.commission ? parsed.commission.trim() : '',
+      });
+      if (commission) {
+        await commission.update({
+          percentage: pct,
+          slabDetails,
         });
-        const slabDetails = JSON.stringify({
-          partnerCommissionPercent: pct,
-          rates: {},
-          source: 'catalog-import',
-          rawFormat: parsed.commission.trim(),
+      } else {
+        await db.Commission.create({
+          universityId: uni.id,
+          percentage: pct,
+          slabDetails,
         });
-        if (commission) {
-          await commission.update({
-            percentage: pct,
-            slabDetails,
-          });
-        } else {
-          await db.Commission.create({
-            universityId: uni.id,
-            percentage: pct,
-            slabDetails,
-          });
-        }
       }
     }
   }
