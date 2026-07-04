@@ -528,4 +528,176 @@
  *         description: Invalid id
  *       404:
  *         description: University not found
+ * 
+ * /api/v1/student/digilocker/status:
+ *   get:
+ *     tags: [Student]
+ *     summary: Get DigiLocker connection status
+ *     description: Check if DigiLocker is configured on the backend, and if the current logged-in student has already connected their DigiLocker account.
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: OK
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     configured: { type: boolean, example: true }
+ *                     connected: { type: boolean, example: true }
+ *                     digilockerName: { type: string, nullable: true, example: "John Doe" }
+ *                     connectedAt: { type: string, format: date-time, nullable: true }
+ *       401:
+ *         description: Unauthorized
+ * 
+ * /api/v1/student/digilocker/auth-url:
+ *   get:
+ *     tags: [Student]
+ *     summary: Get DigiLocker authorization URL
+ *     description: Returns the URL to redirect the student to so they can log in to their DigiLocker account and authorize Uniwizer.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: applicationId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: The draft application ID that the document is being uploaded to.
+ *     responses:
+ *       200:
+ *         description: OK
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     authUrl: { type: string, example: "https://digilocker.meripehchaan.gov.in/public/oauth2/1/authorize?..." }
+ *       400:
+ *         description: Missing application ID
+ *       401:
+ *         description: Unauthorized
+ *       503:
+ *         description: DigiLocker integration not configured
+ * 
+ * /api/v1/student/digilocker/callback:
+ *   get:
+ *     tags: [Student]
+ *     summary: Public DigiLocker OAuth callback
+ *     description: Endpoint invoked by DigiLocker redirecting the user back. Performs authorization code exchange, gets token credentials, and redirects the browser back to the frontend.
+ *     parameters:
+ *       - in: query
+ *         name: code
+ *         required: true
+ *         schema: { type: string }
+ *         description: Authorization code from DigiLocker
+ *       - in: query
+ *         name: state
+ *         required: true
+ *         schema: { type: string }
+ *         description: Signed JWT state token
+ *     responses:
+ *       302:
+ *         description: Redirects back to frontend application details page
+ * 
+ * /api/v1/student/digilocker/documents:
+ *   get:
+ *     tags: [Student]
+ *     summary: List issued documents from DigiLocker
+ *     description: Retrieves the list of certificates and credentials issued to the student's connected DigiLocker account (e.g. marksheets, identity cards).
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: OK
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       name: { type: string, example: "Class XII Marksheet" }
+ *                       uri: { type: string, example: "in.gov.cbse-12-marksheet" }
+ *                       doctype: { type: string, example: "12" }
+ *                       description: { type: string, nullable: true }
+ *                       date: { type: string, example: "2024-05-15" }
+ *       401:
+ *         description: Unauthorized
+ * 
+ * /api/v1/student/digilocker/import:
+ *   post:
+ *     tags: [Student]
+ *     summary: Import document from DigiLocker
+ *     description: Downloads the specific certificate from DigiLocker by URI and attaches it directly to the application documents list, marking it as verified.
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [applicationId, uri]
+ *             properties:
+ *               applicationId: { type: string, format: uuid, example: "681b4340-488c-4a34-a108-c1dc5784a538" }
+ *               uri: { type: string, example: "in.gov.cbse-12-marksheet" }
+ *               documentType: { type: string, nullable: true, example: "academic" }
+ *     responses:
+ *       201:
+ *         description: Imported successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "DigiLocker document imported" }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id: { type: string, format: uuid }
+ *                     applicationId: { type: string, format: uuid }
+ *                     originalFileName: { type: string, example: "cbse_12_marksheet.pdf" }
+ *                     fileUrl: { type: string }
+ *                     type: { type: string, example: "academic" }
+ *                     status: { type: string, example: "verified" }
+ *       400:
+ *         description: Invalid parameters
+ *       401:
+ *         description: Unauthorized
+ * 
+ * /api/v1/student/digilocker/disconnect:
+ *   delete:
+ *     tags: [Student]
+ *     summary: Disconnect DigiLocker account
+ *     description: Revokes / destroys the stored DigiLocker connection tokens in the database for the logged-in student.
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Disconnected successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: "DigiLocker disconnected" }
+ *       401:
+ *         description: Unauthorized
  */

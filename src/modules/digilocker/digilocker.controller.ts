@@ -24,11 +24,6 @@ const getStudentProfileId = async (req: Request): Promise<number> => {
 export const getDigilockerStatusHandler = catchAsyncError(async (req: Request, res: Response) => {
   const userId = (req.user as { id: string }).id;
   const status = await getDigilockerConnectionStatus(userId);
-  console.log('[DigiLocker Status Check Debug]', {
-    configured: status.configured,
-    clientId: process.env.DIGILOCKER_CLIENT_ID || 'MISSING',
-    NODE_ENV: process.env.NODE_ENV || 'MISSING',
-  });
   res.json({ success: true, data: status });
 });
 
