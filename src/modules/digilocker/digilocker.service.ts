@@ -278,7 +278,7 @@ export const importDigilockerDocumentForStudent = async (input: {
     input.documentType?.trim() ||
     mapDigilockerDocType(meta.doctype, meta.description || meta.name);
 
-  const { attachVerifiedStudentDocument } = await import('../../../services/studentPortal.service');
+  const { attachVerifiedStudentDocument, submitStudentApplication } = await import('../../../services/studentPortal.service');
   const doc = await attachVerifiedStudentDocument(input.studentProfileId, {
     applicationId: input.applicationId,
     fileUrl: absolutePath.replace(/\\/g, '/'),
@@ -293,6 +293,12 @@ export const importDigilockerDocumentForStudent = async (input: {
       mime,
     },
   });
+
+  try {
+    await submitStudentApplication(input.studentProfileId, input.applicationId);
+  } catch (err) {
+    console.error('[DigiLocker Auto-Submit] Failed to automatically submit application:', err);
+  }
 
   return doc;
 };

@@ -204,6 +204,11 @@ export const createStudentApplication = async (
   studentProfileId: number,
   body: { universityName?: string | null; programName?: string | null; notes?: string | null; country?: string | null },
 ) => {
+  const count = await db.Application.count({ where: { studentId: studentProfileId } });
+  if (count >= 3) {
+    throw new AppError('Application limit reached. You cannot create more than 3 applications.', 400);
+  }
+
   const sp = await db.StudentProfile.findByPk(studentProfileId);
   const linkedAgentId = sp?.agentProfileId ?? null;
   const uniName = body.universityName?.trim() || null;
@@ -271,6 +276,17 @@ export const submitStudentApplication = async (studentProfileId: number, idOrRef
   const sp = await db.StudentProfile.findByPk(studentProfileId);
   if (sp?.agentProfileId && app.agentId == null) {
     app.agentId = sp.agentProfileId;
+  }
+
+  const docs = await db.Document.findAll({ where: { applicationId: app.id } });
+  if (docs.length === 0) {
+    throw new AppError('Please upload documents before submitting the application.', 400);
+  }
+  const hasDigilockerDoc = docs.some(
+    d => d.status === 'verified' && d.fileUrl && d.fileUrl.includes('digilocker'),
+  );
+  if (!hasDigilockerDoc) {
+    throw new AppError('Please verify at least one document with DigiLocker before submitting.', 400);
   }
 
   // Final guard at submit time: pin country to the university's country if the

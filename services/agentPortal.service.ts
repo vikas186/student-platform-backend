@@ -398,6 +398,14 @@ export const createAgentApplication = async (
     if (!sp) {
       throw new AppError('Student profile not found', 404);
     }
+    const count = await db.Application.count({
+      where: { studentId: studentProfileId },
+      transaction,
+    });
+    if (count >= 3) {
+      throw new AppError('This student has already reached the application limit of 3 applications.', 400);
+    }
+
     await assertStudentInAgentScope(agentProfileId, studentProfileId, transaction);
 
     const application = await db.Application.create(
@@ -503,6 +511,17 @@ export const submitAgentApplication = async (agentProfileId: number, idOrRef: st
   const prog = app.programName?.trim();
   if (!uni || !prog) {
     throw new AppError('University and program are required to submit', 400);
+  }
+
+  const docs = await db.Document.findAll({ where: { applicationId: app.id } });
+  if (docs.length === 0) {
+    throw new AppError('Please upload documents before submitting the application.', 400);
+  }
+  const hasDigilockerDoc = docs.some(
+    d => d.status === 'verified' && d.fileUrl && d.fileUrl.includes('digilocker'),
+  );
+  if (!hasDigilockerDoc) {
+    throw new AppError('Please verify at least one document with DigiLocker before submitting.', 400);
   }
   const previousStatus = app.status;
   app.status = 'submitted';

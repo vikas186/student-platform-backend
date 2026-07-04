@@ -193,9 +193,9 @@ const adminUniversityCatalogUpload = multer({
   storage: adminUniversityCatalogStorage,
   limits: { fileSize: 25 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
-    if (!/\.(csv|xlsx|xls)$/i.test(file.originalname)) {
+    if (!/\.(csv|xlsx|xls|pdf)$/i.test(file.originalname)) {
       return cb(
-        new multer.MulterError('LIMIT_UNEXPECTED_FILE', 'Only .csv, .xlsx, or .xls files are allowed.'),
+        new multer.MulterError('LIMIT_UNEXPECTED_FILE', 'Only .csv, .xlsx, .xls, or .pdf files are allowed.'),
       );
     }
     cb(null, true);

@@ -378,7 +378,7 @@ export const importUniversityCatalogFileForAdmin = async (file: Express.Multer.F
 
   let matrix: string[][];
   try {
-    matrix = readCatalogSpreadsheetToMatrix(file.path);
+    matrix = await readCatalogSpreadsheetToMatrix(file.path);
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
     throw new AppError(msg, 400);
@@ -398,9 +398,9 @@ export const importUniversityCatalogFileForAdmin = async (file: Express.Multer.F
     firstRows: [] as any[],
   };
 
-  if (colIndex.university == null || colIndex.country == null) {
+  if (colIndex.university == null) {
     throw new AppError(
-      'Could not find University and Country columns. First sheet must include headers such as University, Country, and UG/PG fee columns.',
+      'Could not find University column. First sheet must include at least a University column.',
       400,
     );
   }
@@ -424,18 +424,33 @@ export const importUniversityCatalogFileForAdmin = async (file: Express.Multer.F
       continue;
     }
 
+    let parsedName = parsed.name.trim();
     let uni = await db.University.findOne({
       where: {
         [Op.and]: [
-          { name: { [Op.iLike]: parsed.name.trim() } },
+          { name: { [Op.iLike]: parsedName } },
           { country: { [Op.iLike]: parsed.country.trim() } },
         ],
       },
     });
 
     if (!uni) {
+      const allUnis = await db.University.findAll({
+        where: { country: { [Op.iLike]: parsed.country.trim() } },
+      });
+      const lowerParsed = parsedName.toLowerCase();
+      const matched = allUnis.find(u => {
+        const dbName = u.name.toLowerCase();
+        return lowerParsed.includes(dbName) || dbName.includes(lowerParsed);
+      });
+      if (matched) {
+        uni = matched;
+      }
+    }
+
+    if (!uni) {
       uni = await db.University.create({
-        name: parsed.name.trim(),
+        name: parsedName,
         country: (parsed.country.trim() || 'General').slice(0, 200),
         status: true,
         programFeeRanges: parsed.ranges,
