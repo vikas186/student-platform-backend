@@ -32,7 +32,7 @@ export const createDigilockerOAuthState = (
   jwt.sign(
     { userId, applicationId, purpose: 'digilocker', codeVerifier } satisfies DigiLockerOAuthState,
     oauthSecret(),
-    { expiresIn: '15m' },
+    { expiresIn: '2h' },
   );
 
 export const verifyDigilockerOAuthState = (state: string): DigiLockerOAuthState => {
