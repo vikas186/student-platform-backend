@@ -312,7 +312,7 @@ export const importDigilockerDocumentForStudent = async (input: {
     input.documentType?.trim() ||
     mapDigilockerDocType(meta.doctype, meta.description || meta.name);
 
-  const { attachVerifiedStudentDocument, submitStudentApplication } = await import('../../../services/studentPortal.service');
+  const { attachVerifiedStudentDocument } = await import('../../../services/studentPortal.service');
   const doc = await attachVerifiedStudentDocument(input.studentProfileId, {
     applicationId: input.applicationId,
     fileUrl: absolutePath.replace(/\\/g, '/'),
@@ -328,13 +328,48 @@ export const importDigilockerDocumentForStudent = async (input: {
     },
   });
 
-  try {
-    await submitStudentApplication(input.studentProfileId, input.applicationId);
-  } catch (err) {
-    console.error('[DigiLocker Auto-Submit] Failed to automatically submit application:', err);
+  return doc;
+};
+
+export const importAllDigilockerDocumentsForStudent = async (input: {
+  userId: string;
+  studentProfileId: number;
+  applicationId: string;
+}) => {
+  const issued = await listDigilockerIssuedDocuments(input.userId);
+  const { db } = await import('../../../config/database');
+  const existing = await db.Document.findAll({
+    where: { applicationId: input.applicationId, studentProfileId: input.studentProfileId },
+  });
+  const existingTypes = new Set(existing.map(d => d.type));
+
+  const imported: Awaited<ReturnType<typeof importDigilockerDocumentForStudent>>[] = [];
+  const skipped: { uri: string; reason: string }[] = [];
+
+  for (const meta of issued) {
+    const documentType = mapDigilockerDocType(meta.doctype, meta.description || meta.name);
+    if (documentType === 'general') {
+      skipped.push({ uri: meta.uri, reason: 'Unrecognized document type' });
+      continue;
+    }
+    if (existingTypes.has(documentType)) {
+      skipped.push({ uri: meta.uri, reason: `Already imported as ${documentType}` });
+      continue;
+    }
+    try {
+      const doc = await importDigilockerDocumentForStudent({
+        ...input,
+        uri: meta.uri,
+        documentType,
+      });
+      imported.push(doc);
+      existingTypes.add(documentType);
+    } catch (err: any) {
+      skipped.push({ uri: meta.uri, reason: err?.message || 'Import failed' });
+    }
   }
 
-  return doc;
+  return { imported, skipped, total: issued.length };
 };
 
 export const digilockerFrontendRedirect = (

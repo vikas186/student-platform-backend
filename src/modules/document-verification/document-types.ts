@@ -60,6 +60,14 @@ export const DOCUMENT_TYPE_LABELS: Record<string, string> = {
 
 export const REQUIRED_ACADEMIC_TYPES = ['10th_marksheet', '12th_marksheet', 'degree_certificate'] as const;
 
+/** Academic certificates issued via DigiLocker — must not be manually uploaded when DigiLocker is enabled. */
+export const DIGILOCKER_IMPORTABLE_TYPES = [...ACADEMIC_DOCUMENT_TYPES] as const;
+
+export const isDigilockerImportableType = (documentType: string): boolean => {
+  const t = normalizeDocumentType(documentType);
+  return (DIGILOCKER_IMPORTABLE_TYPES as readonly string[]).includes(t);
+};
+
 export const OCR_CONFIDENCE_THRESHOLD = 80;
 export const PASSPORT_CONFIDENCE_THRESHOLD = 85;
 export const NAME_MATCH_THRESHOLD = 0.85;

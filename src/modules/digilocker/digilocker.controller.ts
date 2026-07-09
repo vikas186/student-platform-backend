@@ -8,6 +8,7 @@ import {
   getDigilockerConnectionStatus,
   handleDigilockerOAuthCallback,
   importDigilockerDocumentForStudent,
+  importAllDigilockerDocumentsForStudent,
   listDigilockerIssuedDocuments,
 } from './digilocker.service';
 import { isDigilockerConfigured } from './digilocker.config';
@@ -97,6 +98,25 @@ export const importDigilockerDocumentHandler = catchAsyncError(async (req: Reque
     success: true,
     message: 'DigiLocker document imported',
     data: doc,
+  });
+});
+
+export const importAllDigilockerDocumentsHandler = catchAsyncError(async (req: Request, res: Response) => {
+  const userId = (req.user as { id: string }).id;
+  const applicationId = String(req.body?.applicationId ?? '').trim();
+  if (!applicationId) throw new AppError('applicationId is required', 400);
+
+  const studentProfileId = await getStudentProfileId(req);
+  const result = await importAllDigilockerDocumentsForStudent({
+    userId,
+    studentProfileId,
+    applicationId,
+  });
+
+  res.status(201).json({
+    success: true,
+    message: `Imported ${result.imported.length} document(s) from DigiLocker`,
+    data: result,
   });
 });
 

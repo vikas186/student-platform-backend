@@ -527,16 +527,8 @@ export const submitAgentApplication = async (agentProfileId: number, idOrRef: st
     throw new AppError('University and program are required to submit', 400);
   }
 
-  const docs = await db.Document.findAll({ where: { applicationId: app.id } });
-  if (docs.length === 0) {
-    throw new AppError('Please upload documents before submitting the application.', 400);
-  }
-  const hasDigilockerDoc = docs.some(
-    d => d.status === 'verified' && d.fileUrl && d.fileUrl.includes('digilocker'),
-  );
-  if (!hasDigilockerDoc) {
-    throw new AppError('Please verify at least one document with DigiLocker before submitting.', 400);
-  }
+  await db.Document.findAll({ where: { applicationId: app.id } });
+  // Student completes DigiLocker verification and submits from the student portal.
   const previousStatus = app.status;
   app.status = 'submitted';
   await app.save();
@@ -642,6 +634,19 @@ export const createAgentDocument = async (
   }
 
   const fileUrl = file.path.replace(/\\/g, '/');
+  const rawType = (opts.documentType || 'general').trim();
+  const { normalizeDocumentType, isDigilockerImportableType, DOCUMENT_TYPE_LABELS } = await import(
+    '../src/modules/document-verification/document-types'
+  );
+  const { isDigilockerConfigured } = await import('../src/modules/digilocker/digilocker.config');
+  const normalizedType = normalizeDocumentType(rawType);
+  if (isDigilockerConfigured() && isDigilockerImportableType(normalizedType)) {
+    throw new AppError(
+      `${DOCUMENT_TYPE_LABELS[normalizedType] || normalizedType} must be verified by the student via DigiLocker after they log in. Academic certificates cannot be uploaded manually.`,
+      400,
+    );
+  }
+
   return db.Document.create({
     studentProfileId: appRow.studentId,
     applicationId: appRow.id,

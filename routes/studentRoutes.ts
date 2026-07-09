@@ -43,6 +43,7 @@ import {
   getDigilockerAuthUrlHandler,
   getDigilockerStatusHandler,
   importDigilockerDocumentHandler,
+  importAllDigilockerDocumentsHandler,
   listDigilockerDocumentsHandler,
 } from '../src/modules/digilocker/digilocker.controller';
 import {
@@ -163,6 +164,7 @@ studentRouter
   .get('/digilocker/auth-url', requirePermission('applications', 'edit'), getDigilockerAuthUrlHandler)
   .get('/digilocker/documents', requirePermission('applications', 'view'), listDigilockerDocumentsHandler)
   .post('/digilocker/import', requirePermission('applications', 'edit'), importDigilockerDocumentHandler)
+  .post('/digilocker/import-all', requirePermission('applications', 'edit'), importAllDigilockerDocumentsHandler)
   .delete('/digilocker/disconnect', requirePermission('applications', 'edit'), disconnectDigilockerHandler);
 
 export default studentRouter;

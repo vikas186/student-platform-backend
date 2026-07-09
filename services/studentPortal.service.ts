@@ -283,7 +283,7 @@ export const submitStudentApplication = async (studentProfileId: number, idOrRef
 
   const docs = await db.Document.findAll({ where: { applicationId: app.id } });
   if (docs.length === 0) {
-    throw new AppError('Please upload documents before submitting the application.', 400);
+    throw new AppError('Please sign in to DigiLocker and import your academic documents before submitting.', 400);
   }
 
   const connection = await db.DigiLockerConnection.findByPk(sp.userId);
@@ -418,6 +418,7 @@ export const createStudentDocument = async (
   const {
     isVerificationDocumentType,
     normalizeDocumentType,
+    DOCUMENT_TYPE_LABELS,
   } = await import('../src/modules/document-verification/document-types');
 
   const rawType = opts.documentType?.trim();
@@ -425,6 +426,17 @@ export const createStudentDocument = async (
     validateVerificationDocumentType(rawType);
   }
   const normalizedType = normalizeDocumentType(rawType);
+
+  const { isDigilockerImportableType } = await import(
+    '../src/modules/document-verification/document-types'
+  );
+  const { isDigilockerConfigured } = await import('../src/modules/digilocker/digilocker.config');
+  if (isDigilockerConfigured() && isDigilockerImportableType(normalizedType)) {
+    throw new AppError(
+      `${DOCUMENT_TYPE_LABELS[normalizedType] || normalizedType} must be imported from DigiLocker. Connect your DigiLocker account and import the document — manual upload is not allowed for government-issued certificates.`,
+      400,
+    );
+  }
 
   const fileUrl = file.path.replace(/\\/g, '/');
   const doc = await db.Document.create({
