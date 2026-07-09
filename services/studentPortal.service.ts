@@ -287,53 +287,64 @@ export const submitStudentApplication = async (studentProfileId: number, idOrRef
   }
 
   const connection = await db.DigiLockerConnection.findByPk(sp.userId);
-  if (!connection) {
-    throw new AppError('Please connect your DigiLocker account and verify your documents before submitting.', 400);
-  }
+  const hasDigilockerDoc = docs.some(
+    d => d.status === 'verified' && d.fileUrl && d.fileUrl.includes('digilocker'),
+  );
 
   const { listDigilockerIssuedDocuments, mapDigilockerDocType } = await import(
     '../src/modules/digilocker/digilocker.service'
   );
 
-  let issuedDocs: any[] = [];
-  try {
-    issuedDocs = await listDigilockerIssuedDocuments(sp.userId);
-  } catch (err: any) {
-    throw new AppError(`Failed to fetch DigiLocker documents: ${err.message || err}`, 400);
-  }
-
-  const verifiableTypesInDigilocker = new Set(
-    issuedDocs.map(d => mapDigilockerDocType(d.doctype, d.description || d.name))
-  );
-
-  const hasDigilockerDoc = docs.some(
-    d => d.status === 'verified' && d.fileUrl && d.fileUrl.includes('digilocker'),
-  );
   if (!hasDigilockerDoc) {
+    if (!connection) {
+      throw new AppError('Please connect your DigiLocker account and verify your documents before submitting.', 400);
+    }
+    try {
+      await listDigilockerIssuedDocuments(sp.userId);
+    } catch (err: any) {
+      throw new AppError('Your DigiLocker session has expired or is invalid. Please reconnect your DigiLocker account and verify at least one document.', 400);
+    }
     throw new AppError('Please verify at least one document with DigiLocker before submitting.', 400);
   }
 
-  const uploadedDocTypes = new Set(docs.map(d => d.type));
-  const unverifiedVerifiableTypes: string[] = [];
+  if (connection) {
+    let issuedDocs: any[] = [];
+    let fetchFailed = false;
+    try {
+      issuedDocs = await listDigilockerIssuedDocuments(sp.userId);
+    } catch (err: any) {
+      fetchFailed = true;
+      console.warn(`[DigiLocker Submit Check] Failed to fetch DigiLocker documents for user ${sp.userId}: ${err.message || err}`);
+    }
 
-  for (const docType of uploadedDocTypes) {
-    if (verifiableTypesInDigilocker.has(docType)) {
-      const isVerified = docs.some(
-        d => d.type === docType && d.status === 'verified' && d.fileUrl && d.fileUrl.includes('digilocker')
+    if (!fetchFailed) {
+      const verifiableTypesInDigilocker = new Set(
+        issuedDocs.map(d => mapDigilockerDocType(d.doctype, d.description || d.name))
       );
-      if (!isVerified) {
-        unverifiedVerifiableTypes.push(docType);
+
+      const uploadedDocTypes = new Set(docs.map(d => d.type));
+      const unverifiedVerifiableTypes: string[] = [];
+
+      for (const docType of uploadedDocTypes) {
+        if (verifiableTypesInDigilocker.has(docType)) {
+          const isVerified = docs.some(
+            d => d.type === docType && d.status === 'verified' && d.fileUrl && d.fileUrl.includes('digilocker')
+          );
+          if (!isVerified) {
+            unverifiedVerifiableTypes.push(docType);
+          }
+        }
+      }
+
+      if (unverifiedVerifiableTypes.length > 0) {
+        const { DOCUMENT_TYPE_LABELS } = await import('../src/modules/document-verification/document-types');
+        const labels = unverifiedVerifiableTypes.map(t => DOCUMENT_TYPE_LABELS[t] || t);
+        throw new AppError(
+          `The following document(s) are available in your DigiLocker and must be verified: ${labels.join(', ')}. Please remove the manual uploads and import them from DigiLocker.`,
+          400
+        );
       }
     }
-  }
-
-  if (unverifiedVerifiableTypes.length > 0) {
-    const { DOCUMENT_TYPE_LABELS } = await import('../src/modules/document-verification/document-types');
-    const labels = unverifiedVerifiableTypes.map(t => DOCUMENT_TYPE_LABELS[t] || t);
-    throw new AppError(
-      `The following document(s) are available in your DigiLocker and must be verified: ${labels.join(', ')}. Please remove the manual uploads and import them from DigiLocker.`,
-      400
-    );
   }
 
   // Final guard at submit time: pin country to the university's country if the
