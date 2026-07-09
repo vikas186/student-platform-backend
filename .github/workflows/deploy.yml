@@ -78,6 +78,7 @@ jobs:
               set +a
               PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -U "$DB_USERNAME" -d "$DB_NAME" -p "${DB_PORT:-5432}" -f migrations/017_email_verification.sql || true
               PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -U "$DB_USERNAME" -d "$DB_NAME" -p "${DB_PORT:-5432}" -f migrations/018_agent_agreement_email_sent.sql || true
+              PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -U "$DB_USERNAME" -d "$DB_NAME" -p "${DB_PORT:-5432}" -f migrations/019_agent_agreement_reminders.sql || true
             fi
             if pm2 describe enroll-api >/dev/null 2>&1; then
               pm2 reload ecosystem.config.cjs --env "$DEPLOY_ENV" --update-env

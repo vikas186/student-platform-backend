@@ -16,6 +16,10 @@ export default (sequelize: Sequelize) => {
     declare signedAgreementUrl: string | null;
     declare agreementSentAt: Date | null;
     declare agreementEmailSentAt: Date | null;
+    declare agreementReminder1SentAt: Date | null;
+    declare agreementReminder2SentAt: Date | null;
+    declare agreementReminder3SentAt: Date | null;
+    declare agreementReminder4SentAt: Date | null;
     declare agreementUploadedAt: Date | null;
     declare agreementApprovedAt: Date | null;
     declare agreementApprovedByUserId: string | null;
@@ -77,6 +81,26 @@ export default (sequelize: Sequelize) => {
         type: DataTypes.DATE,
         allowNull: true,
         field: 'agreement_email_sent_at',
+      },
+      agreementReminder1SentAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: 'agreement_reminder_1_sent_at',
+      },
+      agreementReminder2SentAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: 'agreement_reminder_2_sent_at',
+      },
+      agreementReminder3SentAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: 'agreement_reminder_3_sent_at',
+      },
+      agreementReminder4SentAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: 'agreement_reminder_4_sent_at',
       },
       agreementUploadedAt: {
         type: DataTypes.DATE,

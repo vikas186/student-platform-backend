@@ -33,6 +33,8 @@
     "prod:scrape:cancel": "cross-env NODE_ENV=production ts-node scripts/cancel-active-scrape-jobs.ts",
     "migrate:agent-agreement-email": "cross-env NODE_ENV=development ts-node scripts/apply-agent-agreement-email-migration.ts",
     "prod:migrate:agent-agreement-email": "cross-env NODE_ENV=production ts-node scripts/apply-agent-agreement-email-migration.ts",
+    "migrate:agent-agreement-reminders": "cross-env NODE_ENV=development ts-node scripts/apply-agent-agreement-reminder-migration.ts",
+    "prod:migrate:agent-agreement-reminders": "cross-env NODE_ENV=production ts-node scripts/apply-agent-agreement-reminder-migration.ts",
     "sync:chat-knowledge": "cross-env NODE_ENV=development ts-node scripts/sync-chat-knowledge.ts",
     "prod:sync:chat-knowledge": "cross-env NODE_ENV=production ts-node scripts/sync-chat-knowledge.ts",
     "sync:recommendation-knowledge": "cross-env NODE_ENV=development ts-node scripts/sync-recommendation-knowledge.ts",

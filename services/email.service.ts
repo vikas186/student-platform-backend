@@ -9,6 +9,7 @@ import {
   appointmentReminderTemplate,
   applicationStatusTemplate,
   agentEmailVerificationTemplate,
+  agentAgreementReminderTemplate,
   agentPartnershipAgreementTemplate,
   passwordResetTemplate,
   promotionTemplate,
@@ -228,6 +229,37 @@ export const sendAgentEmailVerificationEmail = async (params: {
   const cfg = emailConfig();
   const tpl = agentEmailVerificationTemplate(cfg, params.name, params.verifyUrl);
   await sendMail({ to: params.to, subject: tpl.subject, html: tpl.html, text: tpl.text });
+};
+
+export const sendAgentAgreementReminderEmail = async (params: {
+  to: string;
+  name: string;
+  agencyName: string;
+  reminderLabel: string;
+  reminderNumber: number;
+  reupload: boolean;
+  pdfBuffer: Buffer;
+  fileName: string;
+}): Promise<void> => {
+  const cfg = emailConfig();
+  const loginUrl = `${cfg.frontendUrl}/login`;
+  const tpl = agentAgreementReminderTemplate(cfg, params.name, params.agencyName, loginUrl, {
+    reminderLabel: params.reminderLabel,
+    reminderNumber: params.reminderNumber,
+    reupload: params.reupload,
+  });
+  await sendMail({
+    to: params.to,
+    subject: tpl.subject,
+    html: tpl.html,
+    text: tpl.text,
+    attachments: [
+      {
+        filename: params.fileName,
+        content: params.pdfBuffer,
+      },
+    ],
+  });
 };
 
 export const sendAgentPartnershipAgreementEmail = async (params: {

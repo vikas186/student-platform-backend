@@ -5,6 +5,7 @@ import app from './app';
 import './config/database';
 import { registerScrapeCron } from './src/scheduler/scrape.cron';
 import { registerCounsellingReminderCron } from './src/scheduler/counselling-reminder.cron';
+import { registerAgentAgreementReminderCron } from './src/scheduler/agent-agreement-reminder.cron';
 import { registerNoticeCron } from './src/scheduler/notice.cron';
 import { colorizeText } from './utils/others';
 import { emailConfig, validateEmailConfig } from './config/email.config';
@@ -34,6 +35,7 @@ server.listen(PORT, () => {
   console.log(colorizeText(`Server Running on ${isStaging ? 'HTTPS' : 'HTTP'} on Port ${PORT}`, 'green', true));
   registerScrapeCron();
   registerCounsellingReminderCron();
+  registerAgentAgreementReminderCron();
   registerNoticeCron();
 
   const cfg = emailConfig();

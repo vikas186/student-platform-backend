@@ -105,6 +105,48 @@ export const agentEmailVerificationTemplate = (
   };
 };
 
+export const agentAgreementReminderTemplate = (
+  cfg: EmailConfig,
+  name: string,
+  agencyName: string,
+  loginUrl: string,
+  params: {
+    reminderNumber: number;
+    reminderLabel: string;
+    reupload: boolean;
+  },
+) => {
+  const action =
+    params.reupload
+      ? 're-upload the corrected signed PDF'
+      : 'sign the agreement and upload the signed PDF';
+  const urgency =
+    params.reminderNumber >= 4
+      ? 'This is our final reminder — your agent portal will remain locked until we receive the signed agreement.'
+      : params.reminderNumber >= 3
+        ? 'Please complete this step soon so we can activate your agent dashboard.'
+        : 'When you have a moment, please complete this onboarding step.';
+
+  const body = `
+    <p style="margin:0 0 12px;font-size:15px;line-height:1.6;color:#3d4f72;">Hi ${name},</p>
+    <p style="margin:0 0 12px;font-size:15px;line-height:1.6;color:#3d4f72;">
+      This is a ${params.reminderLabel} reminder that we are still waiting for the signed B2B Agent Partner Agreement for <strong>${agencyName}</strong>.
+    </p>
+    <p style="margin:0 0 12px;font-size:15px;line-height:1.6;color:#3d4f72;">
+      Please ${action} via the agent portal. The unsigned agreement PDF is attached for your convenience.
+    </p>
+    <p style="margin:0 0 12px;font-size:15px;line-height:1.6;color:#3d4f72;">${urgency}</p>
+    ${button(loginUrl, 'Sign in to agent portal')}
+  `;
+  const subjectPrefix =
+    params.reminderNumber >= 4 ? 'Final reminder' : `Reminder ${params.reminderNumber}`;
+  return {
+    subject: `${subjectPrefix}: ${cfg.brandName} partnership agreement — action required`,
+    html: layout(cfg, 'Partnership agreement reminder', body),
+    text: `Hi ${name},\n\n${subjectPrefix}: we are still waiting for the signed partnership agreement for ${agencyName}. Please ${action}: ${loginUrl}\n\nThe unsigned PDF is attached.`,
+  };
+};
+
 export const agentPartnershipAgreementTemplate = (
   cfg: EmailConfig,
   name: string,
