@@ -16,24 +16,15 @@ export const digilockerConfig = () => ({
   apiBase:
     process.env.DIGILOCKER_API_BASE?.trim() ||
     'https://digilocker.meripehchaan.gov.in/public/oauth2',
-  scope: process.env.DIGILOCKER_SCOPE?.trim() || 'openid files.issueddocs',
+  scope: process.env.DIGILOCKER_SCOPE?.trim() || 'avs_parent',
 });
 
-const REQUIRED_DIGILOCKER_SCOPES = ['files.issueddocs'] as const;
+/** True when the partner app is configured for issued-document APIs (files.issueddocs). */
+export const isDigilockerDocumentsImportEnabled = (): boolean =>
+  digilockerConfig().scope.includes('files.issueddocs');
 
 export const hasDigilockerDocumentScope = (scopes: string | null | undefined): boolean =>
   Boolean(scopes?.includes('files.issueddocs'));
-
-export const assertDigilockerDocumentScope = (): void => {
-  const scope = digilockerConfig().scope;
-  const missing = REQUIRED_DIGILOCKER_SCOPES.filter(s => !scope.includes(s));
-  if (missing.length > 0) {
-    throw new AppError(
-      `DigiLocker scope is missing "${missing.join('", "')}". Set DIGILOCKER_SCOPE=openid files.issueddocs, then disconnect and sign in again.`,
-      503,
-    );
-  }
-};
 
 export const isDigilockerConfigured = (): boolean => {
   const c = digilockerConfig();
@@ -44,6 +35,15 @@ export const assertDigilockerConfigured = (): void => {
   if (!isDigilockerConfigured()) {
     throw new AppError(
       'DigiLocker is not configured. Set DIGILOCKER_CLIENT_ID and DIGILOCKER_CLIENT_SECRET.',
+      503,
+    );
+  }
+};
+
+export const assertDigilockerDocumentsImportEnabled = (): void => {
+  if (!isDigilockerDocumentsImportEnabled()) {
+    throw new AppError(
+      'DigiLocker certificate import is not enabled for this partner app. The current integration only supports AVS (avs / avs_parent). Request files.issueddocs scope from the DigiLocker Partner Portal, or upload academic documents manually.',
       503,
     );
   }

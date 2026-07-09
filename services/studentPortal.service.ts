@@ -430,8 +430,14 @@ export const createStudentDocument = async (
   const { isDigilockerImportableType } = await import(
     '../src/modules/document-verification/document-types'
   );
-  const { isDigilockerConfigured } = await import('../src/modules/digilocker/digilocker.config');
-  if (isDigilockerConfigured() && isDigilockerImportableType(normalizedType)) {
+  const { isDigilockerConfigured, isDigilockerDocumentsImportEnabled } = await import(
+    '../src/modules/digilocker/digilocker.config'
+  );
+  if (
+    isDigilockerConfigured() &&
+    isDigilockerDocumentsImportEnabled() &&
+    isDigilockerImportableType(normalizedType)
+  ) {
     throw new AppError(
       `${DOCUMENT_TYPE_LABELS[normalizedType] || normalizedType} must be imported from DigiLocker. Connect your DigiLocker account and import the document — manual upload is not allowed for government-issued certificates.`,
       400,

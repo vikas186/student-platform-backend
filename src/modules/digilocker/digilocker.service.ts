@@ -8,10 +8,11 @@ import AppError from '../../../utils/errorHandler';
 import { encryptToken, decryptToken } from '../scheduling/token-crypto.util';
 import {
   assertDigilockerConfigured,
-  assertDigilockerDocumentScope,
+  assertDigilockerDocumentsImportEnabled,
   digilockerConfig,
   hasDigilockerDocumentScope,
   isDigilockerConfigured,
+  isDigilockerDocumentsImportEnabled,
 } from './digilocker.config';
 import type { DigiLockerIssuedDocument, DigiLockerOAuthState } from './digilocker.types';
 
@@ -52,7 +53,6 @@ export const verifyDigilockerOAuthState = (state: string): DigiLockerOAuthState 
 
 export const getDigilockerAuthUrl = (userId: string, applicationId: string): string => {
   assertDigilockerConfigured();
-  assertDigilockerDocumentScope();
   const cfg = digilockerConfig();
   const codeVerifier = createCodeVerifier();
   const state = createDigilockerOAuthState(userId, applicationId, codeVerifier);
@@ -180,6 +180,7 @@ const getValidAccessToken = async (userId: string): Promise<string> => {
 
 export const getDigilockerConnectionStatus = async (userId: string) => {
   const configured = isDigilockerConfigured();
+  const documentsImportEnabled = isDigilockerDocumentsImportEnabled();
   const row = await db.DigiLockerConnection.findByPk(userId);
   if (!row) {
     return {
@@ -188,7 +189,8 @@ export const getDigilockerConnectionStatus = async (userId: string) => {
       digilockerName: null,
       connectedAt: null,
       grantedScopes: null,
-      documentsAccessGranted: false,
+      documentsImportEnabled,
+      documentsAccessGranted: null,
     };
   }
   return {
@@ -197,7 +199,9 @@ export const getDigilockerConnectionStatus = async (userId: string) => {
     digilockerName: (row.getDataValue('digilockerName') as string | null) ?? null,
     connectedAt: row.getDataValue('connectedAt')?.toISOString?.() ?? null,
     grantedScopes: (row.getDataValue('scopes') as string | null) ?? null,
+    documentsImportEnabled,
     documentsAccessGranted: (() => {
+      if (!documentsImportEnabled) return false;
       const scopes = row.getDataValue('scopes') as string | null;
       return scopes ? hasDigilockerDocumentScope(scopes) : null;
     })(),
@@ -213,7 +217,7 @@ const mapDigilockerApiError = (err: any, action: string): AppError => {
   const errorCode = String(err.response?.data?.error ?? '').toLowerCase();
   if (status === 403 || errorCode === 'insufficient_scope') {
     return new AppError(
-      'DigiLocker access token cannot read issued documents. Set DIGILOCKER_SCOPE=openid files.issueddocs, click Switch account, and sign in again.',
+      'DigiLocker denied access to issued documents. Your partner app may only have AVS scope (avs / avs_parent). Request files.issueddocs from the DigiLocker Partner Portal, or upload documents manually.',
       403,
     );
   }
@@ -230,13 +234,13 @@ const mapDigilockerApiError = (err: any, action: string): AppError => {
 
 export const listDigilockerIssuedDocuments = async (userId: string): Promise<DigiLockerIssuedDocument[]> => {
   assertDigilockerConfigured();
-  assertDigilockerDocumentScope();
+  assertDigilockerDocumentsImportEnabled();
 
   const row = await db.DigiLockerConnection.findByPk(userId);
   const grantedScopes = (row?.getDataValue('scopes') as string | null) ?? null;
   if (grantedScopes && !hasDigilockerDocumentScope(grantedScopes)) {
     throw new AppError(
-      'DigiLocker is connected without document permission. Click Switch account and sign in again to allow certificate import.',
+      'DigiLocker is connected without certificate import permission. Your partner credentials only support AVS verification. Upload academic documents manually, or upgrade the DigiLocker partner app to include files.issueddocs.',
       403,
     );
   }

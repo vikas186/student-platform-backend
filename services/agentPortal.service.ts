@@ -638,9 +638,15 @@ export const createAgentDocument = async (
   const { normalizeDocumentType, isDigilockerImportableType, DOCUMENT_TYPE_LABELS } = await import(
     '../src/modules/document-verification/document-types'
   );
-  const { isDigilockerConfigured } = await import('../src/modules/digilocker/digilocker.config');
+  const { isDigilockerConfigured, isDigilockerDocumentsImportEnabled } = await import(
+    '../src/modules/digilocker/digilocker.config'
+  );
   const normalizedType = normalizeDocumentType(rawType);
-  if (isDigilockerConfigured() && isDigilockerImportableType(normalizedType)) {
+  if (
+    isDigilockerConfigured() &&
+    isDigilockerDocumentsImportEnabled() &&
+    isDigilockerImportableType(normalizedType)
+  ) {
     throw new AppError(
       `${DOCUMENT_TYPE_LABELS[normalizedType] || normalizedType} must be verified by the student via DigiLocker after they log in. Academic certificates cannot be uploaded manually.`,
       400,
