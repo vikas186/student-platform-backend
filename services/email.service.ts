@@ -51,14 +51,28 @@ const sendViaApi = async (options: {
 }): Promise<void> => {
   const cfg = emailConfig();
   const client = getBrevoClient();
-  await client.transactionalEmails.sendTransacEmail({
-    subject: options.subject,
-    htmlContent: options.html,
-    textContent: options.text,
-    sender: { name: cfg.fromName, email: cfg.from },
-    to: [{ email: options.to }],
-    ...(options.attachments?.length ? { attachment: options.attachments } : {}),
-  });
+  try {
+    await client.transactionalEmails.sendTransacEmail({
+      subject: options.subject,
+      htmlContent: options.html,
+      textContent: options.text,
+      sender: { name: cfg.fromName, email: cfg.from },
+      to: [{ email: options.to }],
+      ...(options.attachments?.length ? { attachment: options.attachments } : {}),
+    });
+  } catch (err: unknown) {
+    const detail =
+      err && typeof err === 'object' && 'response' in err
+        ? JSON.stringify(
+            (err as { response?: { body?: unknown; data?: unknown } }).response?.body ??
+              (err as { response?: { data?: unknown } }).response?.data,
+          )
+        : err instanceof Error
+          ? err.message
+          : String(err);
+    console.error(`[email] Brevo API error → ${options.to}:`, detail);
+    throw err;
+  }
 };
 
 const sendViaSmtp = async (options: Mail.Options): Promise<void> => {
@@ -106,8 +120,6 @@ const sendMail = async (options: Mail.Options): Promise<void> => {
   console.log(`[email] sent via Brevo SMTP → ${to} (${options.subject})`);
   return result;
 };
-
-/** Fire-and-forget wrapper — never blocks API responses on email failures. */
 export const dispatchEmail = (task: () => Promise<void>, context: string): void => {
   void task().catch(err => {
     const msg = err instanceof Error ? err.message : String(err);

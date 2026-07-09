@@ -53,7 +53,7 @@ jobs:
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           port: ${{ secrets.DEPLOY_PORT || 22 }}
-          source: "dist,package.json,package-lock.json,ecosystem.config.cjs,assets"
+          source: "dist,package.json,package-lock.json,ecosystem.config.cjs,assets,migrations"
           target: ${{ secrets.DEPLOY_PATH }}
           strip_components: 0
 
@@ -71,6 +71,14 @@ jobs:
             mkdir -p config logs uploads debug raw
             export PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
             npm ci --omit=dev
+            if command -v psql >/dev/null 2>&1 && [ -f "config/.env.$DEPLOY_ENV" ]; then
+              set -a
+              # shellcheck disable=SC1090
+              . "config/.env.$DEPLOY_ENV"
+              set +a
+              PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -U "$DB_USERNAME" -d "$DB_NAME" -p "${DB_PORT:-5432}" -f migrations/017_email_verification.sql || true
+              PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -U "$DB_USERNAME" -d "$DB_NAME" -p "${DB_PORT:-5432}" -f migrations/018_agent_agreement_email_sent.sql || true
+            fi
             if pm2 describe enroll-api >/dev/null 2>&1; then
               pm2 reload ecosystem.config.cjs --env "$DEPLOY_ENV" --update-env
             else

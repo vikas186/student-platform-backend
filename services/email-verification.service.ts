@@ -5,7 +5,6 @@ import type { UserRole } from '../models/User.model';
 import { generateOpaqueRefreshToken } from './token.service';
 import {
   buildEmailVerificationUrl,
-  dispatchEmail,
   sendAgentEmailVerificationEmail,
   sendStudentEmailVerificationOtpEmail,
 } from './email.service';
@@ -14,6 +13,20 @@ const OTP_EXPIRY_MS = 15 * 60 * 1000;
 const LINK_EXPIRY_MS = 24 * 60 * 60 * 1000;
 
 const generateOtp = (): string => String(crypto.randomInt(100000, 1000000));
+
+/** Verification emails must be awaited — signup/resend should fail visibly if Brevo is misconfigured. */
+const sendVerificationEmail = async (task: () => Promise<void>, context: string): Promise<void> => {
+  try {
+    await task();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[email] ${context} failed:`, msg);
+    throw new AppError(
+      'We could not send the verification email. Check that your email address is correct, try again in a few minutes, or use a different inbox (some disposable addresses are blocked).',
+      503,
+    );
+  }
+};
 
 const invalidateExistingTokens = async (userId: string) => {
   await db.EmailVerificationToken.update({ used: true }, { where: { userId, used: false } });
@@ -44,7 +57,7 @@ const issueStudentOtp = async (user: InstanceType<typeof db.User>) => {
     used: false,
     expiresAt,
   });
-  dispatchEmail(
+  await sendVerificationEmail(
     () =>
       sendStudentEmailVerificationOtpEmail({
         to: user.email,
@@ -53,6 +66,7 @@ const issueStudentOtp = async (user: InstanceType<typeof db.User>) => {
       }),
     'student email verification OTP',
   );
+  return otp;
 };
 
 const issueAgentLink = async (user: InstanceType<typeof db.User>) => {
@@ -68,7 +82,7 @@ const issueAgentLink = async (user: InstanceType<typeof db.User>) => {
     expiresAt,
   });
   const verifyUrl = buildEmailVerificationUrl(token);
-  dispatchEmail(
+  await sendVerificationEmail(
     () =>
       sendAgentEmailVerificationEmail({
         to: user.email,
@@ -82,13 +96,14 @@ const issueAgentLink = async (user: InstanceType<typeof db.User>) => {
 
 export const sendSignupVerificationEmail = async (user: InstanceType<typeof db.User>) => {
   const role = user.getDataValue('role') as UserRole;
+  const isDev = process.env.NODE_ENV === 'development';
   if (role === 'student') {
-    await issueStudentOtp(user);
-    return { method: 'otp' as const };
+    const otp = await issueStudentOtp(user);
+    return { method: 'otp' as const, ...(isDev ? { devOtp: otp } : {}) };
   }
   if (role === 'agent') {
-    await issueAgentLink(user);
-    return { method: 'link' as const };
+    const verifyUrl = await issueAgentLink(user);
+    return { method: 'link' as const, ...(isDev ? { devVerifyUrl: verifyUrl } : {}) };
   }
   return null;
 };
@@ -182,10 +197,12 @@ export const resendVerificationEmail = async (email: string) => {
     throw new AppError('This email is already verified. You can sign in.', 400);
   }
 
-  await sendSignupVerificationEmail(user);
+  const sent = await sendSignupVerificationEmail(user);
   return {
     message: 'Verification message sent',
     method: user.role === 'student' ? ('otp' as const) : ('link' as const),
+    ...(sent && 'devOtp' in sent && sent.devOtp ? { devOtp: sent.devOtp } : {}),
+    ...(sent && 'devVerifyUrl' in sent && sent.devVerifyUrl ? { devVerifyUrl: sent.devVerifyUrl } : {}),
     ...(process.env.NODE_ENV === 'development' ? { email: user.email } : {}),
   };
 };
