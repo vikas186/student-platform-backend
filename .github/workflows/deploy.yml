@@ -96,8 +96,11 @@ jobs:
               fi
             fi
             if ! ls "$HOME/.cache/ms-playwright"/chromium-* >/dev/null 2>&1; then
-              echo "[deploy] Installing Playwright Chromium for scraper worker (one-time)..."
-              PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0 npx playwright install chromium || true
+              echo "[deploy] Installing Playwright Chromium + system dependencies (one-time)..."
+              PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0 npx playwright install --with-deps chromium || true
+            elif ! ldconfig -p 2>/dev/null | grep -q libatk-1.0.so.0; then
+              echo "[deploy] Installing Playwright system dependencies for Chromium..."
+              npx playwright install-deps chromium || true
             fi
             for app in enroll-api enroll-scraper enroll-cleaner; do
               if pm2 describe "$app" >/dev/null 2>&1; then
