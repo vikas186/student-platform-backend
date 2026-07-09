@@ -131,6 +131,28 @@ const refreshTokenJoiSchema = {
     }),
 };
 
+const verifyStudentOtpJoiSchema = {
+  body: Joi.object({
+    email: Joi.string().email().required(),
+    otp: Joi.string().trim().length(6).pattern(/^\d+$/).required().messages({
+      'string.length': 'Verification code must be 6 digits',
+      'string.pattern.base': 'Verification code must contain only digits',
+    }),
+  }),
+};
+
+const verifyAgentEmailJoiSchema = {
+  body: Joi.object({
+    token: Joi.string().trim().min(32).max(256).required(),
+  }),
+};
+
+const resendEmailVerificationJoiSchema = {
+  body: Joi.object({
+    email: Joi.string().email().required(),
+  }),
+};
+
 /** Single signup: `student` requires phone + targetCountries; `agent` requires agency + primary market. */
 const adminSignupJoiSchema = {
   body: Joi.object({
@@ -265,4 +287,7 @@ export {
   roleBasedSignupJoiSchema,
   adminSignupJoiSchema,
   refreshTokenJoiSchema,
+  verifyStudentOtpJoiSchema,
+  verifyAgentEmailJoiSchema,
+  resendEmailVerificationJoiSchema,
 };

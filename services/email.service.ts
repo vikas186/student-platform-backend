@@ -8,8 +8,11 @@ import {
   appointmentConfirmationTemplate,
   appointmentReminderTemplate,
   applicationStatusTemplate,
+  agentEmailVerificationTemplate,
+  agentPartnershipAgreementTemplate,
   passwordResetTemplate,
   promotionTemplate,
+  studentEmailVerificationOtpTemplate,
   welcomeTemplate,
 } from './email.templates';
 
@@ -44,6 +47,7 @@ const sendViaApi = async (options: {
   subject: string;
   html: string;
   text?: string;
+  attachments?: { name: string; content: string }[];
 }): Promise<void> => {
   const cfg = emailConfig();
   const client = getBrevoClient();
@@ -53,6 +57,7 @@ const sendViaApi = async (options: {
     textContent: options.text,
     sender: { name: cfg.fromName, email: cfg.from },
     to: [{ email: options.to }],
+    ...(options.attachments?.length ? { attachment: options.attachments } : {}),
   });
 };
 
@@ -76,11 +81,22 @@ const sendMail = async (options: Mail.Options): Promise<void> => {
   if (!to) throw new Error('Email recipient (to) is required');
 
   if (cfg.mode === 'api') {
+    const attachments = Array.isArray(options.attachments)
+      ? options.attachments
+          .filter((a): a is { filename: string; content: Buffer } => {
+            return Boolean(a && typeof a === 'object' && 'filename' in a && Buffer.isBuffer(a.content));
+          })
+          .map(a => ({
+            name: a.filename,
+            content: a.content.toString('base64'),
+          }))
+      : undefined;
     await sendViaApi({
       to,
       subject: String(options.subject ?? ''),
       html: String(options.html ?? ''),
       text: options.text ? String(options.text) : undefined,
+      attachments,
     });
     console.log(`[email] sent via Brevo API → ${to} (${options.subject})`);
     return;
@@ -137,6 +153,16 @@ export const buildPasswordResetUrl = (token: string): string => {
   return `${cfg.frontendUrl}/reset-password?token=${encodeURIComponent(token)}`;
 };
 
+export const buildEmailVerificationUrl = (token: string): string => {
+  const cfg = emailConfig();
+  return `${cfg.frontendUrl}/verify-email?token=${encodeURIComponent(token)}`;
+};
+
+export const buildStudentVerifyEmailUrl = (email: string): string => {
+  const cfg = emailConfig();
+  return `${cfg.frontendUrl}/verify-email/student?email=${encodeURIComponent(email)}`;
+};
+
 export const buildLoginUrl = (): string => `${emailConfig().frontendUrl}/login`;
 
 export const buildStudentPortalUrl = (): string => `${emailConfig().frontendUrl}/student`;
@@ -154,6 +180,50 @@ export const sendPasswordResetEmail = async (params: {
   const cfg = emailConfig();
   const tpl = passwordResetTemplate(cfg, params.name, params.resetUrl);
   await sendMail({ to: params.to, subject: tpl.subject, html: tpl.html, text: tpl.text });
+};
+
+export const sendStudentEmailVerificationOtpEmail = async (params: {
+  to: string;
+  name: string;
+  otp: string;
+}): Promise<void> => {
+  const cfg = emailConfig();
+  const tpl = studentEmailVerificationOtpTemplate(cfg, params.name, params.otp);
+  await sendMail({ to: params.to, subject: tpl.subject, html: tpl.html, text: tpl.text });
+};
+
+export const sendAgentEmailVerificationEmail = async (params: {
+  to: string;
+  name: string;
+  verifyUrl: string;
+}): Promise<void> => {
+  const cfg = emailConfig();
+  const tpl = agentEmailVerificationTemplate(cfg, params.name, params.verifyUrl);
+  await sendMail({ to: params.to, subject: tpl.subject, html: tpl.html, text: tpl.text });
+};
+
+export const sendAgentPartnershipAgreementEmail = async (params: {
+  to: string;
+  name: string;
+  agencyName: string;
+  pdfBuffer: Buffer;
+  fileName: string;
+}): Promise<void> => {
+  const cfg = emailConfig();
+  const loginUrl = `${cfg.frontendUrl}/login`;
+  const tpl = agentPartnershipAgreementTemplate(cfg, params.name, params.agencyName, loginUrl);
+  await sendMail({
+    to: params.to,
+    subject: tpl.subject,
+    html: tpl.html,
+    text: tpl.text,
+    attachments: [
+      {
+        filename: params.fileName,
+        content: params.pdfBuffer,
+      },
+    ],
+  });
 };
 
 export const sendWelcomeEmail = async (params: {

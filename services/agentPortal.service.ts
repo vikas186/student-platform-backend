@@ -10,6 +10,7 @@ import { OFFER_LETTER_STATUSES } from '../models/OfferLetter.model';
 import { normalizeApplicationReference } from '../utils/applicationRef';
 import { normalizeOfferReference } from '../utils/offerRef';
 import { isUuid } from '../utils/isUuid';
+import { readAgentAgreementPdf, resolveAgentAgreementPdfPath } from './agent-agreement.service';
 
 const CHECKLIST_TYPES: { key: string; label: string }[] = [
   { key: 'passport_id', label: 'Passport / ID' },
@@ -141,6 +142,7 @@ export const createStudentForAgent = async (
       role: 'student',
       phone: body.phone?.trim() || null,
       status: true,
+      emailVerified: true,
     },
     { transaction: t },
   );
@@ -199,6 +201,7 @@ const buildAgreementSummary = (profile: InstanceType<typeof db.AgentProfile>) =>
   canUpload: profile.agreementStatus === 'pending' || profile.agreementStatus === 'rejected',
   portalUnlocked: profile.agreementStatus === 'approved',
   agreementSentAt: profile.agreementSentAt ?? null,
+  agreementEmailSentAt: profile.agreementEmailSentAt ?? null,
   signedAgreementUrl: profile.signedAgreementUrl ?? null,
   agreementUploadedAt: profile.agreementUploadedAt ?? null,
   agreementApprovedAt: profile.agreementApprovedAt ?? null,
@@ -209,6 +212,17 @@ const buildAgreementSummary = (profile: InstanceType<typeof db.AgentProfile>) =>
 export const getAgentAgreementStatus = async (userId: string) => {
   const profile = await requireAgentProfile(userId);
   return buildAgreementSummary(profile);
+};
+
+/** Download the unsigned B2B partnership agreement template (pending agents). */
+export const getAgentAgreementTemplateFile = async () => {
+  const filePath = resolveAgentAgreementPdfPath();
+  const buffer = readAgentAgreementPdf();
+  return {
+    filePath,
+    buffer,
+    fileName: path.basename(filePath),
+  };
 };
 
 /** Agent uploads the signed agreement PDF. Allowed only when status is `pending` or `rejected`. */

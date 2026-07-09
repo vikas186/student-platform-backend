@@ -21,6 +21,7 @@ export default (sequelize: Sequelize) => {
     declare role: UserRole;
     declare phone: string | null;
     declare status: boolean;
+    declare emailVerified: boolean;
     declare readonly createdAt: Date;
     declare readonly updatedAt: Date;
 
@@ -30,6 +31,11 @@ export default (sequelize: Sequelize) => {
       User.hasOne(models.UniversityProfile, { foreignKey: 'userId', as: 'universityProfile', onDelete: 'CASCADE' });
       User.hasMany(models.Token, { foreignKey: 'userId', onDelete: 'CASCADE' });
       User.hasMany(models.PasswordResetToken, { foreignKey: 'userId', as: 'resetTokens', onDelete: 'CASCADE' });
+      User.hasMany(models.EmailVerificationToken, {
+        foreignKey: 'userId',
+        as: 'emailVerificationTokens',
+        onDelete: 'CASCADE',
+      });
       User.hasMany(models.Payment, { foreignKey: 'userId', onDelete: 'CASCADE' });
       User.hasMany(models.Notification, { foreignKey: 'userId', onDelete: 'CASCADE' });
       User.hasMany(models.ActivityLog, { foreignKey: 'userId', onDelete: 'SET NULL' });
@@ -93,6 +99,11 @@ export default (sequelize: Sequelize) => {
       status: {
         type: DataTypes.BOOLEAN,
         defaultValue: true,
+      },
+      emailVerified: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+        allowNull: false,
       },
     },
     {

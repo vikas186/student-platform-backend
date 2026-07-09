@@ -13,6 +13,9 @@ import {
   deleteUser,
   forgotPassword,
   resetPassword,
+  verifyStudentEmailOtp,
+  verifyAgentEmail,
+  resendEmailVerification,
 } from '../controller/authController';
 import { jwtAuthMiddleware, verifyJwtToken } from '../middleware/jwtAuth';
 import { requirePermission } from '../middleware/requirePermission';
@@ -22,9 +25,12 @@ import {
   forgotPasswordJoiSchema,
   loginJoiSchema,
   refreshTokenJoiSchema,
+  resendEmailVerificationJoiSchema,
   resetPasswordJoiSchema,
   roleBasedSignupJoiSchema,
   universitySignupJoiSchema,
+  verifyAgentEmailJoiSchema,
+  verifyStudentOtpJoiSchema,
 } from '../validations/auth.validation';
 
 const authRouter: Router = Router();
@@ -42,6 +48,10 @@ authRouter
   .patch('/change-password', jwtAuthMiddleware(['all']), changePassword)
   .delete('/users/:userId', jwtAuthMiddleware(['admin']), requirePermission('users', 'delete'), deleteUser)
   .post('/forgot-password', validateMiddleware(forgotPasswordJoiSchema), forgotPassword)
+  .post('/verify-email/otp', validateMiddleware(verifyStudentOtpJoiSchema), verifyStudentEmailOtp)
+  .post('/verify-email', validateMiddleware(verifyAgentEmailJoiSchema), verifyAgentEmail)
+  .get('/verify-email', verifyAgentEmail)
+  .post('/resend-verification', validateMiddleware(resendEmailVerificationJoiSchema), resendEmailVerification)
   .post('/reset-password', validateMiddleware(resetPasswordJoiSchema), verifyJwtToken, resetPassword);
 
 export default authRouter;

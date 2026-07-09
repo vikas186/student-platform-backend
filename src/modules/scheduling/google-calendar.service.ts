@@ -53,13 +53,13 @@ export const createCalendarEvent = async (
   const res = await calendar.events.insert({
     calendarId,
     conferenceDataVersion: 1,
-    sendUpdates: 'all',
+    sendUpdates: 'externalOnly',
     requestBody: {
       summary: title,
       description: `Scheduled via ${BRAND_NAME} platform (${input.type.replace('_', ' ')}).`,
       start: { dateTime: input.startsAt.toISOString(), timeZone: input.timezone },
       end: { dateTime: input.endsAt.toISOString(), timeZone: input.timezone },
-      attendees: [{ email: input.studentEmail }, { email: input.adminEmail }],
+      attendees: [{ email: input.studentEmail }],
       conferenceData: {
         createRequest: {
           requestId: `uniwizer-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
@@ -94,7 +94,7 @@ export const updateCalendarEventTimes = async (
     calendarId,
     eventId,
     conferenceDataVersion: 1,
-    sendUpdates: 'all',
+    sendUpdates: 'externalOnly',
     requestBody: {
       start: { dateTime: startsAt.toISOString(), timeZone: timezone },
       end: { dateTime: endsAt.toISOString(), timeZone: timezone },
@@ -109,5 +109,5 @@ export const updateCalendarEventTimes = async (
 
 export const deleteCalendarEvent = async (adminUserId: string, eventId: string): Promise<void> => {
   const { calendar, calendarId } = await calendarApi(adminUserId);
-  await calendar.events.delete({ calendarId, eventId, sendUpdates: 'all' });
+  await calendar.events.delete({ calendarId, eventId, sendUpdates: 'externalOnly' });
 };

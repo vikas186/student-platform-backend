@@ -32,6 +32,7 @@ import {
   globalSearch,
   getAgreementStatus,
   uploadAgreement,
+  downloadAgreementTemplate,
   requireAgreementApproved,
 } from '../controller/agentController';
 import { jwtAuthMiddleware } from '../middleware/jwtAuth';
@@ -68,6 +69,7 @@ agentRouter.use(jwtAuthMiddleware(['agent']));
  */
 agentRouter
   .get('/agreement', getAgreementStatus)
+  .get('/agreement/template', downloadAgreementTemplate)
   .post('/agreement/signed', agentAgreementUpload.single('file'), uploadAgreement);
 
 /**

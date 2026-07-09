@@ -5,6 +5,7 @@ import {
   formatAppointmentWhen,
   sendAppointmentReminderEmail,
 } from '../../../services/email.service';
+import { getHostAdminDetails } from './host-admin.util';
 
 type ReminderKind = '24h' | '1h';
 
@@ -44,12 +45,15 @@ export const processCounsellingReminders = async (): Promise<{ sent: number }> =
         startsAt: Date;
         timezone: string;
         meetLink?: string | null;
+        hostAdminUserId: string;
         studentUser?: { name?: string; email?: string };
         hostAdmin?: { name?: string; email?: string };
       };
 
       const when = formatAppointmentWhen(new Date(plain.startsAt), plain.timezone);
       const label = sessionLabel(plain.type);
+      const hostDetails = await getHostAdminDetails(plain.hostAdminUserId);
+      const hostEmail = hostDetails.counsellorEmail || plain.hostAdmin?.email;
 
       const recipients: { name: string; email: string; context: string }[] = [];
       if (plain.studentUser?.email) {
@@ -59,10 +63,10 @@ export const processCounsellingReminders = async (): Promise<{ sent: number }> =
           context: `reminder ${kind} student`,
         });
       }
-      if (plain.hostAdmin?.email) {
+      if (hostEmail) {
         recipients.push({
-          name: plain.hostAdmin.name?.trim() || 'there',
-          email: plain.hostAdmin.email,
+          name: hostDetails.counsellorName || plain.hostAdmin?.name?.trim() || 'there',
+          email: hostEmail,
           context: `reminder ${kind} host`,
         });
       }

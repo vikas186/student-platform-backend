@@ -14,6 +14,10 @@ import {
   dispatchEmail,
   sendPasswordResetEmail,
 } from './email.service';
+import {
+  assertEmailVerifiedForLogin,
+  sendSignupVerificationEmail,
+} from './email-verification.service';
 
 type SignupStudentBody = {
   fullName: string;
@@ -38,6 +42,7 @@ const signupStudent = async (body: SignupStudentBody) => {
     role: 'student',
     phone,
     status: true,
+    emailVerified: false,
   });
 
   await db.StudentProfile.create({
@@ -46,6 +51,8 @@ const signupStudent = async (body: SignupStudentBody) => {
     preferredCountry: null,
     targetCountries: body.targetCountries,
   });
+
+  await sendSignupVerificationEmail(user);
 
   return user.toSafeObject();
 };
@@ -74,6 +81,7 @@ const signupAgent = async (body: SignupAgentBody) => {
     role: 'agent',
     phone,
     status: true,
+    emailVerified: false,
   });
 
   await db.AgentProfile.create({
@@ -87,6 +95,8 @@ const signupAgent = async (body: SignupAgentBody) => {
     agreementStatus: 'pending',
     agreementSentAt: new Date(),
   });
+
+  await sendSignupVerificationEmail(user);
 
   return user.toSafeObject();
 };
@@ -141,6 +151,7 @@ const createUniversityPortalUser = async (params: {
     role: 'university',
     phone: null,
     status: true,
+    emailVerified: true,
   });
   await db.UniversityProfile.create({
     userId: user.id,
@@ -261,6 +272,7 @@ const loginService = async (email: any, password: any) => {
   if (!user.status) {
     throw new AppError('You are not allowed to login', 400);
   }
+  assertEmailVerifiedForLogin(user);
 
   return createAuthSession(user);
 };
@@ -308,6 +320,7 @@ const signupAdmin = async (body: SignupAdminBody) => {
     role: 'admin',
     phone: null,
     status: true,
+    emailVerified: true,
   });
 
   return user.toSafeObject();
@@ -364,6 +377,7 @@ const refreshSessionService = async (refreshToken: string) => {
   if (!user || !user.getDataValue('status')) {
     throw new AppError('Invalid or expired refresh token', 401);
   }
+  assertEmailVerifiedForLogin(user);
 
   const newAccess = await generateToken(user);
   const newRefreshExpiresAt = new Date(Date.now() + refreshTtlMs());

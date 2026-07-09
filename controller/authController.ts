@@ -7,6 +7,12 @@ import dbServices from '../services/db.services';
 import AppError from '../utils/errorHandler';
 import { isUuid } from '../utils/isUuid';
 import { dispatchEmail, sendWelcomeEmail } from '../services/email.service';
+import {
+  resendVerificationEmail,
+  verifyAgentEmailLink,
+  verifyStudentOtp,
+} from '../services/email-verification.service';
+import { dispatchPartnershipAgreementIfNeeded } from '../services/agent-agreement.service';
 
 const dispatchWelcomeEmail = (user: Record<string, unknown>, role: 'student' | 'agent' | 'university' | 'admin') => {
   const email = typeof user.email === 'string' ? user.email : '';
@@ -20,17 +26,20 @@ const signup = catchAsyncError(async (req: Request, res: Response) => {
   const role = req.body.role as string;
   const message =
     role === 'agent'
-      ? 'Agent account created successfully'
+      ? 'Agent account created. Check your email for a verification link before signing in.'
       : role === 'university'
         ? 'University account created successfully'
-        : 'Student account created successfully';
-  if (role === 'agent' || role === 'university' || role === 'student') {
+        : 'Student account created. Check your email for a verification code before signing in.';
+  if (role === 'university') {
     dispatchWelcomeEmail(user as Record<string, unknown>, role);
   }
   res.status(201).json({
     success: true,
     message,
-    data: { user },
+    data: {
+      user,
+      requiresEmailVerification: role === 'student' || role === 'agent',
+    },
   });
 });
 
@@ -171,6 +180,47 @@ const resetPassword = catchAsyncError(async (req: Request, res: Response) => {
   });
 });
 
+const verifyStudentEmailOtp = catchAsyncError(async (req: Request, res: Response) => {
+  const { email, otp } = req.body;
+  const result = await verifyStudentOtp(email, otp);
+  if (!result.alreadyVerified) {
+    dispatchWelcomeEmail(result.user as Record<string, unknown>, 'student');
+  }
+  res.status(200).json({
+    success: true,
+    message: result.alreadyVerified
+      ? 'Email is already verified. You can sign in.'
+      : 'Email verified successfully. You can sign in now.',
+    data: result.user,
+  });
+});
+
+const verifyAgentEmail = catchAsyncError(async (req: Request, res: Response) => {
+  const token = req.body.token ?? req.query.token;
+  const result = await verifyAgentEmailLink(String(token ?? ''));
+  if (!result.alreadyVerified) {
+    dispatchWelcomeEmail(result.user as Record<string, unknown>, 'agent');
+    const userId = typeof result.user.id === 'string' ? result.user.id : '';
+    if (userId) dispatchPartnershipAgreementIfNeeded(userId);
+  }
+  res.status(200).json({
+    success: true,
+    message: result.alreadyVerified
+      ? 'Email is already verified. You can sign in.'
+      : 'Email verified successfully. You can sign in now.',
+    data: result.user,
+  });
+});
+
+const resendEmailVerification = catchAsyncError(async (req: Request, res: Response) => {
+  const result = await resendVerificationEmail(req.body.email);
+  res.status(200).json({
+    success: true,
+    message: result.message,
+    data: result,
+  });
+});
+
 const deleteUser = catchAsyncError(async (req: Request, res: Response) => {
   const { userId } = req.params;
   if (!isUuid(userId)) {
@@ -198,4 +248,7 @@ export {
   resetPassword,
   deleteUser,
   logoutAllDevices,
+  verifyStudentEmailOtp,
+  verifyAgentEmail,
+  resendEmailVerification,
 };

@@ -69,6 +69,15 @@ export const uploadAgreement = catchAsyncError(async (req: Request, res: Respons
   });
 });
 
+export const downloadAgreementTemplate = catchAsyncError(async (req: Request, res: Response) => {
+  const user: any = req.user;
+  await agentPortal.getAgentAgreementStatus(user.id);
+  const { buffer, fileName } = await agentPortal.getAgentAgreementTemplateFile();
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="${fileName.replace(/"/g, '')}"`);
+  res.send(buffer);
+});
+
 /**
  * Gate middleware for the rest of the agent portal — must run AFTER the agreement
  * endpoints so the agent can still see status / upload while the gate is active.

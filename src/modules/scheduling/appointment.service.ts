@@ -40,6 +40,18 @@ type AppointmentRow = {
   googleEventId?: string | null;
 };
 
+const assertValidBookingEmail = (email: string) => {
+  const norm = String(email).trim().toLowerCase();
+  const domain = norm.split('@')[1] ?? '';
+  if (!domain || !domain.includes('.')) {
+    throw new AppError('Please use a valid email address on your profile before booking.', 400);
+  }
+  const blocked = ['localhost', 'example.com', 'example.org', 'test', 'invalid'];
+  if (blocked.includes(domain) || domain.endsWith('.local') || domain.endsWith('.test')) {
+    throw new AppError('Please use a valid email address on your profile before booking.', 400);
+  }
+};
+
 const toSummary = (
   row: AppointmentRow,
   host?: { counsellorName: string; counsellorEmail: string; counsellorTitle: string },
@@ -215,6 +227,10 @@ export const bookAppointment = async (
   const hostAdminUserId = await resolveHostAdminUserId();
   const hostAdmin = await db.User.findByPk(hostAdminUserId);
   if (!hostAdmin) throw new AppError('Host admin not found', 503);
+  const hostDetails = await getHostAdminDetails(hostAdminUserId);
+  const hostEmail = hostDetails.counsellorEmail || hostAdmin.email;
+
+  assertValidBookingEmail(student.email);
 
   await assertSlotAvailable(hostAdminUserId, startsAt, endsAt);
 
@@ -288,8 +304,8 @@ export const bookAppointment = async (
   dispatchEmail(
     () =>
       sendAppointmentConfirmationEmail({
-        to: hostAdmin.email,
-        name: hostAdmin.name,
+        to: hostEmail,
+        name: hostDetails.counsellorName || hostAdmin.name,
         sessionLabel: `${label} with ${student.name}`,
         whenLabel: when,
         meetLink,
@@ -297,7 +313,6 @@ export const bookAppointment = async (
     'appointment confirmation (host)',
   );
 
-  const hostDetails = await getHostAdminDetails(hostAdminUserId);
   return toSummary(row.get({ plain: true }) as AppointmentRow, hostDetails);
 };
 
@@ -312,6 +327,8 @@ export const cancelAppointment = async (userId: string, appointmentId: string) =
 
   const student = await db.User.findByPk(row.studentUserId);
   const hostAdmin = await db.User.findByPk(row.hostAdminUserId);
+  const hostDetails = hostAdmin ? await getHostAdminDetails(row.hostAdminUserId) : undefined;
+  const hostEmail = hostDetails?.counsellorEmail || hostAdmin?.email;
   const label = row.type === 'counselling' ? 'Counselling' : 'Mock interview';
   const when = formatAppointmentWhen(row.startsAt, row.timezone);
 
@@ -337,12 +354,12 @@ export const cancelAppointment = async (userId: string, appointmentId: string) =
       'appointment cancelled (student)',
     );
   }
-  if (hostAdmin?.email) {
+  if (hostEmail) {
     dispatchEmail(
       () =>
         sendAppointmentCancelledEmail({
-          to: hostAdmin.email,
-          name: hostAdmin.name,
+          to: hostEmail,
+          name: hostDetails?.counsellorName || hostAdmin?.name || 'Counsellor',
           sessionLabel: `${label} with ${student?.name ?? 'student'}`,
           whenLabel: when,
         }),
@@ -350,7 +367,6 @@ export const cancelAppointment = async (userId: string, appointmentId: string) =
     );
   }
 
-  const hostDetails = await getHostAdminDetails(row.hostAdminUserId);
   return toSummary(row.get({ plain: true }) as AppointmentRow, hostDetails);
 };
 

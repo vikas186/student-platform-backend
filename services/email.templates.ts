@@ -47,6 +47,67 @@ export const passwordResetTemplate = (cfg: EmailConfig, name: string, resetUrl: 
   };
 };
 
+export const studentEmailVerificationOtpTemplate = (cfg: EmailConfig, name: string, otp: string) => {
+  const body = `
+    <p style="margin:0 0 12px;font-size:15px;line-height:1.6;color:#3d4f72;">Hi ${name},</p>
+    <p style="margin:0 0 12px;font-size:15px;line-height:1.6;color:#3d4f72;">
+      Use this one-time code to verify your student account on ${cfg.brandName}. It expires in 15 minutes.
+    </p>
+    <p style="margin:20px 0;font-size:28px;font-weight:700;letter-spacing:0.35em;color:#1a2b5e;text-align:center;">${otp}</p>
+    <p style="margin:0;font-size:13px;line-height:1.5;color:#6b7a9a;">
+      If you did not create this account, you can ignore this email.
+    </p>
+  `;
+  return {
+    subject: `Verify your ${cfg.brandName} student account`,
+    html: layout(cfg, 'Verify your email', body),
+    text: `Hi ${name},\n\nYour verification code is ${otp}. It expires in 15 minutes.`,
+  };
+};
+
+export const agentEmailVerificationTemplate = (
+  cfg: EmailConfig,
+  name: string,
+  verifyUrl: string,
+) => {
+  const body = `
+    <p style="margin:0 0 12px;font-size:15px;line-height:1.6;color:#3d4f72;">Hi ${name},</p>
+    <p style="margin:0 0 12px;font-size:15px;line-height:1.6;color:#3d4f72;">
+      Confirm your agent account on ${cfg.brandName} by clicking the button below. This link expires in 24 hours.
+    </p>
+    ${button(verifyUrl, 'Verify email address')}
+    <p style="margin:16px 0 0;font-size:13px;line-height:1.5;color:#6b7a9a;word-break:break-all;">${verifyUrl}</p>
+  `;
+  return {
+    subject: `Verify your ${cfg.brandName} agent account`,
+    html: layout(cfg, 'Verify your email', body),
+    text: `Hi ${name},\n\nVerify your agent account: ${verifyUrl}\n\nThis link expires in 24 hours.`,
+  };
+};
+
+export const agentPartnershipAgreementTemplate = (
+  cfg: EmailConfig,
+  name: string,
+  agencyName: string,
+  loginUrl: string,
+) => {
+  const body = `
+    <p style="margin:0 0 12px;font-size:15px;line-height:1.6;color:#3d4f72;">Hi ${name},</p>
+    <p style="margin:0 0 12px;font-size:15px;line-height:1.6;color:#3d4f72;">
+      Welcome to the ${cfg.brandName} agent network. Attached is the <strong>B2B Agent Partner Agreement</strong> for <strong>${agencyName}</strong>.
+    </p>
+    <p style="margin:0 0 12px;font-size:15px;line-height:1.6;color:#3d4f72;">
+      Please sign where indicated, then sign in to the agent portal and upload the signed PDF to unlock your dashboard.
+    </p>
+    ${button(loginUrl, 'Sign in to agent portal')}
+  `;
+  return {
+    subject: `${cfg.brandName} partnership agreement — action required`,
+    html: layout(cfg, 'Partnership agreement', body),
+    text: `Hi ${name},\n\nPlease find the B2B Agent Partner Agreement attached for ${agencyName}. Sign and upload the signed copy via the agent portal: ${loginUrl}`,
+  };
+};
+
 export const welcomeTemplate = (
   cfg: EmailConfig,
   name: string,

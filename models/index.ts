@@ -23,6 +23,7 @@ import ChatFeedbackModel from './ChatFeedback.model';
 import TokenModel from './Token.model';
 import ErrorLogModel from './ErrorLog.model';
 import PasswordResetTokenModel from './PasswordResetToken.model';
+import EmailVerificationTokenModel from './EmailVerificationToken.model';
 import RolePermissionModel from './RolePermission.model';
 import ScrapeJobModel from './ScrapeJob.model';
 import RawScrapeBatchModel from './RawScrapeBatch.model';
@@ -69,6 +70,7 @@ interface Db {
   Token: ReturnType<typeof TokenModel>;
   ErrorLogs: ReturnType<typeof ErrorLogModel>;
   PasswordResetToken: ReturnType<typeof PasswordResetTokenModel>;
+  EmailVerificationToken: ReturnType<typeof EmailVerificationTokenModel>;
   RolePermission: ReturnType<typeof RolePermissionModel>;
   ScrapeJob: ReturnType<typeof ScrapeJobModel>;
   RawScrapeBatch: ReturnType<typeof RawScrapeBatchModel>;
@@ -119,6 +121,7 @@ const db: Db = {
   Token: TokenModel(sequelize),
   ErrorLogs: ErrorLogModel(sequelize),
   PasswordResetToken: PasswordResetTokenModel(sequelize),
+  EmailVerificationToken: EmailVerificationTokenModel(sequelize),
   RolePermission: RolePermissionModel(sequelize),
   ScrapeJob: ScrapeJobModel(sequelize),
   RawScrapeBatch: RawScrapeBatchModel(sequelize),

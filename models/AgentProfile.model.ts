@@ -15,6 +15,7 @@ export default (sequelize: Sequelize) => {
     declare agreementStatus: AgentAgreementStatus;
     declare signedAgreementUrl: string | null;
     declare agreementSentAt: Date | null;
+    declare agreementEmailSentAt: Date | null;
     declare agreementUploadedAt: Date | null;
     declare agreementApprovedAt: Date | null;
     declare agreementApprovedByUserId: string | null;
@@ -71,6 +72,11 @@ export default (sequelize: Sequelize) => {
         type: DataTypes.DATE,
         allowNull: true,
         field: 'agreement_sent_at',
+      },
+      agreementEmailSentAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: 'agreement_email_sent_at',
       },
       agreementUploadedAt: {
         type: DataTypes.DATE,
