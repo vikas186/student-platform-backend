@@ -209,14 +209,34 @@ const capturePageOnce = async (
 
     if (ctx?.source === 'AECC') {
       try {
-        await page.waitForSelector('a.sr-tile, .search_result_content', { timeout: 20_000 });
+        await page.waitForSelector('a.sr-tile, .search_result_content', { timeout: 30_000 });
+        await page.waitForFunction(
+          () => {
+            const tiles = document.querySelectorAll('a.sr-tile');
+            if (tiles.length === 0) return false;
+            const title = tiles[0]?.querySelector('.sr-tile-text h2');
+            return Boolean(title?.textContent?.trim());
+          },
+          { timeout: 15_000 },
+        );
       } catch {
-        scrapeLogger.debug('AECC course tiles not visible yet', { url, attempt });
+        scrapeLogger.warn('AECC course tiles not ready before capture', { url, attempt });
       }
+      await page.waitForTimeout(2500);
     }
 
     const { title, mainText, links } = await extractPageContent(page);
-    const html = await page.content();
+    let html = await page.content();
+
+    if (ctx?.source === 'AECC' && /\/courses?\b/i.test(url)) {
+      for (let poll = 0; poll < 6; poll++) {
+        const tileCount = (html.match(/<a class="sr-tile"/g) || []).length;
+        if (tileCount >= 3) break;
+        await page.waitForTimeout(2000);
+        html = await page.content();
+      }
+    }
+
     const result: PlaywrightPageResult = { url, title, mainText, html, links, apiResponses };
 
     if (ctx?.source === 'AECC') {
@@ -226,6 +246,9 @@ const capturePageOnce = async (
     if (ctx?.saveArtifacts) {
       const { saveDebugHtml, saveDebugScreenshot } = await import('../debug/scrape-debug.util');
       await saveDebugScreenshot(page, 'page', ctx.source);
+      await page.waitForTimeout(1500);
+      html = await page.content();
+      result.html = html;
       await saveDebugHtml(page, 'page', ctx.source);
     }
 

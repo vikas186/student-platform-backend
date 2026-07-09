@@ -202,13 +202,22 @@ export const processCleaningJob = async (payload: CleaningJobMessage): Promise<v
 
     const totalFound =
       stats.coursesFound + stats.universitiesFound + stats.feesFound + stats.scholarshipsFound;
-    const jobCompleted = totalFound > 0 || stats.rejectedPages > 0;
+    const hasPersisted =
+      (stats.persisted?.courses ?? 0) > 0 ||
+      (stats.persisted?.universities ?? 0) > 0 ||
+      (stats.persisted?.scholarships ?? 0) > 0;
+    const hasReviewable = (stats.validCount ?? 0) > 0 || (stats.needsReviewCount ?? 0) > 0;
+    const jobCompleted = hasPersisted || hasReviewable;
 
     await batch.update({ status: 'cleaned', errorMessage: null });
     await job.update({
       status: jobCompleted ? 'completed' : 'failed',
       completedAt: new Date(),
-      errorMessage: jobCompleted ? null : 'Scraper returned zero entities',
+      errorMessage: jobCompleted
+        ? null
+        : totalFound > 0
+          ? 'All scraped entities failed validation'
+          : 'Scraper returned zero entities',
       stats: {
         totalPages: (job.stats as { totalPages?: number })?.totalPages ?? 0,
         coursesFound: stats.coursesFound,

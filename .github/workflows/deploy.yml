@@ -53,7 +53,7 @@ jobs:
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           port: ${{ secrets.DEPLOY_PORT || 22 }}
-          source: "dist,package.json,package-lock.json,ecosystem.config.cjs,assets,migrations"
+          source: "dist,package.json,package-lock.json,ecosystem.config.cjs,assets,migrations,docker-compose.yml,docker"
           target: ${{ secrets.DEPLOY_PATH }}
           strip_components: 0
 
@@ -80,9 +80,30 @@ jobs:
               PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -U "$DB_USERNAME" -d "$DB_NAME" -p "${DB_PORT:-5432}" -f migrations/018_agent_agreement_email_sent.sql || true
               PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -U "$DB_USERNAME" -d "$DB_NAME" -p "${DB_PORT:-5432}" -f migrations/019_agent_agreement_reminders.sql || true
             fi
-            if pm2 describe enroll-api >/dev/null 2>&1; then
-              pm2 reload ecosystem.config.cjs --env "$DEPLOY_ENV" --update-env
-            else
-              pm2 start ecosystem.config.cjs --env "$DEPLOY_ENV"
+            if command -v docker >/dev/null 2>&1; then
+              echo "[deploy] Ensuring RabbitMQ is running..."
+              if docker ps -a --format '{{.Names}}' | grep -qx enroll-rabbitmq; then
+                docker start enroll-rabbitmq || true
+              else
+                docker run -d \
+                  --name enroll-rabbitmq \
+                  --restart unless-stopped \
+                  -p 5672:5672 \
+                  -p 15672:15672 \
+                  -e RABBITMQ_DEFAULT_USER=guest \
+                  -e RABBITMQ_DEFAULT_PASS=guest \
+                  rabbitmq:3.13-management-alpine || true
+              fi
             fi
+            if ! ls "$HOME/.cache/ms-playwright"/chromium-* >/dev/null 2>&1; then
+              echo "[deploy] Installing Playwright Chromium for scraper worker (one-time)..."
+              PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0 npx playwright install chromium || true
+            fi
+            for app in enroll-api enroll-scraper enroll-cleaner; do
+              if pm2 describe "$app" >/dev/null 2>&1; then
+                pm2 reload "$app" --update-env
+              else
+                pm2 start ecosystem.config.cjs --only "$app" --env "$DEPLOY_ENV" --update-env
+              fi
+            done
             pm2 save

@@ -67,6 +67,9 @@ export const classifyPageForPipeline = (
       if (path === '/courses' || path === '/courses/') {
         return { type: 'course_listing', scores: { ...emptyScores(), course_listing: 100 } };
       }
+      if (path === '/universities' || path === '/universities/') {
+        return { type: 'university', scores: { ...emptyScores(), university: 100 } };
+      }
       if (/^\/universities\/[^/?#]+/.test(path)) {
         return { type: 'university', scores: { ...emptyScores(), university: 100 } };
       }
@@ -222,18 +225,6 @@ export const runPipelineScrape = async (
         config.source,
       );
 
-      scrapeLogger.info('Pipeline page done', {
-        source: config.source,
-        page: pageNum,
-        total: Math.min(limitedQueue.length, maxQueueSize),
-        type: classification.type,
-        courses: courses.length,
-        universities: universities.length,
-        fees: fees.length,
-        scholarships: scholarships.length,
-        apiResponses: page.apiResponses.length,
-      });
-
       await reportProgress({ currentPage: pageNum, currentUrl: url });
 
       if (classification.type === 'reject') {
@@ -250,7 +241,15 @@ export const runPipelineScrape = async (
         config.source === 'AECC' &&
         (classification.type === 'course' || classification.type === 'course_listing')
       ) {
-        const rows = extractAECCCourses(capture.apiResponses, page.html, url);
+        let rows = extractAECCCourses(capture.apiResponses, page.html, url);
+        if (!rows.length && classification.type === 'course_listing') {
+          scrapeLogger.warn('AECC listing empty — retrying page capture', { url });
+          await sleep(3000);
+          const retryPage = await capturePageWithPlaywright(url, { source: config.source, saveArtifacts: false });
+          pagesVisited++;
+          apiResponseCount += retryPage.apiResponses.length;
+          rows = extractAECCCourses(retryPage.apiResponses, retryPage.html, url);
+        }
         pushCourseRows(rows, courses, entitySeen, capture.mainText);
 
         if (classification.type === 'course_listing') {
@@ -267,7 +266,14 @@ export const runPipelineScrape = async (
           }
         }
 
-        if (!rows.length && classification.type === 'course') {
+        if (!rows.length && classification.type === 'course_listing') {
+          rejectedPages.push({
+            url,
+            pageTitle: capture.title,
+            classification: 'reject',
+            reason: 'AECC course listing returned no parseable courses',
+          });
+        } else if (!rows.length && classification.type === 'course') {
           rejectedPages.push({
             url,
             pageTitle: capture.title,
@@ -338,6 +344,18 @@ export const runPipelineScrape = async (
           }
         }
       }
+
+      scrapeLogger.info('Pipeline page done', {
+        source: config.source,
+        page: pageNum,
+        total: Math.min(limitedQueue.length, maxQueueSize),
+        type: classification.type,
+        courses: courses.length,
+        universities: universities.length,
+        fees: fees.length,
+        scholarships: scholarships.length,
+        apiResponses: page.apiResponses.length,
+      });
 
       if (config.source !== 'AECC') {
         for (const { href, name } of page.links) {

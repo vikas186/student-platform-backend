@@ -1,6 +1,5 @@
 import type { RawCourseRow } from '../../extractors/types';
 import type { CapturedApiResponse } from '../api-course-extract.util';
-import { isRealCourse } from '../../validators/is-real-course.util';
 
 export type AECCCoursesPageMeta = {
   total: number;
@@ -186,8 +185,13 @@ const mapCourseItem = (item: Record<string, unknown>, fallbackUrl: string): RawC
     }),
   };
 
-  if (!isRealCourse(row.courseName, row.courseUrl || fallbackUrl)) return null;
   return row;
+};
+
+const mapAeccCourseItem = (item: Record<string, unknown>, fallbackUrl: string): RawCourseRow | null => {
+  const row = mapCourseItem(item, fallbackUrl);
+  if (!row) return null;
+  return row.courseName.trim().length >= 3 ? row : null;
 };
 
 const inferStudyLevel = (courseName: string, href: string): string | undefined => {
@@ -268,8 +272,6 @@ export const extractAECCCoursesFromHtml = (
       }),
     };
 
-    if (!isRealCourse(row.courseName, row.courseUrl || pageUrl)) continue;
-
     const key = (row.courseUrl || `${row.universityName}::${row.courseName}`).toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
@@ -311,7 +313,7 @@ export const extractAECCCourses = (
     collectCourseNodes(parsed, nodes);
 
     for (const item of nodes) {
-      const row = mapCourseItem(item, res.url);
+      const row = mapAeccCourseItem(item, res.url);
       if (!row) continue;
 
       const key = (row.courseUrl || `${row.universityName}::${row.courseName}`).toLowerCase();

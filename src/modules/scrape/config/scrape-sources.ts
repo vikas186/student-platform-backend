@@ -23,11 +23,7 @@ export const PRESET_CONFIG: Record<ScrapePreset, SourceConfig> = {
   AECC: {
     source: 'AECC',
     baseUrl: 'https://search.aeccglobal.com',
-    seeds: [
-      'https://search.aeccglobal.com/courses',
-      'https://search.aeccglobal.com/universities',
-      'https://search.aeccglobal.com/scholarship',
-    ],
+    seeds: ['https://search.aeccglobal.com/courses'],
     maxPages: parseInt(process.env.SCRAPE_AECC_MAX_PAGES || '22', 10),
     maxDetailPages: parseInt(process.env.SCRAPE_AECC_MAX_DETAIL || '15', 10),
   },
