@@ -19,6 +19,22 @@ export const digilockerConfig = () => ({
   scope: process.env.DIGILOCKER_SCOPE?.trim() || 'openid files.issueddocs',
 });
 
+const REQUIRED_DIGILOCKER_SCOPES = ['files.issueddocs'] as const;
+
+export const hasDigilockerDocumentScope = (scopes: string | null | undefined): boolean =>
+  Boolean(scopes?.includes('files.issueddocs'));
+
+export const assertDigilockerDocumentScope = (): void => {
+  const scope = digilockerConfig().scope;
+  const missing = REQUIRED_DIGILOCKER_SCOPES.filter(s => !scope.includes(s));
+  if (missing.length > 0) {
+    throw new AppError(
+      `DigiLocker scope is missing "${missing.join('", "')}". Set DIGILOCKER_SCOPE=openid files.issueddocs, then disconnect and sign in again.`,
+      503,
+    );
+  }
+};
+
 export const isDigilockerConfigured = (): boolean => {
   const c = digilockerConfig();
   return Boolean(c.clientId && c.clientSecret);

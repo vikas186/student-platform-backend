@@ -8,7 +8,9 @@ import AppError from '../../../utils/errorHandler';
 import { encryptToken, decryptToken } from '../scheduling/token-crypto.util';
 import {
   assertDigilockerConfigured,
+  assertDigilockerDocumentScope,
   digilockerConfig,
+  hasDigilockerDocumentScope,
   isDigilockerConfigured,
 } from './digilocker.config';
 import type { DigiLockerIssuedDocument, DigiLockerOAuthState } from './digilocker.types';
@@ -50,6 +52,7 @@ export const verifyDigilockerOAuthState = (state: string): DigiLockerOAuthState 
 
 export const getDigilockerAuthUrl = (userId: string, applicationId: string): string => {
   assertDigilockerConfigured();
+  assertDigilockerDocumentScope();
   const cfg = digilockerConfig();
   const codeVerifier = createCodeVerifier();
   const state = createDigilockerOAuthState(userId, applicationId, codeVerifier);
@@ -184,6 +187,8 @@ export const getDigilockerConnectionStatus = async (userId: string) => {
       connected: false,
       digilockerName: null,
       connectedAt: null,
+      grantedScopes: null,
+      documentsAccessGranted: false,
     };
   }
   return {
@@ -191,6 +196,11 @@ export const getDigilockerConnectionStatus = async (userId: string) => {
     connected: true,
     digilockerName: (row.getDataValue('digilockerName') as string | null) ?? null,
     connectedAt: row.getDataValue('connectedAt')?.toISOString?.() ?? null,
+    grantedScopes: (row.getDataValue('scopes') as string | null) ?? null,
+    documentsAccessGranted: (() => {
+      const scopes = row.getDataValue('scopes') as string | null;
+      return scopes ? hasDigilockerDocumentScope(scopes) : null;
+    })(),
   };
 };
 
@@ -198,8 +208,39 @@ export const disconnectDigilocker = async (userId: string): Promise<void> => {
   await db.DigiLockerConnection.destroy({ where: { userId } });
 };
 
+const mapDigilockerApiError = (err: any, action: string): AppError => {
+  const status = err.response?.status as number | undefined;
+  const errorCode = String(err.response?.data?.error ?? '').toLowerCase();
+  if (status === 403 || errorCode === 'insufficient_scope') {
+    return new AppError(
+      'DigiLocker access token cannot read issued documents. Set DIGILOCKER_SCOPE=openid files.issueddocs, click Switch account, and sign in again.',
+      403,
+    );
+  }
+  if (status === 401) {
+    return new AppError('DigiLocker session expired. Click Switch account and sign in again.', 401);
+  }
+  const detail =
+    typeof err.response?.data === 'string'
+      ? err.response.data
+      : err.response?.data?.error_description || err.response?.data?.error;
+  const suffix = detail ? `: ${String(detail).slice(0, 200)}` : '';
+  return new AppError(`DigiLocker ${action} failed${suffix}`, status && status >= 400 && status < 600 ? status : 502);
+};
+
 export const listDigilockerIssuedDocuments = async (userId: string): Promise<DigiLockerIssuedDocument[]> => {
   assertDigilockerConfigured();
+  assertDigilockerDocumentScope();
+
+  const row = await db.DigiLockerConnection.findByPk(userId);
+  const grantedScopes = (row?.getDataValue('scopes') as string | null) ?? null;
+  if (grantedScopes && !hasDigilockerDocumentScope(grantedScopes)) {
+    throw new AppError(
+      'DigiLocker is connected without document permission. Click Switch account and sign in again to allow certificate import.',
+      403,
+    );
+  }
+
   const token = await getValidAccessToken(userId);
   const cfg = digilockerConfig();
   try {
@@ -231,7 +272,7 @@ export const listDigilockerIssuedDocuments = async (userId: string): Promise<Dig
       data: err.response?.data,
       message: err.message,
     });
-    throw err;
+    throw mapDigilockerApiError(err, 'document list');
   }
 };
 
