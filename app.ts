@@ -47,6 +47,7 @@ app.get('/', (req: Request, res: Response) => res.json({ success: true, message:
 
 // Static Files
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+app.use('/api/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 // 404 and Error Handling
 app.use('*', (req: Request, res: Response, next: NextFunction) => {
