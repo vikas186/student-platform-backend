@@ -47,6 +47,26 @@ export const passwordResetTemplate = (cfg: EmailConfig, name: string, resetUrl: 
   };
 };
 
+export const studentEmailVerificationLinkTemplate = (
+  cfg: EmailConfig,
+  name: string,
+  verifyUrl: string,
+) => {
+  const body = `
+    <p style="margin:0 0 12px;font-size:15px;line-height:1.6;color:#3d4f72;">Hi ${name},</p>
+    <p style="margin:0 0 12px;font-size:15px;line-height:1.6;color:#3d4f72;">
+      Confirm your student account on ${cfg.brandName} by clicking the button below. This link expires in 24 hours.
+    </p>
+    ${button(verifyUrl, 'Verify email address')}
+    <p style="margin:16px 0 0;font-size:13px;line-height:1.5;color:#6b7a9a;word-break:break-all;">${verifyUrl}</p>
+  `;
+  return {
+    subject: `Verify your ${cfg.brandName} student account`,
+    html: layout(cfg, 'Verify your email', body),
+    text: `Hi ${name},\n\nVerify your student account: ${verifyUrl}\n\nThis link expires in 24 hours.`,
+  };
+};
+
 export const studentEmailVerificationOtpTemplate = (cfg: EmailConfig, name: string, otp: string) => {
   const body = `
     <p style="margin:0 0 12px;font-size:15px;line-height:1.6;color:#3d4f72;">Hi ${name},</p>

@@ -1,30 +1,39 @@
-import crypto from 'crypto';
 import AppError from '../utils/errorHandler';
 import { db } from '../config/database';
 import type { UserRole } from '../models/User.model';
 import { generateOpaqueRefreshToken } from './token.service';
 import {
   buildEmailVerificationUrl,
+  buildStudentEmailVerificationUrl,
   sendAgentEmailVerificationEmail,
-  sendStudentEmailVerificationOtpEmail,
+  sendStudentEmailVerificationLinkEmail,
 } from './email.service';
 
-const OTP_EXPIRY_MS = 15 * 60 * 1000;
 const LINK_EXPIRY_MS = 24 * 60 * 60 * 1000;
 
-const generateOtp = (): string => String(crypto.randomInt(100000, 1000000));
-
 /** Verification emails must be awaited — signup/resend should fail visibly if Brevo is misconfigured. */
+const formatEmailSendError = (err: unknown): string => {
+  const msg = err instanceof Error ? err.message : String(err);
+  if (/525|unauthorized ip/i.test(msg)) {
+    return (
+      'Email service is misconfigured: the server IP is not authorized in Brevo. ' +
+      'In Brevo go to SMTP & API → Authorized IPs and add this server, ' +
+      'or switch BREVO_API_KEY to an xkeysib- REST API key (no IP whitelist required).'
+    );
+  }
+  return (
+    'We could not send the verification email. Check that your email address is correct, ' +
+    'try again in a few minutes, or use a different inbox (some disposable addresses are blocked).'
+  );
+};
+
 const sendVerificationEmail = async (task: () => Promise<void>, context: string): Promise<void> => {
   try {
     await task();
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[email] ${context} failed:`, msg);
-    throw new AppError(
-      'We could not send the verification email. Check that your email address is correct, try again in a few minutes, or use a different inbox (some disposable addresses are blocked).',
-      503,
-    );
+    throw new AppError(formatEmailSendError(err), 503);
   }
 };
 
@@ -45,28 +54,29 @@ export const assertEmailVerifiedForLogin = (user: InstanceType<typeof db.User>) 
   }
 };
 
-const issueStudentOtp = async (user: InstanceType<typeof db.User>) => {
+const issueStudentLink = async (user: InstanceType<typeof db.User>) => {
   await invalidateExistingTokens(user.id);
-  const otp = generateOtp();
-  const expiresAt = new Date(Date.now() + OTP_EXPIRY_MS);
+  const token = generateOpaqueRefreshToken();
+  const expiresAt = new Date(Date.now() + LINK_EXPIRY_MS);
   await db.EmailVerificationToken.create({
     userId: user.id,
-    otp,
-    token: null,
-    kind: 'otp',
+    token,
+    otp: null,
+    kind: 'link',
     used: false,
     expiresAt,
   });
+  const verifyUrl = buildStudentEmailVerificationUrl(token);
   await sendVerificationEmail(
     () =>
-      sendStudentEmailVerificationOtpEmail({
+      sendStudentEmailVerificationLinkEmail({
         to: user.email,
         name: user.name,
-        otp,
+        verifyUrl,
       }),
-    'student email verification OTP',
+    'student email verification link',
   );
-  return otp;
+  return verifyUrl;
 };
 
 const issueAgentLink = async (user: InstanceType<typeof db.User>) => {
@@ -98,8 +108,8 @@ export const sendSignupVerificationEmail = async (user: InstanceType<typeof db.U
   const role = user.getDataValue('role') as UserRole;
   const isDev = process.env.NODE_ENV === 'development';
   if (role === 'student') {
-    const otp = await issueStudentOtp(user);
-    return { method: 'otp' as const, ...(isDev ? { devOtp: otp } : {}) };
+    const verifyUrl = await issueStudentLink(user);
+    return { method: 'link' as const, ...(isDev ? { devVerifyUrl: verifyUrl } : {}) };
   }
   if (role === 'agent') {
     const verifyUrl = await issueAgentLink(user);
@@ -138,6 +148,43 @@ export const verifyStudentOtp = async (email: string, otp: string) => {
 
   if (!entry || entry.expiresAt.getTime() < Date.now()) {
     throw new AppError('Invalid or expired verification code', 400);
+  }
+
+  entry.used = true;
+  await entry.save();
+  user.emailVerified = true;
+  await user.save();
+
+  return { alreadyVerified: false, user: user.toSafeObject() };
+};
+
+export const verifyStudentEmailLink = async (token: string) => {
+  const trimmed = String(token).trim();
+  if (trimmed.length < 32) {
+    throw new AppError('Invalid verification link', 400);
+  }
+
+  const entry = await db.EmailVerificationToken.findOne({
+    where: { token: trimmed, kind: 'link', used: false },
+    include: [{ model: db.User, as: 'user' }],
+  });
+
+  if (!entry || entry.expiresAt.getTime() < Date.now()) {
+    throw new AppError('Invalid or expired verification link', 400);
+  }
+
+  const user = entry.get('user') as InstanceType<typeof db.User> | null;
+  if (!user) {
+    throw new AppError('Invalid verification link', 400);
+  }
+  if (user.role !== 'student') {
+    throw new AppError('This verification link is not valid for this account type', 400);
+  }
+
+  if (user.emailVerified) {
+    entry.used = true;
+    await entry.save();
+    return { alreadyVerified: true, user: user.toSafeObject() };
   }
 
   entry.used = true;
@@ -200,8 +247,7 @@ export const resendVerificationEmail = async (email: string) => {
   const sent = await sendSignupVerificationEmail(user);
   return {
     message: 'Verification message sent',
-    method: user.role === 'student' ? ('otp' as const) : ('link' as const),
-    ...(sent && 'devOtp' in sent && sent.devOtp ? { devOtp: sent.devOtp } : {}),
+    method: user.role === 'student' || user.role === 'agent' ? ('link' as const) : undefined,
     ...(sent && 'devVerifyUrl' in sent && sent.devVerifyUrl ? { devVerifyUrl: sent.devVerifyUrl } : {}),
     ...(process.env.NODE_ENV === 'development' ? { email: user.email } : {}),
   };

@@ -14,6 +14,7 @@ import {
   forgotPassword,
   resetPassword,
   verifyStudentEmailOtp,
+  verifyStudentEmail,
   verifyAgentEmail,
   resendEmailVerification,
 } from '../controller/authController';
@@ -49,6 +50,8 @@ authRouter
   .delete('/users/:userId', jwtAuthMiddleware(['admin']), requirePermission('users', 'delete'), deleteUser)
   .post('/forgot-password', validateMiddleware(forgotPasswordJoiSchema), forgotPassword)
   .post('/verify-email/otp', validateMiddleware(verifyStudentOtpJoiSchema), verifyStudentEmailOtp)
+  .post('/verify-email/student', validateMiddleware(verifyAgentEmailJoiSchema), verifyStudentEmail)
+  .get('/verify-email/student', verifyStudentEmail)
   .post('/verify-email', validateMiddleware(verifyAgentEmailJoiSchema), verifyAgentEmail)
   .get('/verify-email', verifyAgentEmail)
   .post('/resend-verification', validateMiddleware(resendEmailVerificationJoiSchema), resendEmailVerification)

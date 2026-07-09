@@ -10,6 +10,7 @@ import { dispatchEmail, sendWelcomeEmail } from '../services/email.service';
 import {
   resendVerificationEmail,
   verifyAgentEmailLink,
+  verifyStudentEmailLink,
   verifyStudentOtp,
 } from '../services/email-verification.service';
 import { dispatchPartnershipAgreementIfNeeded } from '../services/agent-agreement.service';
@@ -29,7 +30,7 @@ const signup = catchAsyncError(async (req: Request, res: Response) => {
       ? 'Agent account created. Check your email for a verification link before signing in.'
       : role === 'university'
         ? 'University account created successfully'
-        : 'Student account created. Check your email for a verification code before signing in.';
+        : 'Student account created. Check your email for a verification link before signing in.';
   if (role === 'university') {
     dispatchWelcomeEmail(user as Record<string, unknown>, role);
   }
@@ -195,6 +196,21 @@ const verifyStudentEmailOtp = catchAsyncError(async (req: Request, res: Response
   });
 });
 
+const verifyStudentEmail = catchAsyncError(async (req: Request, res: Response) => {
+  const token = req.body.token ?? req.query.token;
+  const result = await verifyStudentEmailLink(String(token ?? ''));
+  if (!result.alreadyVerified) {
+    dispatchWelcomeEmail(result.user as Record<string, unknown>, 'student');
+  }
+  res.status(200).json({
+    success: true,
+    message: result.alreadyVerified
+      ? 'Email is already verified. You can sign in.'
+      : 'Email verified successfully. You can sign in now.',
+    data: result.user,
+  });
+});
+
 const verifyAgentEmail = catchAsyncError(async (req: Request, res: Response) => {
   const token = req.body.token ?? req.query.token;
   const result = await verifyAgentEmailLink(String(token ?? ''));
@@ -249,6 +265,7 @@ export {
   deleteUser,
   logoutAllDevices,
   verifyStudentEmailOtp,
+  verifyStudentEmail,
   verifyAgentEmail,
   resendEmailVerification,
 };

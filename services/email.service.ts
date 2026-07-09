@@ -12,6 +12,7 @@ import {
   agentPartnershipAgreementTemplate,
   passwordResetTemplate,
   promotionTemplate,
+  studentEmailVerificationLinkTemplate,
   studentEmailVerificationOtpTemplate,
   welcomeTemplate,
 } from './email.templates';
@@ -170,6 +171,11 @@ export const buildEmailVerificationUrl = (token: string): string => {
   return `${cfg.frontendUrl}/verify-email?token=${encodeURIComponent(token)}`;
 };
 
+export const buildStudentEmailVerificationUrl = (token: string): string => {
+  const cfg = emailConfig();
+  return `${cfg.frontendUrl}/verify-email/student?token=${encodeURIComponent(token)}`;
+};
+
 export const buildStudentVerifyEmailUrl = (email: string): string => {
   const cfg = emailConfig();
   return `${cfg.frontendUrl}/verify-email/student?email=${encodeURIComponent(email)}`;
@@ -201,6 +207,16 @@ export const sendStudentEmailVerificationOtpEmail = async (params: {
 }): Promise<void> => {
   const cfg = emailConfig();
   const tpl = studentEmailVerificationOtpTemplate(cfg, params.name, params.otp);
+  await sendMail({ to: params.to, subject: tpl.subject, html: tpl.html, text: tpl.text });
+};
+
+export const sendStudentEmailVerificationLinkEmail = async (params: {
+  to: string;
+  name: string;
+  verifyUrl: string;
+}): Promise<void> => {
+  const cfg = emailConfig();
+  const tpl = studentEmailVerificationLinkTemplate(cfg, params.name, params.verifyUrl);
   await sendMail({ to: params.to, subject: tpl.subject, html: tpl.html, text: tpl.text });
 };
 
