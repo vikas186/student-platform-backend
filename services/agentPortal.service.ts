@@ -825,11 +825,12 @@ export const patchOfferLetter = async (
   }>,
 ) => {
   const letter = await getOfferLetterForAgent(agentProfileId, param);
+  const updates: Record<string, any> = {};
   if (body.fileUrl !== undefined) {
-    letter.fileUrl = body.fileUrl === null || body.fileUrl === '' ? null : String(body.fileUrl).trim();
+    updates.fileUrl = body.fileUrl === null || body.fileUrl === '' ? null : String(body.fileUrl).trim();
   }
   if (body.signedFileUrl !== undefined) {
-    letter.signedFileUrl =
+    updates.signedFileUrl =
       body.signedFileUrl === null || body.signedFileUrl === ''
         ? null
         : String(body.signedFileUrl).trim();
@@ -838,15 +839,15 @@ export const patchOfferLetter = async (
     if (!(OFFER_LETTER_STATUSES as readonly string[]).includes(body.status)) {
       throw new AppError('Invalid offer letter status', 400);
     }
-    letter.status = body.status;
+    updates.status = body.status;
   }
   if (body.expiresAt !== undefined) {
-    letter.expiresAt = body.expiresAt ? new Date(body.expiresAt) : null;
+    updates.expiresAt = body.expiresAt ? new Date(body.expiresAt) : null;
   }
   if (body.notes !== undefined) {
-    letter.notes = body.notes === null || body.notes === '' ? null : String(body.notes).trim();
+    updates.notes = body.notes === null || body.notes === '' ? null : String(body.notes).trim();
   }
-  await letter.save();
+  await letter.update(updates);
   return letter;
 };
 
@@ -860,9 +861,10 @@ export const uploadSignedOfferFile = async (
   }
   const letter = await getOfferLetterForAgent(agentProfileId, param);
   const url = file.path.replace(/\\/g, '/');
-  letter.signedFileUrl = url;
-  letter.status = 'signed';
-  await letter.save();
+  await letter.update({
+    signedFileUrl: url,
+    status: 'signed',
+  });
   return letter;
 };
 
@@ -876,16 +878,16 @@ export const uploadOfferLetterFile = async (
   }
   const letter = await getOfferLetterForAgent(agentProfileId, param);
   const url = file.path.replace(/\\/g, '/');
-  letter.fileUrl = url;
-  letter.status = 'active';
-  await letter.save();
+  await letter.update({
+    fileUrl: url,
+    status: 'active',
+  });
   return letter;
 };
 
 export const sendOfferLetter = async (agentProfileId: number, param: string) => {
   const letter = await getOfferLetterForAgent(agentProfileId, param);
-  letter.status = 'sent';
-  await letter.save();
+  await letter.update({ status: 'sent' });
   return letter;
 };
 

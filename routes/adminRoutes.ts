@@ -41,6 +41,7 @@ import {
   listCoursesAdmin,
   createCourseAdmin,
   patchCourseAdmin,
+  deleteCourseAdmin,
   createIntakeRow,
   deleteApplication,
   listDeadlines,
@@ -183,6 +184,7 @@ adminRouter
   .get('/courses', requirePermission('deadlines', 'view'), validateMiddleware(listCoursesQueryJoiSchema), listCoursesAdmin)
   .post('/courses', requirePermission('deadlines', 'create'), validateMiddleware(createAdminCourseJoiSchema), createCourseAdmin)
   .patch('/courses/:courseId', requirePermission('deadlines', 'edit'), validateMiddleware(patchAdminCourseJoiSchema), patchCourseAdmin)
+  .delete('/courses/:courseId', requirePermission('deadlines', 'delete'), deleteCourseAdmin)
   .get('/users', requirePermission('users', 'view'), validateMiddleware(listUsersQueryJoiSchema), listUsers)
   .post('/users', requirePermission('users', 'create'), validateMiddleware(createAdminUserJoiSchema), createUser)
   .patch('/users/:userId/role', requirePermission('users', 'edit'), validateMiddleware(patchUserRoleJoiSchema), patchUserRole)

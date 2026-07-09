@@ -165,6 +165,15 @@ export const patchCourseAdmin = catchAsyncError(async (req: Request, res: Respon
   });
 });
 
+export const deleteCourseAdmin = catchAsyncError(async (req: Request, res: Response) => {
+  const courseId = Number((req.params as any).courseId);
+  await adminPortal.deleteCourseForAdmin(courseId);
+  res.status(constant.msgCode.successCode).json({
+    success: true,
+    message: 'Course deleted',
+  });
+});
+
 export const createIntakeRow = catchAsyncError(async (req: Request, res: Response) => {
   const deadline = await adminPortal.createIntakeRowForAdmin(req.body);
   res.status(201).json({

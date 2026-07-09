@@ -2,14 +2,14 @@ import { Model, DataTypes, Sequelize } from 'sequelize';
 
 export default (sequelize: Sequelize) => {
   class Course extends Model {
-    public id!: number;
-    public universityId!: number;
-    public courseName!: string;
-    public degree!: string;
-    public fee!: number;
-    public duration!: string;
-    public readonly createdAt!: Date;
-    public readonly updatedAt!: Date;
+    declare id: number;
+    declare universityId: number;
+    declare courseName: string;
+    declare degree: string;
+    declare fee: number;
+    declare duration: string;
+    declare readonly createdAt: Date;
+    declare readonly updatedAt: Date;
 
     static associate(models: any) {
       Course.belongsTo(models.University, { foreignKey: 'universityId', as: 'university' });

@@ -2,12 +2,12 @@ import { Model, DataTypes, Sequelize } from 'sequelize';
 
 export default (sequelize: Sequelize) => {
   class Commission extends Model {
-    public id!: number;
-    public universityId!: number;
-    public percentage!: number;
-    public slabDetails?: string | null;
-    public readonly createdAt!: Date;
-    public readonly updatedAt!: Date;
+    declare id: number;
+    declare universityId: number;
+    declare percentage: number;
+    declare slabDetails: string | null;
+    declare createdAt: Date;
+    declare updatedAt: Date;
 
     static associate(models: any) {
       Commission.belongsTo(models.University, { foreignKey: 'universityId', as: 'university', onDelete: 'CASCADE' });

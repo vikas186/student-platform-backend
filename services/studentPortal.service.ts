@@ -274,7 +274,10 @@ export const submitStudentApplication = async (studentProfileId: number, idOrRef
     throw new AppError('University and program are required to submit', 400);
   }
   const sp = await db.StudentProfile.findByPk(studentProfileId);
-  if (sp?.agentProfileId && app.agentId == null) {
+  if (!sp) {
+    throw new AppError('Student profile not found', 404);
+  }
+  if (sp.agentProfileId && app.agentId == null) {
     app.agentId = sp.agentProfileId;
   }
 
@@ -282,11 +285,55 @@ export const submitStudentApplication = async (studentProfileId: number, idOrRef
   if (docs.length === 0) {
     throw new AppError('Please upload documents before submitting the application.', 400);
   }
+
+  const connection = await db.DigiLockerConnection.findByPk(sp.userId);
+  if (!connection) {
+    throw new AppError('Please connect your DigiLocker account and verify your documents before submitting.', 400);
+  }
+
+  const { listDigilockerIssuedDocuments, mapDigilockerDocType } = await import(
+    '../src/modules/digilocker/digilocker.service'
+  );
+
+  let issuedDocs: any[] = [];
+  try {
+    issuedDocs = await listDigilockerIssuedDocuments(sp.userId);
+  } catch (err: any) {
+    throw new AppError(`Failed to fetch DigiLocker documents: ${err.message || err}`, 400);
+  }
+
+  const verifiableTypesInDigilocker = new Set(
+    issuedDocs.map(d => mapDigilockerDocType(d.doctype, d.description || d.name))
+  );
+
   const hasDigilockerDoc = docs.some(
     d => d.status === 'verified' && d.fileUrl && d.fileUrl.includes('digilocker'),
   );
   if (!hasDigilockerDoc) {
     throw new AppError('Please verify at least one document with DigiLocker before submitting.', 400);
+  }
+
+  const uploadedDocTypes = new Set(docs.map(d => d.type));
+  const unverifiedVerifiableTypes: string[] = [];
+
+  for (const docType of uploadedDocTypes) {
+    if (verifiableTypesInDigilocker.has(docType)) {
+      const isVerified = docs.some(
+        d => d.type === docType && d.status === 'verified' && d.fileUrl && d.fileUrl.includes('digilocker')
+      );
+      if (!isVerified) {
+        unverifiedVerifiableTypes.push(docType);
+      }
+    }
+  }
+
+  if (unverifiedVerifiableTypes.length > 0) {
+    const { DOCUMENT_TYPE_LABELS } = await import('../src/modules/document-verification/document-types');
+    const labels = unverifiedVerifiableTypes.map(t => DOCUMENT_TYPE_LABELS[t] || t);
+    throw new AppError(
+      `The following document(s) are available in your DigiLocker and must be verified: ${labels.join(', ')}. Please remove the manual uploads and import them from DigiLocker.`,
+      400
+    );
   }
 
   // Final guard at submit time: pin country to the university's country if the
@@ -556,9 +603,10 @@ export const uploadStudentSignedOfferLetterByIdOrRef = async (
   const letter = await getStudentOfferLetterByIdOrRef(studentProfileId, offerLetterParam);
   assertOfficialOfferPresent(letter);
   const url = file.path.replace(/\\/g, '/');
-  letter.signedFileUrl = url;
-  letter.status = 'signed';
-  await letter.save();
+  await letter.update({
+    signedFileUrl: url,
+    status: 'signed',
+  });
   return letter;
 };
 
@@ -573,9 +621,10 @@ export const uploadStudentSignedOfferLetterForApplication = async (
   const letter = await getStudentOfferLetterForApplication(studentProfileId, applicationIdOrRef);
   assertOfficialOfferPresent(letter);
   const url = file.path.replace(/\\/g, '/');
-  letter.signedFileUrl = url;
-  letter.status = 'signed';
-  await letter.save();
+  await letter.update({
+    signedFileUrl: url,
+    status: 'signed',
+  });
   return letter;
 };
 

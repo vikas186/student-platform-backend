@@ -580,6 +580,17 @@ export const patchCourseForAdmin = async (
   });
 };
 
+export const deleteCourseForAdmin = async (courseId: number) => {
+  if (!Number.isFinite(courseId) || courseId < 1) {
+    throw new AppError('Invalid course id', 400);
+  }
+  const c = await db.Course.findByPk(courseId);
+  if (!c) {
+    throw new AppError('Course not found', 404);
+  }
+  await c.destroy();
+};
+
 /**
  * Matches Uniwizer admin "Add intake row" (free-text university) — creates university/course if needed.
  */
@@ -858,10 +869,11 @@ export const uploadOfferLetterByMatchForAdmin = async (
     });
   }
   const url = file.path.replace(/\\/g, '/');
-  letter.fileUrl = url;
-  letter.status = 'active';
-  letter.uploadedAt = new Date();
-  await letter.save();
+  await letter.update({
+    fileUrl: url,
+    status: 'active',
+    uploadedAt: new Date(),
+  });
   return letter;
 };
 
@@ -1304,10 +1316,11 @@ export const uploadOfferLetterFileForAdmin = async (param: string, file: Express
     throw new AppError('Offer letter not found', 404);
   }
   const url = file.path.replace(/\\/g, '/');
-  letter.fileUrl = url;
-  letter.status = 'active';
-  letter.uploadedAt = new Date();
-  await letter.save();
+  await letter.update({
+    fileUrl: url,
+    status: 'active',
+    uploadedAt: new Date(),
+  });
   return letter;
 };
 

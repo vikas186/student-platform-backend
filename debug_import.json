@@ -33,48 +33,14 @@
     {
       "rowIndex": 1,
       "row": [
-        "Curtin University - Singapore",
-        "",
-        "10%",
-        "",
+        "University of West London",
+        "United Kingdom",
         "",
         "",
+        "£12,000",
         "",
         "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        ""
-      ],
-      "parsed": {
-        "name": "Curtin University - Singapore",
-        "country": "United Kingdom",
-        "commission": "10%",
-        "rates": {},
-        "ranges": {
-          "ugBusinessUsdYear": null,
-          "ugStemUsdYear": null,
-          "ugComputerScienceUsdYear": null,
-          "pgBusinessUsdYear": null,
-          "pgStemUsdYear": null,
-          "pgComputerScienceUsdYear": null
-        }
-      }
-    },
-    {
-      "rowIndex": 2,
-      "row": [
-        "Management Development Institute of Singapore (MDIS)",
-        "",
-        "2400 USD",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
+        "£21,000",
         "",
         "",
         "",
@@ -82,111 +48,14 @@
         ""
       ],
       "parsed": {
-        "name": "Management Development Institute of Singapore (MDIS)",
+        "name": "University of West London",
         "country": "United Kingdom",
-        "commission": "2400 USD",
-        "rates": {},
+        "commission": null,
+        "rates": {
+          "Deposit": 12000
+        },
         "ranges": {
-          "ugBusinessUsdYear": null,
-          "ugStemUsdYear": null,
-          "ugComputerScienceUsdYear": null,
-          "pgBusinessUsdYear": null,
-          "pgStemUsdYear": null,
-          "pgComputerScienceUsdYear": null
-        }
-      }
-    },
-    {
-      "rowIndex": 3,
-      "row": [
-        "Nanyang Institute of Management",
-        "",
-        "12%",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        ""
-      ],
-      "parsed": {
-        "name": "Nanyang Institute of Management",
-        "country": "United Kingdom",
-        "commission": "12%",
-        "rates": {},
-        "ranges": {
-          "ugBusinessUsdYear": null,
-          "ugStemUsdYear": null,
-          "ugComputerScienceUsdYear": null,
-          "pgBusinessUsdYear": null,
-          "pgStemUsdYear": null,
-          "pgComputerScienceUsdYear": null
-        }
-      }
-    },
-    {
-      "rowIndex": 4,
-      "row": [
-        "PSB Academy",
-        "",
-        "10%",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        ""
-      ],
-      "parsed": {
-        "name": "PSB Academy",
-        "country": "United Kingdom",
-        "commission": "10%",
-        "rates": {},
-        "ranges": {
-          "ugBusinessUsdYear": null,
-          "ugStemUsdYear": null,
-          "ugComputerScienceUsdYear": null,
-          "pgBusinessUsdYear": null,
-          "pgStemUsdYear": null,
-          "pgComputerScienceUsdYear": null
-        }
-      }
-    },
-    {
-      "rowIndex": 5,
-      "row": [
-        "S P Jain - Singapore",
-        "",
-        "3450 AUD for UG, 3600 AUD for PG",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        ""
-      ],
-      "parsed": {
-        "name": "S P Jain - Singapore",
-        "country": "United Kingdom",
-        "commission": "3450 AUD for UG, 3600 AUD for PG",
-        "rates": {},
-        "ranges": {
-          "ugBusinessUsdYear": null,
+          "ugBusinessUsdYear": "£21,000",
           "ugStemUsdYear": null,
           "ugComputerScienceUsdYear": null,
           "pgBusinessUsdYear": null,
