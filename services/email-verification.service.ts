@@ -158,7 +158,26 @@ export const verifyStudentOtp = async (email: string, otp: string) => {
   return { alreadyVerified: false, user: user.toSafeObject() };
 };
 
-export const verifyStudentEmailLink = async (token: string) => {
+const completeEmailLinkVerification = async (
+  entry: InstanceType<typeof db.EmailVerificationToken>,
+  user: InstanceType<typeof db.User>,
+) => {
+  if (user.role !== 'student' && user.role !== 'agent') {
+    throw new AppError('Invalid verification link', 400);
+  }
+  if (user.emailVerified) {
+    entry.used = true;
+    await entry.save();
+    return { alreadyVerified: true, user: user.toSafeObject() };
+  }
+  entry.used = true;
+  await entry.save();
+  user.emailVerified = true;
+  await user.save();
+  return { alreadyVerified: false, user: user.toSafeObject() };
+};
+
+export const verifyEmailLink = async (token: string) => {
   const trimmed = String(token).trim();
   if (trimmed.length < 32) {
     throw new AppError('Invalid verification link', 400);
@@ -177,60 +196,13 @@ export const verifyStudentEmailLink = async (token: string) => {
   if (!user) {
     throw new AppError('Invalid verification link', 400);
   }
-  if (user.role !== 'student') {
-    throw new AppError('This verification link is not valid for this account type', 400);
-  }
 
-  if (user.emailVerified) {
-    entry.used = true;
-    await entry.save();
-    return { alreadyVerified: true, user: user.toSafeObject() };
-  }
-
-  entry.used = true;
-  await entry.save();
-  user.emailVerified = true;
-  await user.save();
-
-  return { alreadyVerified: false, user: user.toSafeObject() };
+  return completeEmailLinkVerification(entry, user);
 };
 
-export const verifyAgentEmailLink = async (token: string) => {
-  const trimmed = String(token).trim();
-  if (trimmed.length < 32) {
-    throw new AppError('Invalid verification link', 400);
-  }
+export const verifyStudentEmailLink = verifyEmailLink;
 
-  const entry = await db.EmailVerificationToken.findOne({
-    where: { token: trimmed, kind: 'link', used: false },
-    include: [{ model: db.User, as: 'user' }],
-  });
-
-  if (!entry || entry.expiresAt.getTime() < Date.now()) {
-    throw new AppError('Invalid or expired verification link', 400);
-  }
-
-  const user = entry.get('user') as InstanceType<typeof db.User> | null;
-  if (!user) {
-    throw new AppError('Invalid verification link', 400);
-  }
-  if (user.role !== 'agent') {
-    throw new AppError('This verification link is not valid for this account type', 400);
-  }
-
-  if (user.emailVerified) {
-    entry.used = true;
-    await entry.save();
-    return { alreadyVerified: true, user: user.toSafeObject() };
-  }
-
-  entry.used = true;
-  await entry.save();
-  user.emailVerified = true;
-  await user.save();
-
-  return { alreadyVerified: false, user: user.toSafeObject() };
-};
+export const verifyAgentEmailLink = verifyEmailLink;
 
 export const resendVerificationEmail = async (email: string) => {
   const normalized = String(email).trim().toLowerCase();

@@ -196,12 +196,24 @@ const verifyStudentEmailOtp = catchAsyncError(async (req: Request, res: Response
   });
 });
 
+const finalizeLinkVerification = (
+  result: Awaited<ReturnType<typeof verifyStudentEmailLink>>,
+) => {
+  if (result.alreadyVerified) return;
+  const role = typeof result.user.role === 'string' ? result.user.role : '';
+  if (role === 'student') {
+    dispatchWelcomeEmail(result.user as Record<string, unknown>, 'student');
+  } else if (role === 'agent') {
+    dispatchWelcomeEmail(result.user as Record<string, unknown>, 'agent');
+    const userId = typeof result.user.id === 'string' ? result.user.id : '';
+    if (userId) dispatchPartnershipAgreementIfNeeded(userId);
+  }
+};
+
 const verifyStudentEmail = catchAsyncError(async (req: Request, res: Response) => {
   const token = req.body.token ?? req.query.token;
   const result = await verifyStudentEmailLink(String(token ?? ''));
-  if (!result.alreadyVerified) {
-    dispatchWelcomeEmail(result.user as Record<string, unknown>, 'student');
-  }
+  finalizeLinkVerification(result);
   res.status(200).json({
     success: true,
     message: result.alreadyVerified
@@ -214,11 +226,7 @@ const verifyStudentEmail = catchAsyncError(async (req: Request, res: Response) =
 const verifyAgentEmail = catchAsyncError(async (req: Request, res: Response) => {
   const token = req.body.token ?? req.query.token;
   const result = await verifyAgentEmailLink(String(token ?? ''));
-  if (!result.alreadyVerified) {
-    dispatchWelcomeEmail(result.user as Record<string, unknown>, 'agent');
-    const userId = typeof result.user.id === 'string' ? result.user.id : '';
-    if (userId) dispatchPartnershipAgreementIfNeeded(userId);
-  }
+  finalizeLinkVerification(result);
   res.status(200).json({
     success: true,
     message: result.alreadyVerified
