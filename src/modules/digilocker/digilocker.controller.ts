@@ -10,6 +10,7 @@ import {
   importDigilockerDocumentForStudent,
   importAllDigilockerDocumentsForStudent,
   listDigilockerIssuedDocuments,
+  mapDigilockerOAuthError,
 } from './digilocker.service';
 import { isDigilockerConfigured } from './digilocker.config';
 
@@ -52,7 +53,13 @@ export const digilockerCallbackHandler = catchAsyncError(async (req: Request, re
       res.redirect(`${digilockerConfigSafeFrontend()}/student/applications?digilocker=error`);
       return;
     }
-    res.redirect(digilockerFrontendRedirect(applicationId, false, errorDescription || error));
+    res.redirect(
+      digilockerFrontendRedirect(
+        applicationId,
+        false,
+        mapDigilockerOAuthError(error, errorDescription),
+      ),
+    );
     return;
   }
 

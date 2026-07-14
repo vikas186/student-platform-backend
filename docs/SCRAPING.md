@@ -126,7 +126,7 @@ npm run dev:stop -- --jobs      # also cancel in-progress scrape jobs
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/scrape/start` | Start a new scrape job |
-| `GET` | `/scrape/presets` | List built-in presets (IDP, AECC) |
+| `GET` | `/scrape/presets` | List built-in presets (IDP, AECC, partner consultancies) |
 | `GET` | `/scrape/jobs` | List jobs with stats |
 | `GET` | `/scrape/jobs/:id` | Job detail |
 | `DELETE` | `/scrape/jobs/:id` | Delete job (+ related AI meta) |
@@ -193,14 +193,22 @@ Calls the same `startScrapeJob(target, 'cron')` as the manual API.
 
 | Preset | Base URL | Seed URLs |
 |--------|----------|-----------|
-| **IDP** | `https://www.idp.com/india/` | `/`, `/search/`, `/universities/` |
-| **AECC** | `https://search.aeccglobal.com` | `/courses`, `/universities`, `/scholarship` |
+| **IDP** | `https://www.idp.com/india/find-a-course/?lang=en` | JSON-LD course listings (`find-a-course`) |
+| **AECC** | `https://search.aeccglobal.com` | `/courses/all/all/{destination}` for each study country |
+| **STUDIES_OVERSEAS** | `https://www.studies-overseas.com/` | Homepage + link discovery |
+| **EDWISE** | `https://www.edwiseinternational.com/` | Homepage + link discovery |
+| **CHOPRAS** | `https://www.thechopras.com/` | Homepage + link discovery |
+| **GLOBAL_DEGREES** | `https://globaldegrees.in/` | Homepage + link discovery |
+| **GEEBEE** | `https://www.geebeeworld.com/` | Homepage + link discovery |
+| **EDVOY** | `https://edvoy.com/` | Homepage + link discovery |
 
 Custom URLs use the hostname as the `source` label (see `scrape-target.util.ts` → `resolveScrapeTarget()`).
 
 ### AECC preset (`search.aeccglobal.com`)
 
 AECC course data lives on a separate search SPA, **not** the marketing site (`aeccglobal.com/in`). The preset targets the search app directly.
+
+**Why not global `/courses` alone:** that feed is popularity-sorted (mostly US/Australia on early pages). The preset seeds **one listing per destination** (`/courses/all/all/australia`, `…/canada`, `…/united-kingdom`, etc.) so every AECC study country is crawled. Override destinations with `SCRAPE_AECC_DESTINATIONS`.
 
 **Why SSR HTML, not XHR:** Playwright intercepts JSON responses, but the live course list API is not exposed as a capturable XHR on listing pages (analytics/widgets are captured instead). Real course and scholarship rows are rendered server-side in HTML tiles and parsed after page load.
 
@@ -209,6 +217,7 @@ AECC course data lives on a separate search SPA, **not** the marketing site (`ae
 | URL pattern | Page type |
 |-------------|-----------|
 | `search.aeccglobal.com/courses` | `course_listing` |
+| `search.aeccglobal.com/courses/all/...` | `course_listing` |
 | `search.aeccglobal.com/course/:slug` or `/courses/:slug` | `course` |
 | `search.aeccglobal.com/universities/:slug` | `university` |
 | `search.aeccglobal.com/scholarship` or `/scholarship/:slug` | `scholarship` |
@@ -223,7 +232,7 @@ AECC course data lives on a separate search SPA, **not** the marketing site (`ae
 
 Each extracted row gets a `pageText` field (course name, university, country, level, duration, fees, etc.) for the AI enrichment pipeline.
 
-**Pagination:** After the first `/courses` listing page, the pipeline reads total count from HTML meta (e.g. `63,626 courses found`) and queues `?page=2`, `?page=3`, … up to `SCRAPE_AECC_MAX_PAGES` (default 22). At ~12 tiles per page, expect up to ~264 courses per full run.
+**Pagination:** For each destination seed, the pipeline reads total count from HTML meta and queues `?page=2`, `?page=3`, … up to `SCRAPE_AECC_MAX_PAGES` **per destination** (default 80). Queue budget ≈ destinations × max pages.
 
 **robots.txt:** `search.aeccglobal.com` is allowed when `source === 'AECC'` (`robots.util.ts`). The marketing domain may still be blocked.
 
@@ -425,7 +434,7 @@ scrapeWebsite()          → generic.scraper.ts
 | Preset | Max pages | Max detail pages |
 |--------|-----------|------------------|
 | IDP | `SCRAPE_IDP_MAX_PAGES` (25) | `SCRAPE_IDP_MAX_DETAIL` (15) |
-| AECC | `SCRAPE_AECC_MAX_PAGES` (22) | `SCRAPE_AECC_MAX_DETAIL` (15) |
+| AECC | `SCRAPE_AECC_MAX_PAGES` (80 per destination) | `SCRAPE_AECC_MAX_DETAIL` (15) |
 | Custom | `SCRAPE_CUSTOM_MAX_PAGES` (25) | `SCRAPE_CUSTOM_MAX_DETAIL` (15) |
 
 ---
@@ -525,7 +534,8 @@ Marks all jobs in active statuses as `failed` with message `"Cancelled by admin"
 | `SCRAPE_RATE_LIMIT_MS` | `2000` | Delay between pages |
 | `SCRAPE_MAX_PAGES` | `25` | Generic page limit |
 | `SCRAPE_MAX_DETAIL_PAGES` | `15` | Detail page cap |
-| `SCRAPE_AECC_MAX_PAGES` | `22` | AECC listing pagination cap |
+| `SCRAPE_AECC_MAX_PAGES` | `80` | AECC listing pages **per destination** |
+| `SCRAPE_AECC_DESTINATIONS` | (built-in list) | Comma-separated AECC destination slugs |
 | `SCRAPE_AECC_MAX_DETAIL` | `15` | AECC detail page cap |
 | `SCRAPE_IDP_MAX_PAGES` | `25` | IDP page cap |
 | `SCRAPE_IDP_MAX_DETAIL` | `15` | IDP detail page cap |

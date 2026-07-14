@@ -12,6 +12,8 @@ import allRoutes from './routes/index';
 import { morgan, customFormat } from './utils/morganSettings';
 import { verifyDiditWebhook } from './middleware/verifyDiditWebhook';
 import { diditWebhookHandler } from './src/modules/didit/didit.controller';
+import { verifyFlywireWebhook } from './middleware/verifyFlywireWebhook';
+import { flywireWebhookHandler } from './src/modules/flywire/flywire.controller';
 import auditMiddleware from './middleware/audit.middleware';
 import { requestContextMiddleware } from './middleware/requestContext.middleware';
 
@@ -28,6 +30,14 @@ app.post(
   express.raw({ type: 'application/json' }),
   verifyDiditWebhook,
   diditWebhookHandler,
+);
+
+// Flywire Pay-By-Link status notifications — raw body for X-Flywire-Digest
+app.post(
+  '/api/v1/flywire/webhook',
+  express.raw({ type: 'application/json' }),
+  verifyFlywireWebhook,
+  flywireWebhookHandler,
 );
 
 // Middleware

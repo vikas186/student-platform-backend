@@ -1,7 +1,16 @@
 import { Model, DataTypes, Sequelize } from 'sequelize';
 
 /** Built-in catalog presets (optional shortcuts). Custom URLs use hostname as source label. */
-export const SCRAPE_PRESETS = ['IDP', 'AECC'] as const;
+export const SCRAPE_PRESETS = [
+  'IDP',
+  'AECC',
+  'STUDIES_OVERSEAS',
+  'EDWISE',
+  'CHOPRAS',
+  'GLOBAL_DEGREES',
+  'GEEBEE',
+  'EDVOY',
+] as const;
 export type ScrapePreset = (typeof SCRAPE_PRESETS)[number];
 
 export const SCRAPE_JOB_STATUSES = [
@@ -19,7 +28,7 @@ export type ScrapeJobStatus = (typeof SCRAPE_JOB_STATUSES)[number];
 export const SCRAPE_TRIGGERS = ['manual', 'cron'] as const;
 export type ScrapeTrigger = (typeof SCRAPE_TRIGGERS)[number];
 
-/** @deprecated use string source label; presets are IDP | AECC */
+/** @deprecated use string source label; presets include IDP, AECC, and partner consultancies */
 export type ScrapeSource = ScrapePreset | string;
 
 export default (sequelize: Sequelize) => {

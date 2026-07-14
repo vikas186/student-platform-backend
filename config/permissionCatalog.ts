@@ -125,7 +125,7 @@ export const DEFAULT_PERMISSION_MATRIX: Record<UserRole, Record<string, Record<s
     commission_slabs: { view: false, create: false, edit: false, delete: false },
     subscriptions: { view: false, create: false, edit: false, delete: false },
     deadlines: { view: false, create: false, edit: false, delete: false },
-    payments: { view: false, create: false, edit: false, approve: false },
+    payments: { view: true, create: true, edit: false, approve: false },
     agent_ranking: { view: false, approve: false },
     roles_permissions: { view: false, edit: false },
     university_scraping: { view: false, create: false, edit: false, delete: false, approve: false },

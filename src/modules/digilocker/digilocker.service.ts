@@ -417,6 +417,20 @@ export const importAllDigilockerDocumentsForStudent = async (input: {
   return { imported, skipped, total: issued.length };
 };
 
+/** Map DigiLocker OAuth error codes to actionable messages for students/admins. */
+export const mapDigilockerOAuthError = (error: string, description?: string): string => {
+  if (error === 'invalid_scope_avs') {
+    return (
+      'DigiLocker partner app is AVS-only (Age verification). Uncheck Age verification in MeriPehchaan Auth ' +
+      'or email partners@digitalindia.gov.in to enable openid + Issued Documents for this client.'
+    );
+  }
+  if (error === 'invalid_scope') {
+    return description || 'Invalid OAuth scope. Set DIGILOCKER_SCOPE=openid for document import apps.';
+  }
+  return description || error;
+};
+
 export const digilockerFrontendRedirect = (
   applicationId: string,
   ok: boolean,

@@ -1,10 +1,12 @@
 import type { RawCourseRow } from '../scrapers/types';
 import {
+  normalizeAcademicRequirements,
   normalizeCountry,
   normalizeDegreeLevel,
   normalizeDuration,
   normalizeEnglishRequirements,
   normalizeIntakes,
+  mergeNormalizedRequirements,
   normalizeText,
   normalizeTuition,
   normalizeUrl,
@@ -31,7 +33,7 @@ export const cleanCourseData = (raw: RawCourseRow): CleanedCourse => {
     courseUrl: normalizeUrl(raw.courseUrl || '') || raw.courseUrl?.trim() || undefined,
   };
 
-  const requirementsRaw = [row.academicRequirement, row.ieltsRequirement].filter(Boolean).join(' ');
+  const englishRaw = [row.ieltsRequirement, row.academicRequirement].filter(Boolean).join(' ');
   const { score, status } = calculateCourseQuality(row);
 
   return {
@@ -44,6 +46,9 @@ export const cleanCourseData = (raw: RawCourseRow): CleanedCourse => {
     normalizedTuition: row.tuitionFee ? normalizeTuition(row.tuitionFee) : null,
     normalizedDuration: row.duration ? normalizeDuration(row.duration) : null,
     normalizedIntakes: row.intake ? normalizeIntakes(row.intake) : [],
-    normalizedRequirements: requirementsRaw ? normalizeEnglishRequirements(requirementsRaw) : null,
+    normalizedRequirements: mergeNormalizedRequirements(
+      englishRaw ? normalizeEnglishRequirements(englishRaw) : null,
+      row.academicRequirement ? normalizeAcademicRequirements(row.academicRequirement) : null,
+    ),
   };
 };

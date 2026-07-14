@@ -19,6 +19,22 @@ const normalizeToOptionalString = (val: unknown): string | undefined => {
 /** OpenAI/parser often returns numbers or arrays; normalize to optional string. */
 export const optionalStringCoerce = z.preprocess(normalizeToOptionalString, z.string().optional());
 
+/** OpenAI often returns null for booleans; treat null/undefined as absent. */
+export const optionalBooleanCoerce = z.preprocess((val: unknown) => {
+  if (val == null) return undefined;
+  if (typeof val === 'boolean') return val;
+  if (typeof val === 'string') {
+    const t = val.trim().toLowerCase();
+    if (t === 'true' || t === 'yes' || t === '1') return true;
+    if (t === 'false' || t === 'no' || t === '0') return false;
+  }
+  if (typeof val === 'number') {
+    if (val === 1) return true;
+    if (val === 0) return false;
+  }
+  return undefined;
+}, z.boolean().optional());
+
 export const rawCourseSchema = z.object({
   universityName: z.string().min(1),
   courseName: z.string().min(1),
@@ -79,7 +95,7 @@ export const enrichedCourseSchema = rawCourseSchema.extend({
   aiSummary: z.string().optional(),
   subjectTags: z.array(z.string()).default([]),
   careerTags: z.array(z.string()).default([]),
-  ieltsRequired: z.boolean().optional(),
+  ieltsRequired: optionalBooleanCoerce,
   ieltsScore: optionalStringCoerce,
 });
 
@@ -107,7 +123,7 @@ export const categorizerOutputSchema = z.object({
   confidence: z.coerce.number().min(0).max(1),
   subjectTags: z.array(z.string()).default([]),
   careerTags: z.array(z.string()).default([]),
-  ieltsRequired: z.boolean().optional(),
+  ieltsRequired: optionalBooleanCoerce,
   ieltsScore: optionalStringCoerce,
 });
 

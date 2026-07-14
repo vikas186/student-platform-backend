@@ -24,6 +24,10 @@ export type NormalizedRequirements = {
   ieltsMinBand?: number;
   toeflOverall?: number;
   pteOverall?: number;
+  duolingoOverall?: number;
+  academicMinPercent?: number;
+  workExperienceYears?: number;
+  workExperienceRequired?: boolean;
   raw: string;
 };
 

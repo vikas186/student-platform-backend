@@ -1,6 +1,7 @@
 import { SCRAPE_DELAY_MS, randomScrapeDelay } from '../config/scrape.constants';
 import type { SourceConfig } from '../config/scrape-sources';
 import { classifyPage } from '../classifier/page.classifier';
+import { classifyStudiesOverseasPage } from '../classifier/studiesOverseas.classifier';
 import { extractFee } from '../extractors/fee.extractor';
 import { scrapeCourse } from './course.scraper';
 import { scrapeUniversity } from './university.scraper';
@@ -23,6 +24,10 @@ import {
   extractAECCCourses,
 } from './aecc/aecc-course.extractor';
 import { extractAECCScholarships } from './aecc/aecc-scholarship.extractor';
+import {
+  enqueueIDPCoursePagination,
+  extractIDPCourses,
+} from './idp/idp-course.extractor';
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 const yieldEventLoop = (): Promise<void> => new Promise(r => setImmediate(r));
@@ -36,7 +41,7 @@ const emptyScores = (): Record<PageType, number> => ({
   reject: 0,
 });
 
-/** AECC URL rules run before generic heuristics. */
+/** AECC / IDP URL rules run before generic heuristics. */
 export const classifyPageForPipeline = (
   url: string,
   title: string,
@@ -61,11 +66,19 @@ export const classifyPageForPipeline = (
     }
 
     if (host.includes('search.aeccglobal.com')) {
-      if (/^\/courses?\/[^/?#]+/.test(path)) {
-        return { type: 'course', scores: { ...emptyScores(), course: 100 } };
-      }
-      if (path === '/courses' || path === '/courses/') {
+      // Destination / filtered listings must win over the detail regex:
+      // /courses/all/all/canada would otherwise match as a single course page.
+      if (
+        path === '/courses' ||
+        path === '/courses/' ||
+        /^\/courses\/all(\/|$)/.test(path) ||
+        /^\/courses\/study-[^/]+(\/|$)/.test(path)
+      ) {
         return { type: 'course_listing', scores: { ...emptyScores(), course_listing: 100 } };
+      }
+      // Detail: /course/:slug or /courses/:single-slug (not /all/...)
+      if (/^\/course\/[^/?#]+/.test(path) || /^\/courses\/[^/?#]+\/?$/.test(path)) {
+        return { type: 'course', scores: { ...emptyScores(), course: 100 } };
       }
       if (path === '/universities' || path === '/universities/') {
         return { type: 'university', scores: { ...emptyScores(), university: 100 } };
@@ -77,6 +90,41 @@ export const classifyPageForPipeline = (
         return { type: 'scholarship', scores: { ...emptyScores(), scholarship: 100 } };
       }
     }
+  }
+
+  if (source === 'IDP') {
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch {
+      return classifyPage(url, title, content);
+    }
+
+    const host = parsed.hostname.toLowerCase();
+    const path = parsed.pathname.toLowerCase();
+
+    if (host.includes('idp.com')) {
+      if (/\/find-a-course(?:\/|$)/.test(path)) {
+        return { type: 'course_listing', scores: { ...emptyScores(), course_listing: 100 } };
+      }
+      if (/\/universities-and-colleges\/[^/]+\/[^/]+\/prg-[a-z]{2}-\d+/i.test(`${path}${parsed.search}`)) {
+        return { type: 'course', scores: { ...emptyScores(), course: 100 } };
+      }
+      if (/\/universities-and-colleges\/[^/]+\/iid-/i.test(path)) {
+        return { type: 'university', scores: { ...emptyScores(), university: 100 } };
+      }
+      if (path === '/india' || path === '/india/' || /\/india\/search/.test(path)) {
+        return { type: 'reject', scores: emptyScores(), reason: 'IDP marketing or empty search page' };
+      }
+      // Root homepage without find-a-course — marketing only
+      if (path === '/' || path === '') {
+        return { type: 'reject', scores: emptyScores(), reason: 'IDP marketing homepage' };
+      }
+    }
+  }
+
+  if (source === 'STUDIES_OVERSEAS') {
+    return classifyStudiesOverseasPage(url, title, content);
   }
 
   return classifyPage(url, title, content);
@@ -162,7 +210,7 @@ export const runPipelineScrape = async (
   }
   if (!limitedQueue.length) limitedQueue.push(config.baseUrl);
 
-  if (config.source !== 'AECC') {
+  if (config.source !== 'AECC' && config.source !== 'IDP') {
     const homepage = await capturePageWithPlaywright(config.baseUrl, {
       source: config.source,
       saveArtifacts: true,
@@ -176,8 +224,16 @@ export const runPipelineScrape = async (
     }
   }
 
-  const maxQueueSize = config.maxPages;
-  scrapeLogger.info('Pipeline pages queued', { source: config.source, count: limitedQueue.length });
+  const maxQueueSize =
+    config.source === 'AECC'
+      ? Math.max(config.maxPages * Math.max(config.seeds.length, 1), config.maxPages)
+      : config.maxPages;
+  scrapeLogger.info('Pipeline pages queued', {
+    source: config.source,
+    count: limitedQueue.length,
+    maxQueueSize,
+    seedCount: config.seeds.length,
+  });
   await reportProgress({ currentPage: 0 });
 
   let pageNum = 0;
@@ -228,6 +284,12 @@ export const runPipelineScrape = async (
       await reportProgress({ currentPage: pageNum, currentUrl: url });
 
       if (classification.type === 'reject') {
+        scrapeLogger.warn('Pipeline page rejected', {
+          url,
+          pageTitle: capture.title,
+          reason: classification.reason || 'low classification score',
+          scores: classification.scores,
+        });
         rejectedPages.push({
           url,
           pageTitle: capture.title,
@@ -267,18 +329,62 @@ export const runPipelineScrape = async (
         }
 
         if (!rows.length && classification.type === 'course_listing') {
+          const reason = 'AECC course listing returned no parseable courses';
+          scrapeLogger.warn('AECC page parse failed', { url, reason });
           rejectedPages.push({
             url,
             pageTitle: capture.title,
             classification: 'reject',
-            reason: 'AECC course listing returned no parseable courses',
+            reason,
           });
         } else if (!rows.length && classification.type === 'course') {
+          const reason = 'AECC course API extraction returned no rows';
+          scrapeLogger.warn('AECC page parse failed', { url, reason });
           rejectedPages.push({
             url,
             pageTitle: capture.title,
             classification: 'reject',
-            reason: 'AECC course API extraction returned no rows',
+            reason,
+          });
+        }
+      } else if (
+        config.source === 'IDP' &&
+        (classification.type === 'course' || classification.type === 'course_listing')
+      ) {
+        let rows = extractIDPCourses(page.html, url);
+        if (!rows.length && classification.type === 'course_listing') {
+          scrapeLogger.warn('IDP listing empty — retrying page capture', { url });
+          await sleep(3000);
+          const retryPage = await capturePageWithPlaywright(url, { source: config.source, saveArtifacts: false });
+          pagesVisited++;
+          apiResponseCount += retryPage.apiResponses.length;
+          rows = extractIDPCourses(retryPage.html, url);
+        }
+        pushCourseRows(rows, courses, entitySeen, capture.mainText);
+
+        if (classification.type === 'course_listing') {
+          const added = enqueueIDPCoursePagination(
+            url,
+            config.maxPages,
+            limitedQueue,
+            scrapedUrls,
+            page.html,
+          );
+          if (added > 0) {
+            scrapeLogger.info('IDP course pagination queued', { source: config.source, url, added });
+          }
+        }
+
+        if (!rows.length) {
+          const reason = classification.type === 'course_listing'
+            ? 'IDP course listing returned no parseable courses'
+            : 'IDP course page returned no parseable courses';
+          scrapeLogger.warn('IDP page parse failed', { url, reason });
+          rejectedPages.push({
+            url,
+            pageTitle: capture.title,
+            classification: 'reject',
+            reason,
           });
         }
       } else if (classification.type === 'course' || classification.type === 'course_listing') {
@@ -290,11 +396,13 @@ export const runPipelineScrape = async (
             courses.push({ ...row, pageText: capture.mainText.slice(0, 15_000) });
           }
         } else {
+          const reason = 'course extraction failed';
+          scrapeLogger.warn('Generic page parse failed', { url, reason });
           rejectedPages.push({
             url,
             pageTitle: capture.title,
             classification: 'reject',
-            reason: 'course extraction failed',
+            reason,
           });
         }
       } else if (classification.type === 'university') {
@@ -305,6 +413,15 @@ export const runPipelineScrape = async (
             entitySeen.add(key);
             universities.push({ ...row, pageText: capture.mainText.slice(0, 15_000) });
           }
+        } else {
+          const reason = 'university extraction failed';
+          scrapeLogger.warn('Generic page parse failed', { url, reason });
+          rejectedPages.push({
+            url,
+            pageTitle: capture.title,
+            classification: 'reject',
+            reason,
+          });
         }
       } else if (classification.type === 'fee') {
         const row = extractFee(capture);
@@ -314,6 +431,15 @@ export const runPipelineScrape = async (
             entitySeen.add(key);
             fees.push(row);
           }
+        } else {
+          const reason = 'fee extraction failed';
+          scrapeLogger.warn('Generic page parse failed', { url, reason });
+          rejectedPages.push({
+            url,
+            pageTitle: capture.title,
+            classification: 'reject',
+            reason,
+          });
         }
       } else if (classification.type === 'scholarship') {
         if (config.source === 'AECC') {
@@ -326,11 +452,13 @@ export const runPipelineScrape = async (
             scholarshipPath = '';
           }
           if (!rows.length && /\/scholarship\/[^/?#]+/.test(scholarshipPath)) {
+            const reason = 'AECC scholarship API extraction returned no rows';
+            scrapeLogger.warn('AECC page parse failed', { url, reason });
             rejectedPages.push({
               url,
               pageTitle: capture.title,
               classification: 'reject',
-              reason: 'AECC scholarship API extraction returned no rows',
+              reason,
             });
           }
         } else {
@@ -341,6 +469,15 @@ export const runPipelineScrape = async (
               entitySeen.add(key);
               scholarships.push({ ...row, pageText: capture.mainText.slice(0, 15_000) });
             }
+          } else {
+            const reason = 'scholarship extraction failed';
+            scrapeLogger.warn('Generic page parse failed', { url, reason });
+            rejectedPages.push({
+              url,
+              pageTitle: capture.title,
+              classification: 'reject',
+              reason,
+            });
           }
         }
       }
@@ -357,7 +494,7 @@ export const runPipelineScrape = async (
         apiResponses: page.apiResponses.length,
       });
 
-      if (config.source !== 'AECC') {
+      if (config.source !== 'AECC' && config.source !== 'IDP') {
         for (const { href, name } of page.links) {
           if (!isSameSite(config.baseUrl, href)) continue;
           if (scrapedUrls.has(href)) continue;

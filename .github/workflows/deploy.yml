@@ -53,7 +53,7 @@ jobs:
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           port: ${{ secrets.DEPLOY_PORT || 22 }}
-          source: "dist,package.json,package-lock.json,ecosystem.config.cjs,assets,migrations,docker-compose.yml,docker"
+          source: "dist,package.json,package-lock.json,ecosystem.config.cjs,assets,migrations,docker-compose.yml,docker,deploy"
           target: ${{ secrets.DEPLOY_PATH }}
           strip_components: 0
 
@@ -79,6 +79,7 @@ jobs:
               PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -U "$DB_USERNAME" -d "$DB_NAME" -p "${DB_PORT:-5432}" -f migrations/017_email_verification.sql || true
               PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -U "$DB_USERNAME" -d "$DB_NAME" -p "${DB_PORT:-5432}" -f migrations/018_agent_agreement_email_sent.sql || true
               PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -U "$DB_USERNAME" -d "$DB_NAME" -p "${DB_PORT:-5432}" -f migrations/019_agent_agreement_reminders.sql || true
+              PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -U "$DB_USERNAME" -d "$DB_NAME" -p "${DB_PORT:-5432}" -f migrations/020_course_admission_requirements.sql || true
             fi
             if command -v docker >/dev/null 2>&1; then
               echo "[deploy] Ensuring RabbitMQ is running..."

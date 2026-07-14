@@ -51,7 +51,10 @@ export const resolveScrapeTarget = (body: StartScrapeBody): ResolvedScrapeTarget
     };
   }
 
-  throw new AppError('Provide either source preset (IDP, AECC) or url', 400);
+  throw new AppError(
+    'Provide either a source preset (IDP, AECC, STUDIES_OVERSEAS, …) or url',
+    400,
+  );
 };
 
 export const toSourceConfig = (target: ResolvedScrapeTarget): SourceConfig => ({

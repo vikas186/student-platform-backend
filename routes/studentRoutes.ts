@@ -18,6 +18,7 @@ import {
   deleteDocument,
   listUniversities,
   getUniversity,
+  createTuitionPayLink,
 } from '../controller/studentController';
 import { jwtAuthMiddleware } from '../middleware/jwtAuth';
 import { requirePermission } from '../middleware/requirePermission';
@@ -28,6 +29,7 @@ import {
   listApplicationsQueryJoiSchema,
   studentProfilePatchJoiSchema,
   universitiesQueryJoiSchema,
+  tuitionPayLinkBodyJoiSchema,
 } from '../validations/student.validation';
 import {
   bookStudentAppointmentHandler,
@@ -158,6 +160,12 @@ studentRouter
   )
   .post('/verification/didit/session', createDiditSessionHandler)
   .get('/verification/didit/status', getDiditStatusHandler)
+  .post(
+    '/payments/tuition-link',
+    requirePermission('applications', 'edit'),
+    validateMiddleware(tuitionPayLinkBodyJoiSchema),
+    createTuitionPayLink,
+  )
   .get('/document-status', requirePermission('applications', 'view'), getStudentDocumentStatusHandler)
   .get('/verifications', requirePermission('applications', 'view'), listStudentVerificationsHandler)
   .get('/digilocker/status', requirePermission('applications', 'view'), getDigilockerStatusHandler)

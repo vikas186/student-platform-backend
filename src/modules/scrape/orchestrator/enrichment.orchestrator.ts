@@ -4,6 +4,7 @@ import { enrichEntity, mergeRecord } from '../enrichment/enrichment.service';
 import { cleanCourseData } from '../cleaners/clean-course.service';
 import { cleanUniversityData } from '../cleaners/university.cleaner';
 import { cleanScholarshipData } from '../cleaners/scholarship.cleaner';
+import { cleanFeeData } from '../cleaners/fee.cleaner';
 import {
   enrichedCourseSchema,
   enrichedUniversitySchema,
@@ -26,6 +27,7 @@ export const processEnrichmentPipeline = async (
     courses: unknown[];
     universities: unknown[];
     scholarships: unknown[];
+    fees?: unknown[];
     rejectedPages?: unknown[];
   },
 ): Promise<EntityCleaningStats> => {
@@ -46,6 +48,7 @@ export const processEnrichmentPipeline = async (
   stats.coursesFound = validated.courses.length;
   stats.universitiesFound = validated.universities.length;
   stats.scholarshipsFound = validated.scholarships.length;
+  stats.feesFound = (raw.fees || []).length;
   stats.rejectedCount += validated.invalidCount;
 
   scrapeLogger.info('Enrichment started', {
@@ -54,6 +57,7 @@ export const processEnrichmentPipeline = async (
     courses: validated.courses.length,
     universities: validated.universities.length,
     scholarships: validated.scholarships.length,
+    fees: (raw.fees || []).length,
   });
 
   const enrichedCourses: Array<{ entity: EnrichedCourse; enrichment: Awaited<ReturnType<typeof enrichEntity>> }> = [];
@@ -87,11 +91,11 @@ export const processEnrichmentPipeline = async (
         ...merged,
         qualityScore: cleaned.qualityScore,
         cleaningStatus: cleaned.cleaningStatus,
-        aiSummary: enrichment.aiSummary,
+        aiSummary: enrichment.aiSummary ?? undefined,
         subjectTags: enrichment.subjectTags || [],
         careerTags: enrichment.careerTags || [],
-        ieltsRequired: enrichment.ieltsRequired,
-        ieltsScore: enrichment.ieltsScore,
+        ieltsRequired: enrichment.ieltsRequired ?? undefined,
+        ieltsScore: enrichment.ieltsScore ?? undefined,
       });
       enrichedCourses.push({ entity, enrichment });
     }
@@ -118,6 +122,22 @@ export const processEnrichmentPipeline = async (
         { ...cleaned } as Record<string, unknown>,
         enrichment.parserOutput,
       );
+
+      const normalizeArray = (arr: unknown): string[] | undefined => {
+        if (!arr || !Array.isArray(arr)) return undefined;
+        return arr.map(x => {
+          if (x == null) return '';
+          if (typeof x === 'object') {
+            return (x as any).name || (x as any).title || JSON.stringify(x);
+          }
+          return String(x).trim();
+        }).filter(Boolean);
+      };
+
+      if (merged.faculties) merged.faculties = normalizeArray(merged.faculties);
+      if (merged.departments) merged.departments = normalizeArray(merged.departments);
+      if (merged.popularCourses) merged.popularCourses = normalizeArray(merged.popularCourses);
+
       const entity = enrichedUniversitySchema.parse({
         ...merged,
         qualityScore: cleaned.qualityScore,
@@ -162,13 +182,26 @@ export const processEnrichmentPipeline = async (
     }
   }
 
+  const cleanedFees = ((raw.fees || []) as any[]).map(rawFee => {
+    const cleaned = cleanFeeData(rawFee);
+    if (cleaned.cleaningStatus === 'rejected') {
+      stats.rejectedCount++;
+    } else if (cleaned.cleaningStatus === 'high_quality') {
+      stats.validCount++;
+    } else {
+      stats.needsReviewCount++;
+    }
+    return cleaned;
+  });
+
   const persisted = await upsertEnrichedBatch(jobId, rawBatchId, source, {
     courses: enrichedCourses,
     universities: enrichedUniversities,
     scholarships: enrichedScholarships,
+    fees: cleanedFees,
   });
 
-  stats.persisted = { ...persisted, fees: 0, rejectedPages: stats.rejectedPages };
+  stats.persisted = { ...persisted, rejectedPages: stats.rejectedPages };
   scrapeLogger.info('Enrichment pipeline complete', { jobId, ...stats });
   return stats;
 };

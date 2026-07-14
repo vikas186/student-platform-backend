@@ -2,6 +2,7 @@ import { Op } from 'sequelize';
 import { db } from '../config/database';
 import {
   buildProgramsForUniversity,
+  dedupePrograms,
   mapDbCourse,
   mapScrapedCourse,
   namesMatch,
@@ -22,7 +23,14 @@ const PUBLIC_UNIVERSITY_ATTRIBUTES = [
   'updatedAt',
 ] as const;
 
-const PROGRAM_ATTRIBUTES = ['id', 'courseName', 'degree', 'fee', 'duration'] as const;
+const PROGRAM_ATTRIBUTES = [
+  'id',
+  'courseName',
+  'degree',
+  'fee',
+  'duration',
+  'admissionRequirements',
+] as const;
 
 const SCRAPED_PROGRAM_ATTRIBUTES = [
   'id',
@@ -31,6 +39,10 @@ const SCRAPED_PROGRAM_ATTRIBUTES = [
   'tuitionFee',
   'duration',
   'universityName',
+  'ieltsRequirement',
+  'academicRequirement',
+  'normalizedTuition',
+  'normalizedRequirements',
 ] as const;
 
 export type PublicUniversitiesQuery = {
@@ -114,6 +126,10 @@ export const listPublicUniversitiesWithPrograms = async (query: PublicUniversiti
     tuitionFee: string | null;
     duration: string | null;
     universityName: string;
+    ieltsRequirement: string | null;
+    academicRequirement: string | null;
+    normalizedTuition: Record<string, unknown> | null;
+    normalizedRequirements: Record<string, unknown> | null;
   }>;
 
   const universities = rows.map(row => {
@@ -131,12 +147,16 @@ export const listPublicUniversitiesWithPrograms = async (query: PublicUniversiti
         degree: string;
         fee: number;
         duration: string;
+        admissionRequirements?: Record<string, unknown> | null;
       }>;
     };
 
     const programs = buildProgramsForUniversity(
       plain.name,
-      plain.courses ?? [],
+      (plain.courses ?? []).map(c => ({
+        ...c,
+        admissionRequirements: (c.admissionRequirements as any) ?? null,
+      })),
       scrapedPlain,
       plain.programFeeRanges,
     );
@@ -154,7 +174,62 @@ export const listPublicUniversitiesWithPrograms = async (query: PublicUniversiti
     };
   });
 
-  return { universities, page, limit, total: count };
+  // Fee-matrix / scrape imports can create multiple University rows with the same name.
+  // Collapse them for public dropdowns so each name (+ country) appears once.
+  const deduped = dedupeUniversitiesByNameCountry(universities);
+  const removed = universities.length - deduped.length;
+
+  return {
+    universities: deduped,
+    page,
+    limit,
+    total: Math.max(0, count - removed),
+  };
+};
+
+type PublicUniversityRow = {
+  id: number;
+  name: string;
+  country: string;
+  status: boolean;
+  programFeeRanges: Record<string, unknown> | null;
+  programsCount: number;
+  programs: PublicProgram[];
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+const universityNameCountryKey = (name: string, country: string): string =>
+  `${name.trim().toLowerCase().replace(/\s+/g, ' ')}||${country.trim().toLowerCase()}`;
+
+const dedupeUniversitiesByNameCountry = (rows: PublicUniversityRow[]): PublicUniversityRow[] => {
+  const byKey = new Map<string, PublicUniversityRow>();
+
+  for (const uni of rows) {
+    const key = universityNameCountryKey(uni.name, uni.country || '');
+    const existing = byKey.get(key);
+    if (!existing) {
+      byKey.set(key, uni);
+      continue;
+    }
+
+    const mergedPrograms = dedupePrograms([...existing.programs, ...uni.programs]);
+    const preferIncoming =
+      (uni.programsCount ?? 0) > (existing.programsCount ?? 0) ||
+      (uni.programsCount === existing.programsCount && uni.id > existing.id);
+
+    const winner = preferIncoming ? uni : existing;
+    byKey.set(key, {
+      ...winner,
+      programs: mergedPrograms,
+      programsCount: mergedPrograms.length,
+      programFeeRanges: winner.programFeeRanges ?? existing.programFeeRanges ?? uni.programFeeRanges,
+    });
+  }
+
+  return Array.from(byKey.values()).sort((a, b) =>
+    a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
+  );
 };
 
 // Re-export for tests / other modules

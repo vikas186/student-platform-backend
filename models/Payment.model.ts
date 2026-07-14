@@ -14,6 +14,9 @@ export default (sequelize: Sequelize) => {
     public payLink?: string | null;
     public currency!: string;
     public studentEmail?: string | null;
+    public gateway?: string | null;
+    public gatewayExternalRef?: string | null;
+    public gatewayPaymentId?: string | null;
     public readonly createdAt!: Date;
     public readonly updatedAt!: Date;
 
@@ -50,6 +53,17 @@ export default (sequelize: Sequelize) => {
       currency: { type: DataTypes.STRING(8), allowNull: false, defaultValue: 'USD' },
       payLink: { type: DataTypes.TEXT, allowNull: true },
       studentEmail: { type: DataTypes.STRING, allowNull: true },
+      gateway: { type: DataTypes.STRING(32), allowNull: true },
+      gatewayExternalRef: {
+        type: DataTypes.STRING(120),
+        allowNull: true,
+        field: 'gateway_external_ref',
+      },
+      gatewayPaymentId: {
+        type: DataTypes.STRING(120),
+        allowNull: true,
+        field: 'gateway_payment_id',
+      },
       status: {
         type: DataTypes.ENUM(...PAYMENT_STATUSES),
         allowNull: false,

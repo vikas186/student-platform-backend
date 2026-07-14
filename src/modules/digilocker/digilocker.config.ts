@@ -16,12 +16,24 @@ export const digilockerConfig = () => ({
   apiBase:
     process.env.DIGILOCKER_API_BASE?.trim() ||
     'https://digilocker.meripehchaan.gov.in/public/oauth2',
-  scope: process.env.DIGILOCKER_SCOPE?.trim() || 'avs_parent',
+  // SSO / Requestor apps: `openid` (documents granted on consent screen, returned in token).
+  // AVS-only apps (Age verification checked in partner portal): `avs` or `avs_parent` only.
+  scope: process.env.DIGILOCKER_SCOPE?.trim() || 'openid',
 });
 
-/** True when the partner app is configured for issued-document APIs (files.issueddocs). */
-export const isDigilockerDocumentsImportEnabled = (): boolean =>
-  digilockerConfig().scope.includes('files.issueddocs');
+export const isDigilockerAvsScope = (): boolean => {
+  const scope = digilockerConfig().scope;
+  return scope === 'avs' || scope === 'avs_parent';
+};
+
+/** True when issued-document import is enabled for this deployment. */
+export const isDigilockerDocumentsImportEnabled = (): boolean => {
+  const flag = process.env.DIGILOCKER_DOCUMENTS_IMPORT?.trim().toLowerCase();
+  if (flag === 'true' || flag === '1') return true;
+  if (flag === 'false' || flag === '0') return false;
+  // Back-compat: older configs used files.issueddocs in DIGILOCKER_SCOPE (invalid at authorize).
+  return digilockerConfig().scope.includes('files.issueddocs');
+};
 
 export const hasDigilockerDocumentScope = (scopes: string | null | undefined): boolean =>
   Boolean(scopes?.includes('files.issueddocs'));

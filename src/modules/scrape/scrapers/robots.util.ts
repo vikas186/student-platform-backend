@@ -48,15 +48,23 @@ const evaluateRules = (rules: RobotsRule[], pathname: string): boolean => {
 };
 
 const AECC_SEARCH_HOST = 'search.aeccglobal.com';
+const IDP_HOST = 'www.idp.com';
 
 export const isAllowedByRobots = async (
   targetUrl: string,
   options?: { source?: string },
 ): Promise<boolean> => {
   const parsed = new URL(targetUrl);
+  const host = parsed.hostname.toLowerCase();
+
+  // Partner catalog scrapes — treat like AECC (research bots; IDP robots wildcards are fragile).
+  if (options?.source === 'AECC' && host.includes(AECC_SEARCH_HOST)) {
+    return true;
+  }
   if (
-    options?.source === 'AECC' &&
-    parsed.hostname.toLowerCase().includes(AECC_SEARCH_HOST)
+    options?.source === 'IDP' &&
+    (host === IDP_HOST || host.endsWith('.idp.com')) &&
+    /\/find-a-course/i.test(parsed.pathname)
   ) {
     return true;
   }

@@ -82,8 +82,9 @@ export const createScrapeJob = async (body: StartScrapeBody, trigger: ScrapeTrig
 export const listScrapePresets = () =>
   Object.entries(PRESET_CONFIG).map(([source, cfg]) => ({
     source,
+    label: cfg.label || source,
     targetUrl: cfg.baseUrl,
-    targetName: source,
+    targetName: cfg.label || source,
   }));
 
 export const listScrapeJobs = async (query: {

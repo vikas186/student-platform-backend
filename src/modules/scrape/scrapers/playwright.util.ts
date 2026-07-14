@@ -225,6 +225,27 @@ const capturePageOnce = async (
       await page.waitForTimeout(2500);
     }
 
+    if (ctx?.source === 'IDP' && /\/find-a-course/i.test(url)) {
+      try {
+        await page.waitForFunction(
+          () => {
+            const scripts = Array.from(document.querySelectorAll('script[type="application/ld+json"]'));
+            return scripts.some(script => {
+              const text = script.textContent || '';
+              return (
+                /itemListElement/i.test(text) &&
+                /"@type"\s*:\s*"Course"/i.test(text)
+              );
+            });
+          },
+          { timeout: 45_000 },
+        );
+      } catch {
+        scrapeLogger.warn('IDP course JSON-LD not ready before capture', { url, attempt });
+      }
+      await page.waitForTimeout(2000);
+    }
+
     const { title, mainText, links } = await extractPageContent(page);
     let html = await page.content();
 
@@ -237,10 +258,24 @@ const capturePageOnce = async (
       }
     }
 
+    if (ctx?.source === 'IDP' && /\/find-a-course/i.test(url)) {
+      for (let poll = 0; poll < 6; poll++) {
+        const courseCount = (html.match(/"@type"\s*:\s*"Course"/g) || []).length;
+        if (courseCount >= 3) break;
+        await page.waitForTimeout(1500);
+        html = await page.content();
+      }
+    }
+
     const result: PlaywrightPageResult = { url, title, mainText, html, links, apiResponses };
 
     if (ctx?.source === 'AECC') {
       scrapeLogger.info('AECC XHR captured', { url, capturedCount: apiResponses.length });
+    }
+
+    if (ctx?.source === 'IDP' && /\/find-a-course/i.test(url)) {
+      const courseCount = (html.match(/"@type":"Course"/g) || []).length;
+      scrapeLogger.info('IDP course JSON-LD captured', { url, courseCount });
     }
 
     if (ctx?.saveArtifacts) {

@@ -8,6 +8,8 @@ export default (sequelize: Sequelize) => {
     declare degree: string;
     declare fee: number;
     declare duration: string;
+    /** Optional structured admission requirements (IELTS, %, work experience, etc.). */
+    declare admissionRequirements: Record<string, unknown> | null;
     declare readonly createdAt: Date;
     declare readonly updatedAt: Date;
 
@@ -31,6 +33,11 @@ export default (sequelize: Sequelize) => {
       degree: { type: DataTypes.STRING, allowNull: false },
       fee: { type: DataTypes.FLOAT, allowNull: false },
       duration: { type: DataTypes.STRING, allowNull: false },
+      admissionRequirements: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+        field: 'admission_requirements',
+      },
     },
     {
       sequelize,

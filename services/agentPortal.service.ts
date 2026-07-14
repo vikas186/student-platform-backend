@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { randomBytes, randomUUID } from 'crypto';
+import { randomBytes } from 'crypto';
 import { fn, Op, QueryTypes, Sequelize, type Transaction } from 'sequelize';
 import { db } from '../config/database';
 import AppError from '../utils/errorHandler';
@@ -1178,24 +1178,36 @@ export const createDepositPayLink = async (
   if (!sp) {
     throw new AppError('Student profile missing', 404);
   }
-  const user = (sp as any).user;
-  const base =
-    process.env.BACKEND_URL ||
-    process.env.APP_URL ||
-    `http://localhost:${process.env.PORT || '3000'}`;
-  const token = randomUUID();
-  const payLink = `${String(base).replace(/\/$/, '')}/pay/deposit/${token}`;
+  const user = (sp as any).user as { id: string; name?: string | null; email?: string | null };
+  const amount = typeof body.amount === 'number' ? body.amount : Number(body.amount);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new AppError('Amount must be a positive number', 400);
+  }
 
-  return db.Payment.create({
+  const { createFlywirePayLink, resolveFlywirePaymentDestination } = await import(
+    '../src/modules/flywire/flywire.service'
+  );
+  const { flywireConfig } = await import('../src/modules/flywire/flywire.config');
+
+  const paymentDestination = await resolveFlywirePaymentDestination(app as any);
+  const nameParts = String(user.name || '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  return createFlywirePayLink({
     userId: user.id,
     applicationId: app.id,
     agentProfileId,
-    amount: body.amount,
-    type: 'deposit',
+    amount,
     currency: body.currency || 'USD',
+    type: 'deposit',
     studentEmail: body.studentEmail?.trim() || user.email || null,
-    status: 'pending',
-    payLink,
+    payerFirstName: nameParts[0] || 'Student',
+    payerLastName: nameParts.slice(1).join(' ') || nameParts[0] || 'Payer',
+    payerCountry: app.country || null,
+    paymentDestination,
+    returnUrl: `${flywireConfig().frontendUrl}/agent/deposit-payments`,
   });
 };
 

@@ -430,6 +430,25 @@ export const openapiSchemas = {
         enum: ['course', 'scrape', 'fee_range'],
         example: 'scrape',
       },
+      admissionRequirements: {
+        type: 'object',
+        nullable: true,
+        description:
+          'Admission requirements when available (academic %, English tests, work experience).',
+        properties: {
+          academicMinPercent: { type: 'number', nullable: true, example: 60 },
+          academicRequirement: { type: 'string', nullable: true },
+          ielts: { type: 'number', nullable: true, example: 6.5 },
+          ieltsMinBand: { type: 'number', nullable: true, example: 6 },
+          toefl: { type: 'number', nullable: true, example: 90 },
+          pte: { type: 'number', nullable: true, example: 58 },
+          duolingo: { type: 'number', nullable: true, example: 110 },
+          englishRequirement: { type: 'string', nullable: true },
+          workExperienceYears: { type: 'number', nullable: true, example: 2 },
+          workExperienceRequired: { type: 'boolean', nullable: true },
+          workExperienceNotes: { type: 'string', nullable: true },
+        },
+      },
     },
   },
 

@@ -47,9 +47,20 @@ const universitiesQueryJoiSchema = {
   }),
 };
 
+const tuitionPayLinkBodyJoiSchema = {
+  body: Joi.object()
+    .keys({
+      applicationId: Joi.string().trim().min(3).max(80).required(),
+      amount: Joi.alternatives().try(Joi.number().positive(), Joi.string()).optional().allow(null, ''),
+      currency: Joi.string().trim().max(8).optional(),
+    })
+    .required(),
+};
+
 export {
   studentProfilePatchJoiSchema,
   applicationBodyJoiSchema,
   listApplicationsQueryJoiSchema,
   universitiesQueryJoiSchema,
+  tuitionPayLinkBodyJoiSchema,
 };

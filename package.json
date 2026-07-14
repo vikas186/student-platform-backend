@@ -31,6 +31,8 @@
     "prod:migrate:scrape": "cross-env NODE_ENV=production ts-node scripts/apply-scrape-migration.ts",
     "scrape:cancel": "cross-env NODE_ENV=development ts-node scripts/cancel-active-scrape-jobs.ts",
     "prod:scrape:cancel": "cross-env NODE_ENV=production ts-node scripts/cancel-active-scrape-jobs.ts",
+    "scrape:clear": "cross-env NODE_ENV=development ts-node scripts/clear-all-scraped-data.ts",
+    "prod:scrape:clear": "cross-env NODE_ENV=production ts-node scripts/clear-all-scraped-data.ts",
     "migrate:agent-agreement-email": "cross-env NODE_ENV=development ts-node scripts/apply-agent-agreement-email-migration.ts",
     "prod:migrate:agent-agreement-email": "cross-env NODE_ENV=production ts-node scripts/apply-agent-agreement-email-migration.ts",
     "migrate:agent-agreement-reminders": "cross-env NODE_ENV=development ts-node scripts/apply-agent-agreement-reminder-migration.ts",

@@ -83,10 +83,6 @@ export const classifyPage = (url: string, title: string, content: string): Class
   scores.fee = scoreSignals(hay, FEE_SIGNALS);
   scores.scholarship = scoreSignals(hay, SCHOLARSHIP_SIGNALS);
 
-  if (scores.reject >= 18) {
-    return { type: 'reject', scores, reason: 'informational or SEO page' };
-  }
-
   const candidates: PageType[] = ['course', 'university', 'fee', 'scholarship'];
   let best: PageType = 'reject';
   let bestScore = 0;
@@ -100,6 +96,10 @@ export const classifyPage = (url: string, title: string, content: string): Class
 
   if (bestScore < 12) {
     return { type: 'reject', scores, reason: 'insufficient entity signals' };
+  }
+
+  if (scores.reject >= 18 && scores.reject > bestScore) {
+    return { type: 'reject', scores, reason: `informational or SEO page (reject signals of ${scores.reject} dominate best entity score of ${bestScore})` };
   }
 
   return { type: best, scores };

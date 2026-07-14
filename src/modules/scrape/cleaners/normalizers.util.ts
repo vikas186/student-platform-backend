@@ -175,8 +175,104 @@ export const normalizeEnglishRequirements = (value: string): NormalizedRequireme
   const pte = raw.match(/pte(?:\s*academic)?\s*(\d{2,3})/i);
   if (pte) out.pteOverall = parseInt(pte[1], 10);
 
-  if (!out.ieltsOverall && !out.toeflOverall && !out.pteOverall) return null;
+  const duolingo = raw.match(/duolingo(?:\s*english(?:\s*test)?)?\s*(?:DET)?\s*(\d{2,3})/i);
+  if (duolingo) out.duolingoOverall = parseInt(duolingo[1], 10);
+
+  if (
+    !out.ieltsOverall &&
+    !out.toeflOverall &&
+    !out.pteOverall &&
+    !out.duolingoOverall
+  ) {
+    return null;
+  }
   return out;
+};
+
+/** Parse academic % / work experience from free-text academic requirement strings. */
+export const normalizeAcademicRequirements = (value: string): Partial<NormalizedRequirements> | null => {
+  const raw = normalizeText(value);
+  if (!raw) return null;
+
+  const out: Partial<NormalizedRequirements> = { raw };
+
+  const pct = raw.match(/(\d{2,3}(?:\.\d+)?)\s*%/);
+  if (pct) out.academicMinPercent = parseFloat(pct[1]);
+
+  const gpa = raw.match(/\bgpa\s*(?:of\s*)?(\d(?:\.\d+)?)\s*(?:\/\s*([45](?:\.0)?))?/i);
+  if (gpa && out.academicMinPercent == null) {
+    const score = parseFloat(gpa[1]);
+    const scale = gpa[2] ? parseFloat(gpa[2]) : 4;
+    if (Number.isFinite(score) && scale > 0) {
+      out.academicMinPercent = Math.round((score / scale) * 1000) / 10;
+    }
+  }
+
+  const years = raw.match(/(\d+(?:\.\d+)?)\s*(?:\+\s*)?(?:years?|yrs?)\s+(?:of\s+)?(?:work\s+)?experience/i);
+  if (years) {
+    out.workExperienceYears = parseFloat(years[1]);
+    out.workExperienceRequired = true;
+  } else if (/work\s+experience\s+required|relevant\s+work\s+experience/i.test(raw)) {
+    out.workExperienceRequired = true;
+  }
+
+  if (
+    out.academicMinPercent == null &&
+    out.workExperienceYears == null &&
+    !out.workExperienceRequired
+  ) {
+    return null;
+  }
+  return out;
+};
+
+export const mergeNormalizedRequirements = (
+  ...parts: Array<Partial<NormalizedRequirements> | NormalizedRequirements | null | undefined>
+): NormalizedRequirements | null => {
+  const merged: NormalizedRequirements = { raw: '' };
+  let hasStructured = false;
+
+  for (const part of parts) {
+    if (!part) continue;
+    if (part.raw?.trim()) {
+      merged.raw = merged.raw ? `${merged.raw} | ${part.raw.trim()}` : part.raw.trim();
+    }
+    if (part.ieltsOverall != null) {
+      merged.ieltsOverall = part.ieltsOverall;
+      hasStructured = true;
+    }
+    if (part.ieltsMinBand != null) {
+      merged.ieltsMinBand = part.ieltsMinBand;
+      hasStructured = true;
+    }
+    if (part.toeflOverall != null) {
+      merged.toeflOverall = part.toeflOverall;
+      hasStructured = true;
+    }
+    if (part.pteOverall != null) {
+      merged.pteOverall = part.pteOverall;
+      hasStructured = true;
+    }
+    if (part.duolingoOverall != null) {
+      merged.duolingoOverall = part.duolingoOverall;
+      hasStructured = true;
+    }
+    if (part.academicMinPercent != null) {
+      merged.academicMinPercent = part.academicMinPercent;
+      hasStructured = true;
+    }
+    if (part.workExperienceYears != null) {
+      merged.workExperienceYears = part.workExperienceYears;
+      hasStructured = true;
+    }
+    if (part.workExperienceRequired != null) {
+      merged.workExperienceRequired = part.workExperienceRequired;
+      hasStructured = true;
+    }
+  }
+
+  if (!hasStructured && !merged.raw) return null;
+  return merged;
 };
 
 export const normalizeDeadline = (value: string): string | null => normalizeText(value);

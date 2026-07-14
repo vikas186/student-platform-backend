@@ -196,7 +196,7 @@ export const listStudentApplications = async (
   return db.Application.findAll({
     where,
     order: [['updatedAt', 'DESC']],
-    include: [{ model: db.Course, as: 'course', attributes: ['id', 'courseName', 'degree'], required: false }],
+    include: [{ model: db.Course, as: 'course', attributes: ['id', 'courseName', 'degree', 'fee'], required: false }],
   });
 };
 
@@ -229,7 +229,15 @@ export const createStudentApplication = async (
 export const getStudentApplication = async (studentProfileId: number, idOrRef: string) => {
   const app = await db.Application.findOne({
     where: applicationLookupWhere(studentProfileId, idOrRef),
-    include: [{ model: db.Course, as: 'course', attributes: ['id', 'courseName', 'degree'], required: false }],
+    include: [
+      {
+        model: db.Course,
+        as: 'course',
+        attributes: ['id', 'courseName', 'degree', 'fee'],
+        required: false,
+        include: [{ model: db.University, as: 'university', required: false }],
+      },
+    ],
   });
   if (!app) throw new AppError('Application not found', 404);
   return app;
@@ -730,7 +738,7 @@ export const getStudentUniversityById = async (universityId: number) => {
 
   const courses = await db.Course.findAll({
     where: { universityId: uni.id },
-    attributes: ['id', 'courseName', 'degree', 'fee', 'duration'],
+    attributes: ['id', 'courseName', 'degree', 'fee', 'duration', 'admissionRequirements'],
     order: [['courseName', 'ASC']],
   });
 
@@ -758,4 +766,69 @@ export const deleteStudentDocument = async (studentProfileId: number, documentId
   }
 
   await doc.destroy();
+};
+
+export const createTuitionPayLink = async (
+  studentProfileId: number,
+  userId: string,
+  body: { applicationId: string; amount?: number | string | null; currency?: string },
+) => {
+  const app = await db.Application.findOne({
+    where: applicationLookupWhere(studentProfileId, body.applicationId),
+    include: [
+      {
+        model: db.Course,
+        as: 'course',
+        attributes: ['id', 'courseName', 'degree', 'fee'],
+        required: false,
+        include: [{ model: db.University, as: 'university', required: false }],
+      },
+    ],
+  });
+  if (!app) throw new AppError('Application not found', 404);
+  if (app.status === 'draft') {
+    throw new AppError('Submit the application before creating a tuition payment link', 400);
+  }
+
+  const user = await db.User.findByPk(userId);
+  if (!user) throw new AppError('User not found', 404);
+
+  const courseFee = (app as any).course?.fee;
+  let amount: number;
+  if (body.amount !== undefined && body.amount !== null && String(body.amount).trim() !== '') {
+    amount = typeof body.amount === 'number' ? body.amount : Number(body.amount);
+  } else if (typeof courseFee === 'number' && Number.isFinite(courseFee) && courseFee > 0) {
+    amount = courseFee;
+  } else {
+    throw new AppError('Amount is required when the program has no catalog fee', 400);
+  }
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new AppError('Amount must be a positive number', 400);
+  }
+
+  const { createFlywirePayLink, resolveFlywirePaymentDestination } = await import(
+    '../src/modules/flywire/flywire.service'
+  );
+  const { flywireConfig } = await import('../src/modules/flywire/flywire.config');
+
+  const paymentDestination = await resolveFlywirePaymentDestination(app as any);
+  const nameParts = String(user.name || '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  return createFlywirePayLink({
+    userId: user.id,
+    applicationId: app.id,
+    agentProfileId: app.agentId ?? null,
+    amount,
+    currency: body.currency || 'USD',
+    type: 'tuition',
+    studentEmail: user.email || null,
+    payerFirstName: nameParts[0] || 'Student',
+    payerLastName: nameParts.slice(1).join(' ') || nameParts[0] || 'Payer',
+    payerCountry: app.country || null,
+    paymentDestination,
+    returnUrl: `${flywireConfig().frontendUrl}/student/applications/${app.id}`,
+  });
 };

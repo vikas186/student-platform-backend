@@ -13,6 +13,8 @@ export default (sequelize: Sequelize) => {
     declare countersignedVerifiedAt: Date | null;
     /** USA-style fee matrix from admin catalog upload (UG/PG × Business, STEM, CS). */
     declare programFeeRanges: Record<string, unknown> | null;
+    /** Flywire PayEx portal subdomain / payment_destination override for this university. */
+    declare flywirePaymentDestination: string | null;
     declare readonly createdAt: Date;
     declare readonly updatedAt: Date;
 
@@ -59,6 +61,11 @@ export default (sequelize: Sequelize) => {
         type: DataTypes.JSONB,
         allowNull: true,
         field: 'program_fee_ranges',
+      },
+      flywirePaymentDestination: {
+        type: DataTypes.STRING(120),
+        allowNull: true,
+        field: 'flywire_payment_destination',
       },
     },
     {

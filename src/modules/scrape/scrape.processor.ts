@@ -197,6 +197,7 @@ export const processCleaningJob = async (payload: CleaningJobMessage): Promise<v
       courses: batch.rawCourses || [],
       universities: batch.rawUniversities || [],
       scholarships: batch.rawScholarships || [],
+      fees: batch.rawFees || [],
       rejectedPages: batch.rejectedPages || [],
     });
 
@@ -205,7 +206,8 @@ export const processCleaningJob = async (payload: CleaningJobMessage): Promise<v
     const hasPersisted =
       (stats.persisted?.courses ?? 0) > 0 ||
       (stats.persisted?.universities ?? 0) > 0 ||
-      (stats.persisted?.scholarships ?? 0) > 0;
+      (stats.persisted?.scholarships ?? 0) > 0 ||
+      (stats.persisted?.fees ?? 0) > 0;
     const hasReviewable = (stats.validCount ?? 0) > 0 || (stats.needsReviewCount ?? 0) > 0;
     const jobCompleted = hasPersisted || hasReviewable;
 

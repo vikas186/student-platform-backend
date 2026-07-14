@@ -81,6 +81,9 @@ const INVALID_URL_PATTERNS: RegExp[] = [
   /\/privacy/i,
   /\/terms/i,
   /\/cookie/i,
+  /salesiq\.zohopublic\.com/i,
+  /zohopublic\.com\/visitor/i,
+  /google-analytics|googletagmanager|facebook\.com\/tr/i,
 ];
 
 const POSITIVE_COURSE_KEYWORDS = [

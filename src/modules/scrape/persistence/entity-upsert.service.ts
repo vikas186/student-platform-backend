@@ -185,8 +185,9 @@ export const upsertEnrichedBatch = async (
     courses: Array<{ entity: EnrichedCourse; enrichment: EnrichmentResult }>;
     universities: Array<{ entity: EnrichedUniversity; enrichment: EnrichmentResult }>;
     scholarships: Array<{ entity: EnrichedScholarship; enrichment: EnrichmentResult }>;
+    fees?: any[];
   },
-): Promise<{ courses: number; universities: number; scholarships: number }> => {
+): Promise<{ courses: number; universities: number; scholarships: number; fees: number }> => {
   const sourceLabel = source?.trim();
   if (!sourceLabel) {
     throw new Error('Missing scrape source for enriched upsert');
@@ -195,6 +196,7 @@ export const upsertEnrichedBatch = async (
   let courses = 0;
   let universities = 0;
   let scholarships = 0;
+  let fees = 0;
 
   await sequelize.transaction(async () => {
     for (const { entity, enrichment } of data.courses) {
@@ -212,8 +214,44 @@ export const upsertEnrichedBatch = async (
       await upsertScholarship(jobId, rawBatchId, sourceLabel, entity, enrichment);
       scholarships++;
     }
+    if (data.fees) {
+      for (const fee of data.fees) {
+        if (fee.cleaningStatus === 'rejected') continue;
+        const existing = await db.ScrapeFee.findOne({
+          where: {
+            source: sourceLabel,
+            country: fee.country || '',
+            studyLevel: fee.studyLevel || '',
+            tuitionFee: fee.tuitionFee || '',
+          },
+        });
+        const payload = {
+          jobId,
+          rawBatchId,
+          source: sourceLabel,
+          country: fee.country || null,
+          studyLevel: fee.studyLevel || null,
+          tuitionFee: fee.tuitionFee || null,
+          livingCost: fee.livingCost || null,
+          accommodationCost: fee.accommodationCost || null,
+          currency: fee.currency || null,
+          description: fee.description || null,
+          sourceUrl: fee.sourceUrl || null,
+          qualityScore: fee.qualityScore,
+          cleaningStatus: fee.cleaningStatus,
+          recordStatus: 'cleaned',
+          scrapedAt: new Date(),
+        };
+        if (existing) {
+          await existing.update(payload);
+        } else {
+          await db.ScrapeFee.create(payload);
+        }
+        fees++;
+      }
+    }
   });
 
-  scrapeLogger.info('Upserted enriched entities', { jobId, courses, universities, scholarships });
-  return { courses, universities, scholarships };
+  scrapeLogger.info('Upserted enriched entities', { jobId, courses, universities, scholarships, fees });
+  return { courses, universities, scholarships, fees };
 };

@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { Op, QueryTypes, Sequelize, fn } from 'sequelize';
-import { db } from '../config/database';
+import { db, sequelize } from '../config/database';
 import AppError from '../utils/errorHandler';
 import { APPLICATION_STATUSES } from '../models/Application.model';
 import { PAYMENT_STATUSES } from '../models/Payment.model';
@@ -1891,7 +1891,16 @@ export const deleteUniversityForAdmin = async (id: number) => {
   if (!row) {
     throw new AppError('University not found', 404);
   }
-  await row.destroy();
+
+  await sequelize.transaction(async transaction => {
+    // Explicit cleanup so deletes succeed even if DB FKs were created without CASCADE.
+    await db.Deadline.destroy({ where: { universityId: id }, transaction });
+    await db.Commission.destroy({ where: { universityId: id }, transaction });
+    await db.UniversityProfile.destroy({ where: { universityId: id }, transaction });
+    // Applications keep free-text universityName; courseId is SET NULL via FK when courses go.
+    await db.Course.destroy({ where: { universityId: id }, transaction });
+    await row.destroy({ transaction });
+  });
 };
 
 export const adminGlobalSearch = async (q: string) => {

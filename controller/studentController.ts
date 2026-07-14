@@ -231,3 +231,14 @@ export const uploadSignedOfferLetterByIdOrRef = catchAsyncError(async (req: Requ
     data: letter,
   });
 });
+
+export const createTuitionPayLink = catchAsyncError(async (req: Request, res: Response) => {
+  const user: any = req.user;
+  const pid = await getStudentProfileIdFromReq(req);
+  const data = await studentPortal.createTuitionPayLink(pid, user.id, req.body);
+  res.status(201).json({
+    success: true,
+    message: 'Tuition pay link created',
+    data,
+  });
+});

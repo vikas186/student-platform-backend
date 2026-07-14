@@ -17,8 +17,8 @@ export const scrapeLogger = winston.createLogger({
       // stderr flushes more reliably in Windows + concurrently multiplexed terminals
       stderrLevels: ['error', 'warn', 'info', 'debug'],
     }),
-    ...(process.env.SCRAPE_LOG_FILE
-      ? [new winston.transports.File({ filename: process.env.SCRAPE_LOG_FILE })]
-      : []),
+    new winston.transports.File({ 
+      filename: process.env.SCRAPE_LOG_FILE || 'debug/logs/scrape.log' 
+    }),
   ],
 });
