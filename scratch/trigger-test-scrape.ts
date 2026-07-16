@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
-dotenv.config({ path: `config/.env.${process.env.NODE_ENV || 'development'}` });
+import path from 'path';
+dotenv.config({ path: path.join(__dirname, '..', 'config', `.env.${process.env.NODE_ENV || 'development'}`) });
 
 import { db } from '../models';
 import { startScrapeJob } from '../src/modules/scrape/scrape.processor';
@@ -17,8 +18,8 @@ async function main() {
     targetUrl: 'https://www.studies-overseas.com/universities',
     targetName: 'Studies Overseas',
     seedUrls: ['https://www.studies-overseas.com/universities'],
-    maxPages: 43,
-    maxDetailPages: 6,
+    maxPages: 1,
+    maxDetailPages: 0,
   };
 
   console.log('Starting scrape job for:', target.targetName);

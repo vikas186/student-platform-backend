@@ -15,6 +15,7 @@ export default (sequelize: Sequelize) => {
     public overview!: string | null;
     public websiteUrl!: string | null;
     public sourceUrl!: string | null;
+    public logoUrl!: string | null;
     public faculties!: string[];
     public departments!: string[];
     public popularCourses!: string[];
@@ -27,6 +28,12 @@ export default (sequelize: Sequelize) => {
     public subjectTags!: string[];
     public rankingTags!: string[];
     public scrapedAt!: Date;
+    public intakes!: string | null;
+    public courses!: string | null;
+    public costOfStudy!: string | null;
+    public scholarships!: string | null;
+    public admissionRequirements!: string | null;
+    public acceptanceCriteria!: string | null;
     public readonly createdAt!: Date;
     public readonly updatedAt!: Date;
 
@@ -53,6 +60,7 @@ export default (sequelize: Sequelize) => {
       overview: { type: DataTypes.TEXT, allowNull: true },
       websiteUrl: { type: DataTypes.STRING(2048), allowNull: true, field: 'website_url' },
       sourceUrl: { type: DataTypes.STRING(2048), allowNull: true, field: 'source_url' },
+      logoUrl: { type: DataTypes.STRING(2048), allowNull: true, field: 'logo_url' },
       faculties: { type: DataTypes.JSONB, allowNull: false, defaultValue: [] },
       departments: { type: DataTypes.JSONB, allowNull: false, defaultValue: [] },
       popularCourses: { type: DataTypes.JSONB, allowNull: false, defaultValue: [], field: 'popular_courses' },
@@ -65,6 +73,12 @@ export default (sequelize: Sequelize) => {
       subjectTags: { type: DataTypes.JSONB, allowNull: false, defaultValue: [], field: 'subject_tags' },
       rankingTags: { type: DataTypes.JSONB, allowNull: false, defaultValue: [], field: 'ranking_tags' },
       scrapedAt: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW, field: 'scraped_at' },
+      intakes: { type: DataTypes.TEXT, allowNull: true },
+      courses: { type: DataTypes.TEXT, allowNull: true },
+      costOfStudy: { type: DataTypes.TEXT, allowNull: true, field: 'cost_of_study' },
+      scholarships: { type: DataTypes.TEXT, allowNull: true },
+      admissionRequirements: { type: DataTypes.TEXT, allowNull: true, field: 'admission_requirements' },
+      acceptanceCriteria: { type: DataTypes.TEXT, allowNull: true, field: 'acceptance_criteria' },
     },
     { sequelize, modelName: 'ScrapeUniversity', tableName: 'scrape_universities', timestamps: true },
   );

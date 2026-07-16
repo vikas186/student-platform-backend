@@ -1,16 +1,7 @@
 import { Model, DataTypes, Sequelize } from 'sequelize';
 
 /** Built-in catalog presets (optional shortcuts). Custom URLs use hostname as source label. */
-export const SCRAPE_PRESETS = [
-  'IDP',
-  'AECC',
-  'STUDIES_OVERSEAS',
-  'EDWISE',
-  'CHOPRAS',
-  'GLOBAL_DEGREES',
-  'GEEBEE',
-  'EDVOY',
-] as const;
+export const SCRAPE_PRESETS = ['STUDIES_OVERSEAS'] as const;
 export type ScrapePreset = (typeof SCRAPE_PRESETS)[number];
 
 export const SCRAPE_JOB_STATUSES = [

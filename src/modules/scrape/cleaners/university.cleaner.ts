@@ -19,6 +19,12 @@ export const cleanUniversityData = (raw: RawUniversityRow): CleanedUniversity =>
     faculties: (raw.faculties || []).map(f => normalizeText(f)).filter(Boolean) as string[],
     departments: (raw.departments || []).map(d => normalizeText(d)).filter(Boolean) as string[],
     popularCourses: (raw.popularCourses || []).map(c => normalizeText(c)).filter(Boolean) as string[],
+    intakes: raw.intakes?.trim() || undefined,
+    courses: raw.courses?.trim() || undefined,
+    costOfStudy: raw.costOfStudy?.trim() || undefined,
+    scholarships: raw.scholarships?.trim() || undefined,
+    admissionRequirements: raw.admissionRequirements?.trim() || undefined,
+    acceptanceCriteria: raw.acceptanceCriteria?.trim() || undefined,
   };
 
   const { score, status } = scoreFromFields([

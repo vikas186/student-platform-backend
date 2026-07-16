@@ -75,7 +75,10 @@ export const scrapeStudiesOverseas = async (
   const visitedListings = new Set<string>();
   const discoveredUnisMap = new Map<string, { name: string; country: string; url: string }>();
 
-  while (listingQueue.length > 0 && visitedListings.size < config.maxPages) {
+  while (
+    listingQueue.length > 0 &&
+    (config.maxPages <= 0 || visitedListings.size < config.maxPages)
+  ) {
     const url = listingQueue.shift()!;
     if (visitedListings.has(url)) continue;
     visitedListings.add(url);
@@ -83,12 +86,15 @@ export const scrapeStudiesOverseas = async (
     try {
       const pageResult = await capturePageWithPlaywright(url, {
         source: config.source,
-        saveArtifacts: true,
+        // Listing HTML is large; skip screenshots so we reach detail pages faster.
+        saveArtifacts: false,
       });
       pagesVisited++;
       apiResponseCount += pageResult.apiResponses.length;
 
-      // Extract __NEXT_DATA__
+      let discoveredFromNextData = 0;
+
+      // Extract __NEXT_DATA__ — homepage embeds the full country→university catalog.
       const nextDataMatch = pageResult.html?.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/);
       if (nextDataMatch) {
         try {
@@ -134,6 +140,7 @@ export const scrapeStudiesOverseas = async (
                   country: countryName,
                   url: targetUrl,
                 });
+                discoveredFromNextData++;
                 scrapeLogger.info('University discovered', { name: uniName, url: targetUrl });
               }
             }
@@ -143,16 +150,25 @@ export const scrapeStudiesOverseas = async (
         }
       }
 
-      // Pagination detection
-      const regex = /href="(\/universities\/page-\d+)"/g;
-      let match;
-      if (pageResult.html) {
-        while ((match = regex.exec(pageResult.html)) !== null) {
-          const absoluteLink = `https://www.studies-overseas.com${match[1]}`;
-          if (!visitedListings.has(absoluteLink) && !listingQueue.includes(absoluteLink)) {
-            listingQueue.push(absoluteLink);
+      // Only paginate when NEXT_DATA did not yield the catalog (fallback).
+      // The first listing page already contains all ~672 universities.
+      if (discoveredUnisMap.size === 0) {
+        const regex = /href="(\/universities\/page-\d+)"/g;
+        let match;
+        if (pageResult.html) {
+          while ((match = regex.exec(pageResult.html)) !== null) {
+            const absoluteLink = `https://www.studies-overseas.com${match[1]}`;
+            if (!visitedListings.has(absoluteLink) && !listingQueue.includes(absoluteLink)) {
+              listingQueue.push(absoluteLink);
+            }
           }
         }
+      } else {
+        listingQueue.length = 0;
+        scrapeLogger.info('Full catalog from __NEXT_DATA__; skipping listing pagination', {
+          totalDiscovered: discoveredUnisMap.size,
+          newlyDiscovered: discoveredFromNextData,
+        });
       }
 
       scrapeLogger.info('Listing page completed', { url, totalDiscovered: discoveredUnisMap.size });
@@ -175,8 +191,21 @@ export const scrapeStudiesOverseas = async (
   // ----------------------------------------------------
   // UNIVERSITY DETAIL PAGES CRAWL PHASE (Step 4 onwards)
   // ----------------------------------------------------
-  const unisToScrape = Array.from(discoveredUnisMap.values()).slice(0, config.maxDetailPages);
-  scrapeLogger.info('Starting details extraction phase', { totalToScrape: unisToScrape.length });
+  const detailOffset = Math.max(0, Number((config as { detailOffset?: number }).detailOffset) || 0);
+  const allDiscovered = Array.from(discoveredUnisMap.values());
+  // maxDetailPages <= 0 means unlimited (scrape every discovered university).
+  const detailLimit =
+    config.maxDetailPages > 0 ? config.maxDetailPages : allDiscovered.length - detailOffset;
+  const unisToScrape = allDiscovered.slice(
+    detailOffset,
+    detailOffset + Math.max(0, detailLimit),
+  );
+  scrapeLogger.info('Starting details extraction phase', {
+    totalToScrape: unisToScrape.length,
+    detailOffset,
+    catalogSize: allDiscovered.length,
+    unlimited: !(config.maxDetailPages > 0),
+  });
 
   const browser = await getPlaywrightBrowser();
 
@@ -246,7 +275,73 @@ export const scrapeStudiesOverseas = async (
           images.push(details.universityLogo);
         }
 
-        universities.push({
+        // Extract intakes, cost, scholarships, requirements, and criteria
+        let intakes = '';
+        if (details.intakeSection && Array.isArray(details.intakeSection.intakeDetail)) {
+          intakes = details.intakeSection.intakeDetail
+            .map((item: any) => (item.intake || '').trim())
+            .filter(Boolean)
+            .join(', ');
+        }
+
+        let costOfStudy = '';
+        if (details.costToStudySection) {
+          costOfStudy = (details.costToStudySection.description || '')
+            .replace(/<[^>]*>/g, '')
+            .replace(/&nbsp;/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+        }
+
+        let scholarshipsText = '';
+        const rawScholarshipsList = details.scholarshipsAvailable?.scholarshipsCard || details.scholarshipsAvailable?.data || details.scholarshipsAvailable || [];
+        const finalScholarshipsList = Array.isArray(rawScholarshipsList) ? rawScholarshipsList : [];
+        if (finalScholarshipsList.length > 0) {
+          scholarshipsText = finalScholarshipsList
+            .map((item: any) => {
+              const name = (item.name || item.title || '').trim();
+              const detailsList = Array.isArray(item.detail) ? item.detail.join(', ') : '';
+              return name + (detailsList ? ` (${detailsList})` : '');
+            })
+            .filter(Boolean)
+            .join('; ');
+        }
+
+        let admissionRequirements = '';
+        if (Array.isArray(details.admissionRequirementDetail)) {
+          admissionRequirements = details.admissionRequirementDetail
+            .map((item: any) => {
+              const level = (item.name || '').trim();
+              const cards = Array.isArray(item.requirementCard)
+                ? item.requirementCard
+                    .map((card: any) => {
+                      const title = (card.title || '').trim();
+                      const details = (card.cardDetails || '')
+                        .replace(/<[^>]*>/g, '')
+                        .replace(/&nbsp;/g, ' ')
+                        .replace(/\s+/g, ' ')
+                        .trim();
+                      return `${title}: ${details}`;
+                    })
+                    .filter(Boolean)
+                    .join(' | ')
+                : '';
+              return `${level} -> ${cards}`;
+            })
+            .filter(Boolean)
+            .join('\n');
+        }
+
+        let acceptanceCriteria = '';
+        if (details.admissionRequirementSection) {
+          acceptanceCriteria = (details.admissionRequirementSection.description || '')
+            .replace(/<[^>]*>/g, '')
+            .replace(/&nbsp;/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+        }
+
+        const uniRow: any = {
           universityName: uniName,
           country,
           city,
@@ -254,8 +349,14 @@ export const scrapeStudiesOverseas = async (
           overview: overview ? overview.slice(0, 5000) : '',
           websiteUrl: (details.universityUrl || details.url || '').slice(0, 250),
           sourceUrl: uniSeed.url.slice(0, 250),
+          logoUrl: details.universityLogo ? String(details.universityLogo).slice(0, 2048) : null,
           pageText: html.slice(0, 15000),
-        });
+          intakes,
+          costOfStudy,
+          scholarships: scholarshipsText,
+          admissionRequirements,
+          acceptanceCriteria,
+        };
 
         // Map Cost to Study (Fees)
         if (details.costToStudySection) {
@@ -273,26 +374,24 @@ export const scrapeStudiesOverseas = async (
         }
 
         // Map Scholarships
-        const scholarshipsList = details.scholarshipsAvailable?.data || details.scholarshipsAvailable || [];
-        if (Array.isArray(scholarshipsList)) {
-          for (const item of scholarshipsList) {
+        if (finalScholarshipsList.length > 0) {
+          for (const item of finalScholarshipsList) {
             scholarships.push({
               scholarshipName: (item.title || item.name || 'Scholarship').trim().slice(0, 250),
               universityName: uniName,
               country,
-              amount: (item.amount || '').trim().slice(0, 250),
-              eligibility: item.eligibility || '',
+              amount: (item.amount || (Array.isArray(item.detail) ? item.detail.find((d: string) => d.toLowerCase().includes('value')) : '') || '').trim().slice(0, 250),
+              eligibility: item.eligibility || (Array.isArray(item.detail) ? item.detail.join(', ') : ''),
               deadline: (item.deadline || '').trim().slice(0, 120),
               description: item.description || '',
               sourceUrl: uniSeed.url.slice(0, 250),
             });
           }
-          if (scholarshipsList.length > 0) {
-            scrapeLogger.info('Scholarships extracted', { name: uniName, count: scholarshipsList.length });
-          }
+          scrapeLogger.info('Scholarships extracted', { name: uniName, count: finalScholarshipsList.length });
         }
 
         // 2. Courses Tab clicking & DOM parsing
+        const coursesStartIdx = courses.length;
         const coursesUrl = `${uniSeed.url}?section=courses`;
         await page.goto(coursesUrl, { waitUntil: 'load', timeout: 60000 });
         await page.evaluate(() => {
@@ -302,13 +401,13 @@ export const scrapeStudiesOverseas = async (
         }).catch(() => {});
         await page.waitForTimeout(3000);
         pagesVisited++;
-
+ 
         const coursesTab = page.locator('text=Courses').first();
         if (await coursesTab.isVisible()) {
           await coursesTab.click({ force: true });
           await page.waitForTimeout(2000);
         }
-
+ 
         // Click cookie banners
         try {
           const acceptBtn = page.locator('button:has-text("Accept")').first();
@@ -318,26 +417,26 @@ export const scrapeStudiesOverseas = async (
         } catch {
           // ignore
         }
-
+ 
         const extractCourses = async (mode: string) => {
           const cards = await page!.$$('div[class*="UniversityDetail_cardBody"]');
           for (const card of cards) {
             const nameEl = await card.$('div[class*="UniversityDetail_title"] h3');
             const courseName = nameEl ? await nameEl.innerText() : '';
             if (!courseName) continue;
-
+ 
             let tuitionFee = '';
             let duration = '';
-
+ 
             const feeEl = await card.$('div[class*="UniversityDetail_courseInformation"] div:first-child h4');
             if (feeEl) tuitionFee = await feeEl.innerText();
-
+ 
             const durEl = await card.$('div[class*="UniversityDetail_courseInformation"] div:nth-child(2) h4');
             if (durEl) duration = await durEl.innerText();
-
+ 
              const slugify = (text: string) => text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
              const uniqueCourseUrl = `${coursesUrl}#${slugify(courseName)}`;
-
+ 
              courses.push({
               universityName: uniName.slice(0, 250),
               courseName: courseName.trim().slice(0, 250),
@@ -351,7 +450,7 @@ export const scrapeStudiesOverseas = async (
             });
           }
         };
-
+ 
         // Extract Masters
         const mastersTab = page.locator('text=Masters').first();
         if (await mastersTab.isVisible()) {
@@ -359,17 +458,22 @@ export const scrapeStudiesOverseas = async (
           await page.waitForTimeout(1500);
         }
         await extractCourses('Masters');
-
+ 
         // Extract Bachelors
         const bachelorsTab = page.locator('text=Bachelors').first();
         if (await bachelorsTab.isVisible()) {
           await bachelorsTab.click({ force: true });
           await page.waitForTimeout(1500);
-        }  await extractCourses('Bachelors');
+        }
+        await extractCourses('Bachelors');
+ 
+        const universityCoursesList = courses.slice(coursesStartIdx);
+        uniRow.courses = universityCoursesList.map(c => c.courseName).join(', ');
+        universities.push(uniRow);
 
-        scrapeLogger.info('Courses extracted', { name: uniName, count: courses.length });
+        scrapeLogger.info('Courses extracted', { name: uniName, count: universityCoursesList.length });
         scrapeLogger.info('University completed', { name: uniName });
-
+ 
         attemptSuccess = true;
         break; // break retry loop
 

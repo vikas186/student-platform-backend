@@ -225,9 +225,11 @@ export const runPipelineScrape = async (
   }
 
   const maxQueueSize =
-    config.source === 'AECC'
-      ? Math.max(config.maxPages * Math.max(config.seeds.length, 1), config.maxPages)
-      : config.maxPages;
+    config.maxPages <= 0
+      ? Number.MAX_SAFE_INTEGER
+      : config.source === 'AECC'
+        ? Math.max(config.maxPages * Math.max(config.seeds.length, 1), config.maxPages)
+        : config.maxPages;
   scrapeLogger.info('Pipeline pages queued', {
     source: config.source,
     count: limitedQueue.length,

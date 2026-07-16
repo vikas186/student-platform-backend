@@ -7,6 +7,7 @@ import type {
   EnrichedUniversity,
 } from '../schemas/scrape.schemas';
 import type { EnrichmentResult } from '../enrichment/enrichment.service';
+import { getJaroWinkler, checkSemanticDuplicate, isAcronym } from '../utils/similarity.util';
 
 const upsertAiMeta = async (
   entityType: 'course' | 'university' | 'scholarship',
@@ -100,7 +101,7 @@ export const upsertUniversity = async (
   uni: EnrichedUniversity,
   enrichment: EnrichmentResult,
 ): Promise<string> => {
-  const payload = {
+  const payload: any = {
     jobId,
     rawBatchId,
     source,
@@ -111,6 +112,7 @@ export const upsertUniversity = async (
     overview: uni.overview || null,
     websiteUrl: uni.websiteUrl || null,
     sourceUrl: uni.sourceUrl || null,
+    logoUrl: uni.logoUrl || null,
     faculties: uni.faculties || [],
     departments: uni.departments || [],
     popularCourses: uni.popularCourses || [],
@@ -122,16 +124,157 @@ export const upsertUniversity = async (
     isDuplicate: false,
     recordStatus: 'cleaned',
     scrapedAt: new Date(),
+    intakes: uni.intakes || null,
+    courses: uni.courses || null,
+    costOfStudy: uni.costOfStudy || null,
+    scholarships: uni.scholarships || null,
+    admissionRequirements: uni.admissionRequirements || null,
+    acceptanceCriteria: uni.acceptanceCriteria || null,
   };
 
-  const existing = await db.ScrapeUniversity.findOne({
-    where: { source, universityName: uni.universityName, country: uni.country || '' },
+  // 1. Database Match Check (Exact Name + Country) - Global across all sources
+  let existing = await db.ScrapeUniversity.findOne({
+    where: { universityName: uni.universityName, country: uni.country || '' },
   });
-  const row = existing ? await existing.update(payload) : await db.ScrapeUniversity.create(payload);
 
-  const id = row.id;
-  await upsertAiMeta('university', id, jobId, source, enrichment);
-  return id;
+  // 2. Fuzzy String Matching & AI Semantic Check Check - Global across all sources
+  if (!existing) {
+    const candidates = await db.ScrapeUniversity.findAll({
+      where: { country: uni.country || '' },
+    });
+
+    for (const candidate of candidates) {
+      // Direct case-insensitive comparison
+      if (candidate.universityName.trim().toLowerCase() === uni.universityName.trim().toLowerCase()) {
+        existing = candidate;
+        scrapeLogger.info('Exact case-insensitive duplicate university matched', {
+          universityName: uni.universityName,
+        });
+        break;
+      }
+
+      // Jaro-Winkler name similarity scorer
+      const score = getJaroWinkler(uni.universityName, candidate.universityName);
+      if (score >= 0.95) {
+        existing = candidate;
+        scrapeLogger.info('High similarity duplicate university matched (Jaro-Winkler)', {
+          scrapedName: uni.universityName,
+          matchedAs: candidate.universityName,
+          score,
+        });
+        break;
+      }
+
+      const isAbbr = isAcronym(uni.universityName, candidate.universityName) ||
+                     isAcronym(candidate.universityName, uni.universityName);
+
+      if (score >= 0.70 || isAbbr) {
+        // AI semantic match fallback for near-duplicates or abbreviations
+        const isDuplicate = await checkSemanticDuplicate(
+          uni.universityName,
+          candidate.universityName,
+          uni.country || '',
+          uni.city || null
+        );
+        if (isDuplicate) {
+          existing = candidate;
+          scrapeLogger.info('AI semantic duplicate university matched', {
+            scrapedName: uni.universityName,
+            matchedAs: candidate.universityName,
+            score,
+            isAbbr,
+          });
+          break;
+        }
+      }
+    }
+  }
+
+  // 3. Merge & Change Detection & Persist
+  if (existing) {
+    // Merge comma/semi/newline-separated lists
+    const mergeSet = (val1: string | null, val2: string | null, sep: string = ',') => {
+      const set1 = String(val1 || '').split(sep).map(s => s.trim()).filter(Boolean);
+      const set2 = String(val2 || '').split(sep).map(s => s.trim()).filter(Boolean);
+      const union = Array.from(new Set([...set1, ...set2]));
+      return union.join(sep === ',' ? ', ' : sep === ';' ? '; ' : sep);
+    };
+
+    payload.intakes = mergeSet(existing.intakes, uni.intakes || null);
+    payload.courses = mergeSet(existing.courses, uni.courses || null);
+    payload.scholarships = mergeSet(existing.scholarships, uni.scholarships || null, ';');
+    payload.admissionRequirements = mergeSet(existing.admissionRequirements, uni.admissionRequirements || null, '\n');
+    payload.acceptanceCriteria = mergeSet(existing.acceptanceCriteria, uni.acceptanceCriteria || null, '\n');
+
+    // Merge Cost of Study
+    payload.costOfStudy = existing.costOfStudy && existing.costOfStudy.includes(String(uni.costOfStudy || ''))
+      ? existing.costOfStudy
+      : uni.costOfStudy
+        ? existing.costOfStudy
+          ? `${existing.costOfStudy} | ${uni.costOfStudy}`
+          : uni.costOfStudy
+        : existing.costOfStudy;
+
+    // Merge source values
+    const existingSources = (existing.source || '').split(',').map((s: string) => s.trim()).filter(Boolean);
+    if (!existingSources.includes(source)) {
+      existingSources.push(source);
+      payload.source = existingSources.join(', ');
+    } else {
+      payload.source = existing.source;
+    }
+
+    const fieldsToCompare = [
+      'city',
+      'ranking',
+      'overview',
+      'websiteUrl',
+      'sourceUrl',
+      'logoUrl',
+      'intakes',
+      'courses',
+      'costOfStudy',
+      'scholarships',
+      'admissionRequirements',
+      'acceptanceCriteria',
+      'source',
+    ];
+
+    let hasChanges = false;
+    for (const field of fieldsToCompare) {
+      const existingVal = String(existing.get(field) || '').trim();
+      const incomingVal = String(payload[field] || '').trim();
+      if (existingVal !== incomingVal) {
+        hasChanges = true;
+        break;
+      }
+    }
+
+    if (!hasChanges) {
+      scrapeLogger.info('No changes detected for duplicate university, skipping update', {
+        universityName: uni.universityName,
+        matchedAs: existing.universityName,
+      });
+      return existing.id;
+    }
+
+    scrapeLogger.info('Changes detected for duplicate university, updating existing record', {
+      universityName: uni.universityName,
+      matchedAs: existing.universityName,
+    });
+
+    const { universityName, ...updatePayload } = payload;
+    await existing.update(updatePayload);
+    const id = existing.id;
+    await upsertAiMeta('university', id, jobId, source, enrichment);
+    return id;
+  } else {
+    // Insert new university record
+    const row = await db.ScrapeUniversity.create(payload);
+    const id = row.id;
+    await upsertAiMeta('university', id, jobId, source, enrichment);
+    return id;
+  }
 };
 
 export const upsertScholarship = async (

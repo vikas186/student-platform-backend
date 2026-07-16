@@ -15,6 +15,7 @@ import {
 } from '../utils/adminUiStatus';
 import { applicationScopeForUniversity } from '../utils/universityApplicationScope';
 import { parseSimpleCsvLines } from '../utils/spreadsheetParse';
+import { findMasterUniversityDuplicate } from '../src/modules/scrape/utils/similarity.util';
 import {
   buildColumnIndexMap,
   findCatalogHeaderRowIndex,
@@ -425,28 +426,7 @@ export const importUniversityCatalogFileForAdmin = async (file: Express.Multer.F
     }
 
     let parsedName = parsed.name.trim();
-    let uni = await db.University.findOne({
-      where: {
-        [Op.and]: [
-          { name: { [Op.iLike]: parsedName } },
-          { country: { [Op.iLike]: parsed.country.trim() } },
-        ],
-      },
-    });
-
-    if (!uni) {
-      const allUnis = await db.University.findAll({
-        where: { country: { [Op.iLike]: parsed.country.trim() } },
-      });
-      const lowerParsed = parsedName.toLowerCase();
-      const matched = allUnis.find(u => {
-        const dbName = u.name.toLowerCase();
-        return lowerParsed.includes(dbName) || dbName.includes(lowerParsed);
-      });
-      if (matched) {
-        uni = matched;
-      }
-    }
+    let uni = await findMasterUniversityDuplicate(parsedName, parsed.country);
 
     if (!uni) {
       uni = await db.University.create({
@@ -611,9 +591,7 @@ export const createIntakeRowForAdmin = async (body: {
     throw new AppError('intakeLabel is required', 400);
   }
   const country = (body.country || 'General').trim() || 'General';
-  let uni = await db.University.findOne({
-    where: { name: { [Op.iLike]: name } },
-  });
+  let uni = await findMasterUniversityDuplicate(name, country);
   if (!uni) {
     uni = await db.University.create({ name, country, status: true });
   }
@@ -887,13 +865,12 @@ export const createCommissionSlabRichForAdmin = async (body: {
   if (!name) {
     throw new AppError('universityName is required', 400);
   }
-  let uni = await db.University.findOne({
-    where: { name: { [Op.iLike]: name } },
-  });
+  const country = (body.country || 'General').trim() || 'General';
+  let uni = await findMasterUniversityDuplicate(name, country);
   if (!uni) {
     uni = await db.University.create({
       name,
-      country: (body.country || 'General').trim() || 'General',
+      country,
       status: true,
     });
   }
@@ -1836,9 +1813,18 @@ export const deleteSubscriptionPlanForAdmin = async (id: number) => {
 };
 
 export const createUniversityForAdmin = async (body: { name: string; country: string; status?: boolean }) => {
+  const name = body.name.trim();
+  const country = body.country.trim();
+  const existing = await findMasterUniversityDuplicate(name, country);
+  if (existing) {
+    if (body.status !== undefined) {
+      await existing.update({ status: body.status !== false });
+    }
+    return existing;
+  }
   return db.University.create({
-    name: body.name.trim(),
-    country: body.country.trim(),
+    name,
+    country,
     status: body.status !== false,
   });
 };

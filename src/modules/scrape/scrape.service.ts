@@ -80,12 +80,14 @@ export const createScrapeJob = async (body: StartScrapeBody, trigger: ScrapeTrig
 };
 
 export const listScrapePresets = () =>
-  Object.entries(PRESET_CONFIG).map(([source, cfg]) => ({
-    source,
-    label: cfg.label || source,
-    targetUrl: cfg.baseUrl,
-    targetName: cfg.label || source,
-  }));
+  Object.entries(PRESET_CONFIG)
+    .filter(([source]) => source === 'STUDIES_OVERSEAS')
+    .map(([source, cfg]) => ({
+      source,
+      label: cfg.label || source,
+      targetUrl: cfg.baseUrl,
+      targetName: cfg.label || source,
+    }));
 
 export const listScrapeJobs = async (query: {
   status?: string;

@@ -17,9 +17,9 @@ export const CLEAN_MAX_RETRIES = parseInt(
 );
 export const SCRAPE_TIMEOUT_MS = parseInt(process.env.SCRAPE_TIMEOUT_MS || '120000', 10);
 export const SCRAPE_DELAY_MS = parseInt(process.env.SCRAPE_RATE_LIMIT_MS || '2000', 10);
-export const SCRAPE_MAX_PAGES = parseInt(process.env.SCRAPE_MAX_PAGES || '25', 10);
-export const SCRAPE_MAX_DETAIL_PAGES = parseInt(process.env.SCRAPE_MAX_DETAIL_PAGES || '15', 10);
-export const SCRAPE_MAX_API_RESPONSES = parseInt(process.env.SCRAPE_MAX_API_RESPONSES || '24', 10);
+export const SCRAPE_MAX_PAGES = parseInt(process.env.SCRAPE_MAX_PAGES || '0', 10);
+export const SCRAPE_MAX_DETAIL_PAGES = parseInt(process.env.SCRAPE_MAX_DETAIL_PAGES || '0', 10);
+export const SCRAPE_MAX_API_RESPONSES = parseInt(process.env.SCRAPE_MAX_API_RESPONSES || '0', 10);
 export const SCRAPE_PAGE_RETRIES = parseInt(process.env.SCRAPE_PAGE_RETRIES || '3', 10);
 export const SCRAPE_PAGE_WAIT_MS = parseInt(process.env.SCRAPE_PAGE_WAIT_MS || '3000', 10);
 export const SCRAPE_RANDOM_DELAY_MIN_MS = parseInt(process.env.SCRAPE_RANDOM_DELAY_MIN_MS || '1000', 10);

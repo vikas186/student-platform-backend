@@ -232,7 +232,8 @@ export const enqueueIDPCoursePagination = (
   const meta = html ? extractIDPCoursePageMetaFromHtml(html, listingUrl) : null;
   if (!meta) return 0;
 
-  const totalPages = Math.min(Math.ceil(meta.total / meta.pageSize), maxPages);
+  const catalogPages = Math.ceil(meta.total / meta.pageSize);
+  const totalPages = maxPages > 0 ? Math.min(catalogPages, maxPages) : catalogPages;
   let added = 0;
 
   for (let page = 2; page <= totalPages; page++) {

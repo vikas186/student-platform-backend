@@ -179,7 +179,7 @@ const capturePageOnce = async (
 
   page.on('response', async res => {
     try {
-      if (apiResponses.length >= SCRAPE_MAX_API_RESPONSES) return;
+      if (SCRAPE_MAX_API_RESPONSES > 0 && apiResponses.length >= SCRAPE_MAX_API_RESPONSES) return;
       const resUrl = res.url();
       if (seenApiUrl.has(resUrl)) return;
       const ct = res.headers()['content-type'] || '';

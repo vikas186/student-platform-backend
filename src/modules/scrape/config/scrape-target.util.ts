@@ -39,8 +39,8 @@ export const resolveScrapeTarget = (body: StartScrapeBody): ResolvedScrapeTarget
     const targetUrl = normalizeScrapeUrl(body.url);
     const source = sourceLabelFromUrl(targetUrl);
     const seedUrls = normalizeSeedUrls(targetUrl, body.seeds || []);
-    const maxPages = parseInt(process.env.SCRAPE_CUSTOM_MAX_PAGES || '25', 10);
-    const maxDetailPages = parseInt(process.env.SCRAPE_CUSTOM_MAX_DETAIL || '15', 10);
+    const maxPages = parseInt(process.env.SCRAPE_CUSTOM_MAX_PAGES || '0', 10);
+    const maxDetailPages = parseInt(process.env.SCRAPE_CUSTOM_MAX_DETAIL || '0', 10);
     return {
       source,
       targetUrl,
@@ -51,10 +51,7 @@ export const resolveScrapeTarget = (body: StartScrapeBody): ResolvedScrapeTarget
     };
   }
 
-  throw new AppError(
-    'Provide either a source preset (IDP, AECC, STUDIES_OVERSEAS, …) or url',
-    400,
-  );
+  throw new AppError('Provide either source STUDIES_OVERSEAS or a custom url', 400);
 };
 
 export const toSourceConfig = (target: ResolvedScrapeTarget): SourceConfig => ({

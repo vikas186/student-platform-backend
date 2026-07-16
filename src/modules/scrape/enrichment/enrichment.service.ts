@@ -40,8 +40,8 @@ export const enrichEntity = async (ctx: EnrichmentContext): Promise<EnrichmentRe
     categorizerOutput: {},
   };
 
-  if (!scrapeAiEnabled()) {
-    scrapeLogger.debug('AI enrichment skipped (disabled or no API key)');
+  if (!scrapeAiEnabled() || (ctx.entityType === 'course' && process.env.SKIP_COURSE_AI_ENRICHMENT === 'true')) {
+    scrapeLogger.debug('AI enrichment skipped (disabled or bypassed for courses)');
     return empty;
   }
 

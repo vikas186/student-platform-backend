@@ -39,15 +39,20 @@ export const processScrapeJob = async (payload: ScrapeJobMessage): Promise<void>
     return;
   }
 
+  const jobStats = (job.stats as { maxPages?: number; maxDetailPages?: number }) || {};
   const config = toSourceConfig({
     source,
     targetUrl,
     targetName: job.targetName || source,
     seedUrls: job.seedUrls?.length ? job.seedUrls : [targetUrl],
-    maxPages: Number((job.stats as { maxPages?: number })?.maxPages) || parseInt(process.env.SCRAPE_MAX_PAGES || '25', 10),
+    maxPages:
+      jobStats.maxPages != null && Number.isFinite(Number(jobStats.maxPages))
+        ? Number(jobStats.maxPages)
+        : parseInt(process.env.SCRAPE_MAX_PAGES || '0', 10),
     maxDetailPages:
-      Number((job.stats as { maxDetailPages?: number })?.maxDetailPages) ||
-      parseInt(process.env.SCRAPE_MAX_DETAIL_PAGES || '15', 10),
+      jobStats.maxDetailPages != null && Number.isFinite(Number(jobStats.maxDetailPages))
+        ? Number(jobStats.maxDetailPages)
+        : parseInt(process.env.SCRAPE_MAX_DETAIL_PAGES || '0', 10),
   });
 
   try {
@@ -66,18 +71,22 @@ export const processScrapeJob = async (payload: ScrapeJobMessage): Promise<void>
 
     const result = await scrapeWebsite(config, {
       onProgress: async progress => {
+        const prev = ((await job.reload()).stats as Record<string, unknown>) || baseStats;
         await job.update({
           updatedAt: new Date(),
           stats: {
+            ...prev,
             ...baseStats,
-            totalPages: progress.totalPages ?? baseStats.totalPages,
-            coursesFound: progress.coursesFound ?? 0,
-            universitiesFound: progress.universitiesFound ?? 0,
-            feesFound: progress.feesFound ?? 0,
-            scholarshipsFound: progress.scholarshipsFound ?? 0,
-            rejectedPages: progress.rejectedPages ?? 0,
-            currentPage: progress.currentPage,
-            currentUrl: progress.currentUrl,
+            totalPages: progress.totalPages ?? prev.totalPages ?? baseStats.totalPages,
+            coursesFound: progress.coursesFound ?? prev.coursesFound ?? 0,
+            universitiesFound: progress.universitiesFound ?? prev.universitiesFound ?? 0,
+            feesFound: progress.feesFound ?? prev.feesFound ?? 0,
+            scholarshipsFound: progress.scholarshipsFound ?? prev.scholarshipsFound ?? 0,
+            rejectedPages: progress.rejectedPages ?? prev.rejectedPages ?? 0,
+            currentPage: progress.currentPage ?? prev.currentPage,
+            currentUrl: progress.currentUrl ?? prev.currentUrl,
+            maxPages: baseStats.maxPages ?? prev.maxPages,
+            maxDetailPages: baseStats.maxDetailPages ?? prev.maxDetailPages,
           },
         });
       },

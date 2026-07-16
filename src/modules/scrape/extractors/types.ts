@@ -32,6 +32,12 @@ export type RawUniversityRow = {
   departments?: string[];
   popularCourses?: string[];
   pageText?: string;
+  intakes?: string;
+  courses?: string;
+  costOfStudy?: string;
+  scholarships?: string;
+  admissionRequirements?: string;
+  acceptanceCriteria?: string;
 };
 
 export type RawFeeRow = {

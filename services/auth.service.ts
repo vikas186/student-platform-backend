@@ -115,15 +115,13 @@ type SignupByRoleBody = {
   country?: string;
 };
 
+import { findMasterUniversityDuplicate } from '../src/modules/scrape/utils/similarity.util';
+
 /** Match Uniwizer UI: find by name+country or create institution row. */
 const findOrCreateUniversityForSignup = async (institutionName: string, country: string) => {
   const name = institutionName.trim();
   const countryNorm = country.trim() || 'General';
-  let uni = await db.University.findOne({
-    where: {
-      [Op.and]: [{ name: { [Op.iLike]: name } }, { country: { [Op.iLike]: countryNorm } }],
-    },
-  });
+  let uni = await findMasterUniversityDuplicate(name, countryNorm);
   if (!uni) {
     uni = await db.University.create({
       name,

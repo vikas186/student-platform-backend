@@ -60,10 +60,17 @@ export const rawUniversitySchema = z.object({
   overview: optionalStringCoerce,
   websiteUrl: optionalStringCoerce,
   sourceUrl: optionalStringCoerce,
+  logoUrl: optionalStringCoerce,
   faculties: z.array(z.string()).optional(),
   departments: z.array(z.string()).optional(),
   popularCourses: z.array(z.string()).optional(),
   pageText: optionalStringCoerce,
+  intakes: optionalStringCoerce,
+  courses: optionalStringCoerce,
+  costOfStudy: optionalStringCoerce,
+  scholarships: optionalStringCoerce,
+  admissionRequirements: optionalStringCoerce,
+  acceptanceCriteria: optionalStringCoerce,
 });
 
 export const rawScholarshipSchema = z.object({

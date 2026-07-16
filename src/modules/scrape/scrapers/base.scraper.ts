@@ -77,7 +77,8 @@ export const runCatalogScrape = async (config: SourceConfig): Promise<ScrapeResu
     if (!jobs.includes(href)) jobs.push(href);
   }
 
-  const limitedJobs = jobs.slice(0, config.maxPages);
+  const limitedJobs =
+    config.maxPages > 0 ? jobs.slice(0, config.maxPages) : jobs;
   scrapeLogger.info('Catalog pages queued', { source: config.source, count: limitedJobs.length });
 
   for (const url of limitedJobs) {
@@ -114,10 +115,11 @@ export const runCatalogScrape = async (config: SourceConfig): Promise<ScrapeResu
   const detailLinks = filterRealCourses(courses)
     .filter(c => c.courseUrl && scoreCourseLink(c.courseName, c.courseUrl) >= 3)
     .map(c => ({ name: c.courseName, href: c.courseUrl! }))
-    .sort((a, b) => scoreCourseLink(b.name, b.href) - scoreCourseLink(a.name, a.href))
-    .slice(0, config.maxDetailPages);
+    .sort((a, b) => scoreCourseLink(b.name, b.href) - scoreCourseLink(a.name, a.href));
+  const limitedDetailLinks =
+    config.maxDetailPages > 0 ? detailLinks.slice(0, config.maxDetailPages) : detailLinks;
 
-  for (const { href, name } of detailLinks) {
+  for (const { href, name } of limitedDetailLinks) {
     if (scrapedUrls.has(href)) continue;
     scrapedUrls.add(href);
     await sleep(SCRAPE_DELAY_MS + randomScrapeDelay());
