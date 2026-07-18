@@ -12,7 +12,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { Sequelize } from 'sequelize';
 
-const envFile = path.join(__dirname, '..', 'config', `.env.${process.env.NODE_ENV || 'development'}`);
+const envFile = path.resolve(process.cwd(), 'config', `.env.${process.env.NODE_ENV || 'development'}`);
 dotenv.config({ path: envFile });
 
 const { DB_HOST, DB_USERNAME, DB_PASSWORD, DB_NAME, DB_PORT } = process.env;

@@ -6,7 +6,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 
 const envName = process.env.NODE_ENV || 'development';
-dotenv.config({ path: path.join(__dirname, '..', 'config', `.env.${envName}`) });
+dotenv.config({ path: path.resolve(process.cwd(), 'config', `.env.${envName}`) });
 
 async function main(): Promise<void> {
   const maxDetail = parseInt(process.argv[2] || process.env.SCRAPE_STUDIES_OVERSEAS_MAX_DETAIL || '120', 10);
