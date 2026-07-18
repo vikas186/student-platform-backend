@@ -21,7 +21,7 @@ module.exports = {
       script: 'dist/workers/scraper.worker.js',
       instances: 1,
       exec_mode: 'fork',
-      max_memory_restart: '1536M',
+      max_memory_restart: '2048M',
       env_production: {
         NODE_ENV: 'production',
         SKIP_DB_SYNC: '1',

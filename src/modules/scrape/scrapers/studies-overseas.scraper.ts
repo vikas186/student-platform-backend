@@ -9,6 +9,10 @@ import type {
   RejectedPageRow,
   ScrapeRunOptions,
 } from '../extractors/types';
+import {
+  loadScrapeCheckpoint,
+  saveScrapeCheckpoint,
+} from '../debug/scrape-checkpoint.util';
 import { scrapeLogger } from '../logger';
 import { getPlaywrightBrowser, capturePageWithPlaywright } from '../scrapers/playwright.util';
 import type { Page } from 'playwright';
@@ -109,6 +113,30 @@ export const scrapeStudiesOverseas = async (
   const rejectedPages: RejectedPageRow[] = [];
   let pagesVisited = 0;
   let apiResponseCount = 0;
+  const completedUrls = new Set<string>();
+  let checkpointChain: Promise<void> = Promise.resolve();
+
+  const persistCheckpoint = () => {
+    if (!options?.jobId) return;
+    const snapshot = {
+      completedUrls: [...completedUrls],
+      pagesVisited,
+      apiResponseCount,
+      courses: [...courses],
+      universities: [...universities],
+      fees: [...fees],
+      scholarships: [...scholarships],
+      rejectedPages: [...rejectedPages],
+    };
+    checkpointChain = checkpointChain
+      .then(() => saveScrapeCheckpoint(options.jobId!, config.source, snapshot))
+      .catch(err => {
+        scrapeLogger.warn('Failed to save scrape checkpoint', {
+          jobId: options.jobId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
+  };
 
   const reportProgress = async (progress: {
     totalPages?: number;
@@ -253,10 +281,40 @@ export const scrapeStudiesOverseas = async (
   const detailOffset = Math.max(0, Number((config as { detailOffset?: number }).detailOffset) || 0);
   const allDiscovered = Array.from(discoveredUnisMap.values()).slice(detailOffset);
   // maxDetailPages <= 0 means unlimited; otherwise sample evenly across countries.
-  const unisToScrape =
+  let unisToScrape =
     config.maxDetailPages > 0
       ? sampleUniversitiesAcrossCountries(allDiscovered, config.maxDetailPages)
       : allDiscovered;
+
+  if (options?.jobId) {
+    const checkpoint = await loadScrapeCheckpoint(options.jobId);
+    if (checkpoint) {
+      for (const u of checkpoint.completedUrls || []) completedUrls.add(u);
+      courses.push(...(checkpoint.courses || []));
+      universities.push(...(checkpoint.universities || []));
+      fees.push(...(checkpoint.fees || []));
+      scholarships.push(...(checkpoint.scholarships || []));
+      rejectedPages.push(...(checkpoint.rejectedPages || []));
+      pagesVisited = Math.max(pagesVisited, checkpoint.pagesVisited || 0);
+      apiResponseCount = Math.max(apiResponseCount, checkpoint.apiResponseCount || 0);
+      const before = unisToScrape.length;
+      unisToScrape = unisToScrape.filter(u => !completedUrls.has(u.url));
+      scrapeLogger.info('Resuming Studies Overseas from checkpoint', {
+        jobId: options.jobId,
+        alreadyDone: completedUrls.size,
+        remaining: unisToScrape.length,
+        skipped: before - unisToScrape.length,
+      });
+      await reportProgress({
+        coursesFound: courses.length,
+        universitiesFound: universities.length,
+        feesFound: fees.length,
+        scholarshipsFound: scholarships.length,
+        rejectedPages: rejectedPages.length,
+      });
+    }
+  }
+
   const countryCounts = new Map<string, number>();
   for (const uni of unisToScrape) {
     const key = uni.country || 'Unknown';
@@ -264,12 +322,26 @@ export const scrapeStudiesOverseas = async (
   }
   scrapeLogger.info('Starting details extraction phase', {
     totalToScrape: unisToScrape.length,
+    alreadyCompleted: completedUrls.size,
     detailOffset,
     catalogSize: allDiscovered.length + detailOffset,
     unlimited: !(config.maxDetailPages > 0),
     countries: countryCounts.size,
     perCountry: Object.fromEntries(countryCounts),
   });
+
+  if (unisToScrape.length === 0) {
+    await checkpointChain;
+    return {
+      courses,
+      universities,
+      fees,
+      scholarships,
+      rejectedPages,
+      pagesVisited,
+      apiResponseCount,
+    };
+  }
 
   const browser = await getPlaywrightBrowser();
 
@@ -536,6 +608,8 @@ export const scrapeStudiesOverseas = async (
         const universityCoursesList = courses.slice(coursesStartIdx);
         uniRow.courses = universityCoursesList.map(c => c.courseName).join(', ');
         universities.push(uniRow);
+        completedUrls.add(uniSeed.url);
+        persistCheckpoint();
 
         scrapeLogger.info('Courses extracted', { name: uniName, count: universityCoursesList.length });
         scrapeLogger.info('University completed', { name: uniName });
@@ -590,6 +664,7 @@ export const scrapeStudiesOverseas = async (
   // shouldStop skips remaining universities and keeps already-fetched data for cleaning.
   const detailTasks = unisToScrape.map(uni => scrapeUniTask(uni));
   await runWithLimit(5, detailTasks, options?.shouldStop);
+  await checkpointChain;
 
   if (options?.shouldStop && (await options.shouldStop())) {
     scrapeLogger.info('Studies Overseas scrape stopped early — returning partial results for cleaning', {

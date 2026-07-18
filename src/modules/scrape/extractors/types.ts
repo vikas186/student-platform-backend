@@ -101,6 +101,8 @@ export type ScrapeRunOptions = {
   onProgress?: (progress: ScrapeProgress) => void | Promise<void>;
   /** When true, scrapers should finish in-flight work and return partial results. */
   shouldStop?: () => boolean | Promise<boolean>;
+  /** Used for on-disk checkpoints so long runs can resume after worker restarts. */
+  jobId?: string;
 };
 
 export type PageCapture = {

@@ -19,10 +19,33 @@ import { processEnrichmentPipeline } from './orchestrator/enrichment.orchestrato
 
 const ACTIVE_STATUSES = ['pending', 'running', 'scraping', 'pending_cleaning', 'cleaning'] as const;
 
+/** Prevent RabbitMQ redelivery from starting a second scrape of the same job in-process. */
+const inFlightScrapeJobs = new Set<string>();
+
 export const processScrapeJob = async (payload: ScrapeJobMessage): Promise<void> => {
   const { jobId } = payload;
   const retryCount = payload.retryCount ?? 0;
   const t0 = Date.now();
+
+  if (inFlightScrapeJobs.has(jobId)) {
+    scrapeLogger.warn('Scrape job already in flight — ignoring duplicate delivery', { jobId });
+    return;
+  }
+  inFlightScrapeJobs.add(jobId);
+
+  try {
+    await processScrapeJobInner(payload, retryCount, t0);
+  } finally {
+    inFlightScrapeJobs.delete(jobId);
+  }
+};
+
+const processScrapeJobInner = async (
+  payload: ScrapeJobMessage,
+  retryCount: number,
+  t0: number,
+): Promise<void> => {
+  const { jobId } = payload;
 
   const job = await db.ScrapeJob.findByPk(jobId);
   if (!job) {
@@ -75,23 +98,28 @@ export const processScrapeJob = async (payload: ScrapeJobMessage): Promise<void>
     const baseStats = (job.stats as Record<string, unknown>) || {};
 
     const result = await scrapeWebsite(config, {
+      jobId,
       onProgress: async progress => {
         const prev = ((await job.reload()).stats as Record<string, unknown>) || baseStats;
+        // Never let a lagging concurrent progress update lower counts after a resume/restart.
+        const maxNum = (a: unknown, b: unknown) =>
+          Math.max(Number(a) || 0, Number(b) || 0);
         await job.update({
           updatedAt: new Date(),
           stats: {
             ...prev,
             ...baseStats,
             totalPages: progress.totalPages ?? prev.totalPages ?? baseStats.totalPages,
-            coursesFound: progress.coursesFound ?? prev.coursesFound ?? 0,
-            universitiesFound: progress.universitiesFound ?? prev.universitiesFound ?? 0,
-            feesFound: progress.feesFound ?? prev.feesFound ?? 0,
-            scholarshipsFound: progress.scholarshipsFound ?? prev.scholarshipsFound ?? 0,
-            rejectedPages: progress.rejectedPages ?? prev.rejectedPages ?? 0,
+            coursesFound: maxNum(progress.coursesFound, prev.coursesFound),
+            universitiesFound: maxNum(progress.universitiesFound, prev.universitiesFound),
+            feesFound: maxNum(progress.feesFound, prev.feesFound),
+            scholarshipsFound: maxNum(progress.scholarshipsFound, prev.scholarshipsFound),
+            rejectedPages: maxNum(progress.rejectedPages, prev.rejectedPages),
             currentPage: progress.currentPage ?? prev.currentPage,
             currentUrl: progress.currentUrl ?? prev.currentUrl,
             maxPages: baseStats.maxPages ?? prev.maxPages,
             maxDetailPages: baseStats.maxDetailPages ?? prev.maxDetailPages,
+            stopRequested: prev.stopRequested,
           },
         });
       },
@@ -164,6 +192,8 @@ export const processScrapeJob = async (payload: ScrapeJobMessage): Promise<void>
     });
 
     await publishCleaningJob({ jobId, rawBatchId, retryCount: 0 });
+    const { clearScrapeCheckpoint } = await import('./debug/scrape-checkpoint.util');
+    await clearScrapeCheckpoint(jobId);
     scrapeLogger.info('Raw scrape saved, cleaning queued', { jobId, rawBatchId, batchId: batch.id, totalEntities, stoppedEarly: Boolean(stoppedEarly) });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
