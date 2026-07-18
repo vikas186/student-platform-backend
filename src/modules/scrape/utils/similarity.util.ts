@@ -160,7 +160,17 @@ export async function findMasterUniversityDuplicate(
   const normName = name.trim();
   const normCountry = country.trim();
 
-  // 1. Exact case-insensitive match
+  // 0. Same institution name (any country) — catalog CSVs sometimes put program titles in country.
+  const byName = await db.University.findOne({
+    where: { name: { [Op.iLike]: normName } },
+    order: [['id', 'ASC']],
+  });
+  if (byName) {
+    scrapeLogger.info('Exact master university name duplicate found', { name: normName });
+    return byName;
+  }
+
+  // 1. Exact case-insensitive match on name + country
   const exact = await db.University.findOne({
     where: {
       name: { [Op.iLike]: normName },
@@ -172,9 +182,17 @@ export async function findMasterUniversityDuplicate(
     return exact;
   }
 
-  // 2. Fuzzy/AI check
+  // 2. Fuzzy/AI check (same country when present)
   const candidates = await db.University.findAll({
-    where: { country: { [Op.iLike]: normCountry } },
+    where: normCountry
+      ? {
+          [Op.or]: [
+            { country: { [Op.iLike]: normCountry } },
+            { name: { [Op.iLike]: `%${normName.slice(0, Math.min(12, normName.length))}%` } },
+          ],
+        }
+      : { name: { [Op.iLike]: `%${normName.slice(0, Math.min(12, normName.length))}%` } },
+    limit: 200,
   });
 
   for (const candidate of candidates) {

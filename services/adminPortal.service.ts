@@ -16,6 +16,7 @@ import {
 import { applicationScopeForUniversity } from '../utils/universityApplicationScope';
 import { parseSimpleCsvLines } from '../utils/spreadsheetParse';
 import { findMasterUniversityDuplicate } from '../src/modules/scrape/utils/similarity.util';
+import { looksLikeProgramAsCountry } from './catalogPublic.service';
 import {
   buildColumnIndexMap,
   findCatalogHeaderRowIndex,
@@ -426,18 +427,27 @@ export const importUniversityCatalogFileForAdmin = async (file: Express.Multer.F
     }
 
     let parsedName = parsed.name.trim();
-    let uni = await findMasterUniversityDuplicate(parsedName, parsed.country);
+    let countryRaw = parsed.country.trim();
+    if (looksLikeProgramAsCountry(countryRaw)) {
+      // Bad spreadsheet mapping: program title was put in the country column.
+      countryRaw = '';
+    }
+    let uni = await findMasterUniversityDuplicate(parsedName, countryRaw || 'General');
 
     if (!uni) {
       uni = await db.University.create({
         name: parsedName,
-        country: (parsed.country.trim() || 'General').slice(0, 200),
+        country: (countryRaw || 'General').slice(0, 200),
         status: true,
         programFeeRanges: parsed.ranges,
       });
       created += 1;
     } else {
-      await uni.update({ programFeeRanges: parsed.ranges });
+      const patch: Record<string, unknown> = { programFeeRanges: parsed.ranges };
+      if (countryRaw && looksLikeProgramAsCountry(String(uni.country || ''))) {
+        patch.country = countryRaw.slice(0, 200);
+      }
+      await uni.update(patch);
       updated += 1;
     }
 

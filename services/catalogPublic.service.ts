@@ -52,6 +52,19 @@ export type PublicUniversitiesQuery = {
   limit?: string | number;
 };
 
+const universityNameKey = (name: string): string =>
+  name.trim().toLowerCase().replace(/\s+/g, ' ');
+
+/** True when a "country" cell looks like a program title (bad catalog import). */
+export const looksLikeProgramAsCountry = (value: string): boolean => {
+  const v = value.trim();
+  if (!v) return false;
+  if (/^(BA|BSc|BEng|BBA|MA|MSc|MBA|MEng|PhD|LLB|LLM|PGDip|PGCert)\b/i.test(v)) return true;
+  if (/\(Hons\)|Foundation Year|Bachelor of|Master of|Diploma in|Certificate in/i.test(v)) return true;
+  if (v.length > 64) return true;
+  return false;
+};
+
 export const listPublicUniversitiesWithPrograms = async (query: PublicUniversitiesQuery) => {
   const page = Math.max(1, Number(query.page) || 1);
   const limit = Math.min(100, Math.max(1, Number(query.limit) || 20));
@@ -73,27 +86,80 @@ export const listPublicUniversitiesWithPrograms = async (query: PublicUniversiti
     (where as Record<symbol, unknown>)[Op.and] = andClauses;
   }
 
-  const { rows, count } = await db.University.findAndCountAll({
+  // One row per institution name (catalog imports sometimes created one row per program).
+  const distinctNameRows = (await db.University.findAll({
+    attributes: [
+      [db.sequelize.fn('MIN', db.sequelize.col('id')), 'id'],
+      [db.sequelize.fn('MIN', db.sequelize.col('name')), 'name'],
+    ],
     where,
-    attributes: [...PUBLIC_UNIVERSITY_ATTRIBUTES],
-    include: [
-      {
-        model: db.Course,
-        as: 'courses',
-        attributes: [...PROGRAM_ATTRIBUTES],
-        required: false,
-      },
-    ],
-    order: [
-      ['name', 'ASC'],
-      [{ model: db.Course, as: 'courses' }, 'courseName', 'ASC'],
-    ],
+    group: [db.sequelize.fn('LOWER', db.sequelize.fn('TRIM', db.sequelize.col('name')))],
+    order: [[db.sequelize.fn('MIN', db.sequelize.col('name')), 'ASC']],
     limit,
     offset,
-    distinct: true,
-  });
+    raw: true,
+  })) as Array<{ id: number; name: string }>;
+
+  const totalRow = (await db.University.findAll({
+    attributes: [
+      [
+        db.sequelize.fn(
+          'COUNT',
+          db.sequelize.fn(
+            'DISTINCT',
+            db.sequelize.fn('LOWER', db.sequelize.fn('TRIM', db.sequelize.col('name'))),
+          ),
+        ),
+        'cnt',
+      ],
+    ],
+    where,
+    raw: true,
+  })) as unknown as Array<{ cnt: string | number }>;
+  const count = Number(totalRow[0]?.cnt ?? 0);
+
+  const keeperIds = distinctNameRows.map(r => Number(r.id)).filter(Number.isFinite);
+  const rows =
+    keeperIds.length > 0
+      ? await db.University.findAll({
+          where: { id: { [Op.in]: keeperIds }, status: true },
+          attributes: [...PUBLIC_UNIVERSITY_ATTRIBUTES],
+          include: [
+            {
+              model: db.Course,
+              as: 'courses',
+              attributes: [...PROGRAM_ATTRIBUTES],
+              required: false,
+            },
+          ],
+          order: [
+            ['name', 'ASC'],
+            [{ model: db.Course, as: 'courses' }, 'courseName', 'ASC'],
+          ],
+        })
+      : [];
 
   const pageNames = rows.map(row => (row.get('name') as string) || '');
+  // Also pull sibling duplicate-name rows' courses via scrape + same-name catalog courses.
+  const siblingRows =
+    pageNames.length > 0
+      ? await db.University.findAll({
+          where: {
+            status: true,
+            [Op.or]: pageNames.map(name => ({ name: { [Op.iLike]: name } })),
+          },
+          attributes: ['id', 'name', 'country', 'programFeeRanges'],
+          include: [
+            {
+              model: db.Course,
+              as: 'courses',
+              attributes: [...PROGRAM_ATTRIBUTES],
+              required: false,
+            },
+          ],
+        })
+      : [];
+
   const scrapedWhere: Record<string, unknown> = {
     recordStatus: 'cleaned',
     cleaningStatus: { [Op.in]: ['high_quality', 'needs_review'] },
@@ -132,6 +198,14 @@ export const listPublicUniversitiesWithPrograms = async (query: PublicUniversiti
     normalizedRequirements: Record<string, unknown> | null;
   }>;
 
+  const siblingsByName = new Map<string, typeof siblingRows>();
+  for (const s of siblingRows) {
+    const key = universityNameKey(String(s.get('name') || ''));
+    const list = siblingsByName.get(key) ?? [];
+    list.push(s);
+    siblingsByName.set(key, list);
+  }
+
   const universities = rows.map(row => {
     const plain = row.get({ plain: true }) as {
       id: number;
@@ -151,22 +225,50 @@ export const listPublicUniversitiesWithPrograms = async (query: PublicUniversiti
       }>;
     };
 
+    const siblings = siblingsByName.get(universityNameKey(plain.name)) ?? [];
+    const allDbCourses = siblings.flatMap(s => {
+      const p = s.get({ plain: true }) as {
+        courses?: Array<{
+          id: number;
+          courseName: string;
+          degree: string;
+          fee: number;
+          duration: string;
+          admissionRequirements?: Record<string, unknown> | null;
+        }>;
+      };
+      return p.courses ?? [];
+    });
+
+    let bestCountry = plain.country;
+    let mergedFeeRanges = plain.programFeeRanges;
+    for (const s of siblings) {
+      const p = s.get({ plain: true }) as {
+        country: string;
+        programFeeRanges: Record<string, unknown> | null;
+      };
+      if (looksLikeProgramAsCountry(bestCountry || '') && !looksLikeProgramAsCountry(p.country || '')) {
+        bestCountry = p.country;
+      }
+      if (!mergedFeeRanges && p.programFeeRanges) mergedFeeRanges = p.programFeeRanges;
+    }
+
     const programs = buildProgramsForUniversity(
       plain.name,
-      (plain.courses ?? []).map(c => ({
+      allDbCourses.map(c => ({
         ...c,
         admissionRequirements: (c.admissionRequirements as any) ?? null,
       })),
       scrapedPlain,
-      plain.programFeeRanges,
+      mergedFeeRanges,
     );
 
     return {
       id: plain.id,
       name: plain.name,
-      country: plain.country,
+      country: bestCountry,
       status: plain.status,
-      programFeeRanges: plain.programFeeRanges,
+      programFeeRanges: mergedFeeRanges,
       programsCount: programs.length,
       programs,
       createdAt: plain.createdAt,
@@ -174,16 +276,13 @@ export const listPublicUniversitiesWithPrograms = async (query: PublicUniversiti
     };
   });
 
-  // Fee-matrix / scrape imports can create multiple University rows with the same name.
-  // Collapse them for public dropdowns so each name (+ country) appears once.
   const deduped = dedupeUniversitiesByNameCountry(universities);
-  const removed = universities.length - deduped.length;
 
   return {
     universities: deduped,
     page,
     limit,
-    total: Math.max(0, count - removed),
+    total: count,
   };
 };
 
@@ -199,14 +298,11 @@ type PublicUniversityRow = {
   updatedAt: Date;
 };
 
-const universityNameCountryKey = (name: string, country: string): string =>
-  `${name.trim().toLowerCase().replace(/\s+/g, ' ')}||${country.trim().toLowerCase()}`;
-
 const dedupeUniversitiesByNameCountry = (rows: PublicUniversityRow[]): PublicUniversityRow[] => {
   const byKey = new Map<string, PublicUniversityRow>();
 
   for (const uni of rows) {
-    const key = universityNameCountryKey(uni.name, uni.country || '');
+    const key = universityNameKey(uni.name);
     const existing = byKey.get(key);
     if (!existing) {
       byKey.set(key, uni);
@@ -219,8 +315,17 @@ const dedupeUniversitiesByNameCountry = (rows: PublicUniversityRow[]): PublicUni
       (uni.programsCount === existing.programsCount && uni.id > existing.id);
 
     const winner = preferIncoming ? uni : existing;
+    const loser = preferIncoming ? existing : uni;
+    const country =
+      !looksLikeProgramAsCountry(winner.country || '') && (winner.country || '').trim()
+        ? winner.country
+        : !looksLikeProgramAsCountry(loser.country || '') && (loser.country || '').trim()
+          ? loser.country
+          : winner.country;
+
     byKey.set(key, {
       ...winner,
+      country,
       programs: mergedPrograms,
       programsCount: mergedPrograms.length,
       programFeeRanges: winner.programFeeRanges ?? existing.programFeeRanges ?? uni.programFeeRanges,
