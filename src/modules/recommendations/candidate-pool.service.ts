@@ -10,6 +10,7 @@ import { fetchLatestCommissionByUniversity } from '../../../utils/commissionLook
 import type { NormalizedMatchInput, RecommendationCandidate } from './recommendation.types';
 import { candidateRefKey, parseCandidateRefKey } from './recommendation.types';
 import { fieldMatchesText, levelMatchesDegree } from './input-normalizer.service';
+import { enrichCandidatesWithScrapeContext, loadScrapeContext } from './scrape-context.service';
 
 const PUBLIC_POOL_LIMIT = 80;
 const AGENT_POOL_LIMIT = 120;
@@ -45,7 +46,17 @@ export const buildCandidatePool = async (input: NormalizedMatchInput): Promise<R
     limit: 500,
   });
 
-  const uniById = new Map(activeUniversities.map(u => [u.id, u.get({ plain: true }) as { id: number; name: string; country: string; programFeeRanges: Record<string, unknown> | null }]));
+  const uniById = new Map(
+    activeUniversities.map(u => [
+      u.id,
+      u.get({ plain: true }) as {
+        id: number;
+        name: string;
+        country: string;
+        programFeeRanges: Record<string, unknown> | null;
+      },
+    ]),
+  );
   const uniList = [...uniById.values()];
 
   const resolveUniId = (scrapedName: string): { id: number; name: string } | null => {
@@ -58,44 +69,48 @@ export const buildCandidatePool = async (input: NormalizedMatchInput): Promise<R
   };
 
   const levelWhere = buildLevelWhere(input);
-  const catalogCourses = await db.Course.findAll({
-    where: levelWhere,
-    include: [
-      {
-        model: db.University,
-        as: 'university',
-        required: true,
-        where: { status: true, country: { [Op.iLike]: countryPattern } },
-        attributes: ['id', 'name', 'country'],
-      },
-    ],
-    limit: poolLimit,
-    order: [['courseName', 'ASC']],
-  });
-
   const scrapeLevel = buildScrapeLevelWhere(input);
-  const scrapedCourses = await db.ScrapedCourse.findAll({
-    where: scrapeLevel
-      ? {
-          [Op.and]: [
-            {
-              recordStatus: 'cleaned',
-              cleaningStatus: 'high_quality',
-              isDuplicate: false,
-              country: { [Op.iLike]: countryPattern },
-            },
-            scrapeLevel,
-          ],
-        }
-      : {
-          recordStatus: 'cleaned',
-          cleaningStatus: 'high_quality',
-          isDuplicate: false,
-          country: { [Op.iLike]: countryPattern },
+  const scrapeCourseWhere = scrapeLevel
+    ? {
+        [Op.and]: [
+          {
+            recordStatus: 'cleaned',
+            cleaningStatus: 'high_quality',
+            isDuplicate: false,
+            country: { [Op.iLike]: countryPattern },
+          },
+          scrapeLevel,
+        ],
+      }
+    : {
+        recordStatus: 'cleaned',
+        cleaningStatus: 'high_quality',
+        isDuplicate: false,
+        country: { [Op.iLike]: countryPattern },
+      };
+
+  const [catalogCourses, scrapedCourses, scrapeCtx] = await Promise.all([
+    db.Course.findAll({
+      where: levelWhere,
+      include: [
+        {
+          model: db.University,
+          as: 'university',
+          required: true,
+          where: { status: true, country: { [Op.iLike]: countryPattern } },
+          attributes: ['id', 'name', 'country'],
         },
-    limit: poolLimit,
-    order: [['qualityScore', 'DESC']],
-  });
+      ],
+      limit: poolLimit,
+      order: [['courseName', 'ASC']],
+    }),
+    db.ScrapedCourse.findAll({
+      where: scrapeCourseWhere,
+      limit: poolLimit,
+      order: [['qualityScore', 'DESC']],
+    }),
+    loadScrapeContext(input),
+  ]);
 
   const candidates: RecommendationCandidate[] = [];
 
@@ -110,7 +125,6 @@ export const buildCandidatePool = async (input: NormalizedMatchInput): Promise<R
     };
     if (!plain.university) continue;
     if (!levelMatchesDegree(plain.degree, input.levelKeywords)) continue;
-    // Manual catalog rows: always include for this country; field fit is handled in rerank.
 
     const comm = commissionMap.get(plain.university.id);
     candidates.push({
@@ -130,6 +144,7 @@ export const buildCandidatePool = async (input: NormalizedMatchInput): Promise<R
       commissionPercent: comm?.percentage ?? null,
       subjectTags: [],
       careerTags: [],
+      scholarshipHint: null,
       vectorSimilarity: 0,
       rerankScore: 0,
     });
@@ -152,8 +167,9 @@ export const buildCandidatePool = async (input: NormalizedMatchInput): Promise<R
     };
 
     if (plain.studyLevel && !levelMatchesDegree(plain.studyLevel, input.levelKeywords)) continue;
-    // Agent: country-only pool; program focus is scored via vector + rerank + LLM.
-    if (input.audience !== 'agent' && !fieldMatchesText(plain.courseName, plain.subjectTags ?? [], input.fieldKeywords)) continue;
+    if (input.audience !== 'agent' && !fieldMatchesText(plain.courseName, plain.subjectTags ?? [], input.fieldKeywords)) {
+      continue;
+    }
 
     const resolved = resolveUniId(plain.universityName);
     const comm = resolved ? commissionMap.get(resolved.id) : null;
@@ -175,15 +191,14 @@ export const buildCandidatePool = async (input: NormalizedMatchInput): Promise<R
       commissionPercent: comm?.percentage ?? null,
       subjectTags: plain.subjectTags ?? [],
       careerTags: plain.careerTags ?? [],
+      scholarshipHint: null,
       vectorSimilarity: 0,
       rerankScore: 0,
     });
   }
 
   const feeKeys =
-    input.audience === 'agent'
-      ? Object.keys(FEE_RANGE_PROGRAMS)
-      : fieldToFeeRangeKeys(input.field, input.level);
+    input.audience === 'agent' ? Object.keys(FEE_RANGE_PROGRAMS) : fieldToFeeRangeKeys(input.field, input.level);
   for (const uni of uniList) {
     const ranges = uni.programFeeRanges;
     if (!ranges) continue;
@@ -211,13 +226,14 @@ export const buildCandidatePool = async (input: NormalizedMatchInput): Promise<R
         commissionPercent: comm?.percentage ?? null,
         subjectTags: [],
         careerTags: [],
+        scholarshipHint: null,
         vectorSimilarity: 0,
         rerankScore: 0,
       });
     }
   }
 
-  return candidates;
+  return enrichCandidatesWithScrapeContext(candidates, scrapeCtx);
 };
 
 export const loadCandidatesByRefIds = async (refIds: string[]): Promise<RecommendationCandidate[]> => {
@@ -225,12 +241,14 @@ export const loadCandidatesByRefIds = async (refIds: string[]): Promise<Recommen
   const poolKeys = new Set(refIds);
   const parsed = refIds
     .map(refId => ({ refId, parsed: parseCandidateRefKey(refId) }))
-    .filter((p): p is { refId: string; parsed: NonNullable<ReturnType<typeof parseCandidateRefKey>> } => p.parsed != null);
+    .filter(
+      (p): p is { refId: string; parsed: NonNullable<ReturnType<typeof parseCandidateRefKey>> } => p.parsed != null,
+    );
 
   const commissionMap = await fetchLatestCommissionByUniversity();
   const result: RecommendationCandidate[] = [];
 
-  for (const { refId, parsed: p } of parsed) {
+  for (const { parsed: p } of parsed) {
     if (p.source === 'catalog') {
       const course = await db.Course.findByPk(p.courseId, {
         include: [{ model: db.University, as: 'university', attributes: ['id', 'name', 'country'] }],
@@ -264,6 +282,7 @@ export const loadCandidatesByRefIds = async (refIds: string[]): Promise<Recommen
         commissionPercent: commissionMap.get(plain.university.id)?.percentage ?? null,
         subjectTags: [],
         careerTags: [],
+        scholarshipHint: null,
         vectorSimilarity: 0,
         rerankScore: 0,
       });
@@ -312,6 +331,7 @@ export const loadCandidatesByRefIds = async (refIds: string[]): Promise<Recommen
         commissionPercent: resolvedId ? commissionMap.get(resolvedId)?.percentage ?? null : null,
         subjectTags: plain.subjectTags ?? [],
         careerTags: plain.careerTags ?? [],
+        scholarshipHint: null,
         vectorSimilarity: 0,
         rerankScore: 0,
       });
@@ -342,6 +362,7 @@ export const loadCandidatesByRefIds = async (refIds: string[]): Promise<Recommen
         commissionPercent: commissionMap.get(uni.id)?.percentage ?? null,
         subjectTags: [],
         careerTags: [],
+        scholarshipHint: null,
         vectorSimilarity: 0,
         rerankScore: 0,
       });

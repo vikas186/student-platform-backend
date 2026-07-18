@@ -16,6 +16,9 @@ async function main() {
   const { syncRecommendationKnowledgeBase } = await import('../src/modules/recommendations/recommendation-knowledge-sync.service');
   const result = await syncRecommendationKnowledgeBase();
   console.log('Recommendation knowledge sync complete:', result);
+  if (result.bySource) {
+    console.log('By source:', result.bySource);
+  }
 }
 
 main().catch((e: unknown) => {

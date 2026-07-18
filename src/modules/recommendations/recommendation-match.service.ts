@@ -5,6 +5,7 @@ import { normalizeAgentInput, normalizePublicInput } from './input-normalizer.se
 import { pickCandidatesWithLlm } from './recommendation-llm.service';
 import { buildAgentPathways, buildPublicSuggestions, wrapAgentResponse, wrapMatchResponse } from './recommendation-response.service';
 import { intersectWithVectorHits, rerankCandidates } from './recommendation-rerank.service';
+import { boostCandidatesFromContextHits } from './scrape-context.service';
 import type { AgentMatchBody, PublicMatchBody } from './recommendation.types';
 import { ragHitToRefId } from './recommendation.types';
 
@@ -34,7 +35,7 @@ export const matchPublicRecommendations = async (body: PublicMatchBody) => {
     hits = [];
   }
 
-  const refSimilarity = buildRefSimilarityMap(hits);
+  const refSimilarity = await boostCandidatesFromContextHits(pool, hits, buildRefSimilarityMap(hits));
   let merged = intersectWithVectorHits(pool, refSimilarity, 'public');
   if (!merged.length) merged = pool;
 
@@ -60,7 +61,7 @@ export const matchAgentRecommendations = async (body: AgentMatchBody) => {
     hits = [];
   }
 
-  const refSimilarity = buildRefSimilarityMap(hits);
+  const refSimilarity = await boostCandidatesFromContextHits(pool, hits, buildRefSimilarityMap(hits));
   let merged = intersectWithVectorHits(pool, refSimilarity, 'agent');
   if (!merged.length) merged = pool;
 

@@ -39,6 +39,7 @@ export const pickCandidatesWithLlm = async (
     feeRange: c.feeRange,
     qualityScore: c.qualityScore,
     commissionPercent: c.commissionPercent,
+    scholarshipHint: c.scholarshipHint,
     source: c.source,
   }));
 
@@ -49,12 +50,14 @@ Pick exactly ${pickCount} items ONLY from the provided candidates list.
 The agent typed free-text program focus (e.g. nursing, law, MBA, engineering) — choose programs that best match that intent semantically, not only exact keyword matches.
 Prefer catalog and fee-range rows when they fit; include scraped programs when they are strong matches.
 When commissionPercent is present, mention partner commission as a reason when relevant.
-Do not invent courses, fees, or universities.
+When scholarshipHint is present, mention relevant scholarships as a reason.
+Do not invent courses, fees, scholarships, or universities.
 Output JSON: { "picks": [{ "refId": string, "matchReasons": string[] }] }
 Each matchReasons array should have 2-3 short bullet reasons.`
       : `You select course recommendations for a student recruitment platform.
 Pick exactly ${pickCount} items ONLY from the provided candidates list.
-Do not invent courses, fees, or universities.
+When scholarshipHint is present, mention relevant scholarships as a reason.
+Do not invent courses, fees, scholarships, or universities.
 Output JSON: { "picks": [{ "refId": string, "matchReasons": string[] }] }
 Each matchReasons array should have 2-3 short bullet reasons.`;
 

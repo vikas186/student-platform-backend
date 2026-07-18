@@ -17,6 +17,8 @@ export type RecommendationCandidate = {
   commissionPercent: number | null;
   subjectTags: string[];
   careerTags: string[];
+  /** Short scholarship note from scrape_scholarships when matched by university/country */
+  scholarshipHint: string | null;
   vectorSimilarity: number;
   rerankScore: number;
 };
@@ -86,12 +88,27 @@ export const RECOMMENDATION_DISCLAIMER =
 export const REC_SOURCE_TYPES = [
   'rec_catalog',
   'rec_scrape',
+  'rec_scrape_university',
+  'rec_scrape_scholarship',
+  'rec_scrape_fee',
   'rec_fee_range',
   'rec_career',
   'rec_commission',
 ] as const;
 
 export type RecSourceType = (typeof REC_SOURCE_TYPES)[number];
+
+/** Program-like chunks that map directly to candidate refIds */
+export const REC_PROGRAM_SOURCE_TYPES = ['rec_catalog', 'rec_scrape', 'rec_fee_range'] as const;
+
+/** Context chunks that enrich / boost program candidates (not picks themselves) */
+export const REC_CONTEXT_SOURCE_TYPES = [
+  'rec_scrape_university',
+  'rec_scrape_scholarship',
+  'rec_scrape_fee',
+  'rec_career',
+  'rec_commission',
+] as const;
 
 export const candidateRefKey = (source: CourseRefSource, courseId: number | string, universityId?: number | null): string => {
   if (source === 'fee_range') {

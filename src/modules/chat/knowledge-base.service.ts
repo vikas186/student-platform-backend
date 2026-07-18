@@ -300,7 +300,16 @@ export type SearchRecommendationOptions = {
   sourceTypes?: string[];
 };
 
-const RECOMMENDATION_SOURCE_TYPES = ['rec_catalog', 'rec_scrape', 'rec_fee_range', 'rec_career', 'rec_commission'];
+const RECOMMENDATION_SOURCE_TYPES = [
+  'rec_catalog',
+  'rec_scrape',
+  'rec_scrape_university',
+  'rec_scrape_scholarship',
+  'rec_scrape_fee',
+  'rec_fee_range',
+  'rec_career',
+  'rec_commission',
+];
 
 const recommendationContextForAudience = (audience: 'public' | 'agent'): ChatUserContext => ({
   userId: 'recommendation',
@@ -357,7 +366,7 @@ export const searchRecommendationKnowledge = async (
            :isStudent::boolean = false
            OR :counsellingDone::boolean = true
            OR COALESCE((k.access->'flags'->>'university_named'), 'false') <> 'true'
-           OR k.source_type IN ('rec_catalog', 'rec_scrape', 'rec_fee_range')
+           OR k.source_type IN ('rec_catalog', 'rec_scrape', 'rec_scrape_university', 'rec_scrape_scholarship', 'rec_scrape_fee', 'rec_fee_range')
          )
          AND (
            :uniFilter::boolean = false
@@ -399,7 +408,7 @@ export const searchRecommendationKnowledge = async (
          :isStudent::boolean = false
          OR :counsellingDone::boolean = true
          OR COALESCE((k.access->'flags'->>'university_named'), 'false') <> 'true'
-         OR k.source_type IN ('rec_catalog', 'rec_scrape', 'rec_fee_range')
+         OR k.source_type IN ('rec_catalog', 'rec_scrape', 'rec_scrape_university', 'rec_scrape_scholarship', 'rec_scrape_fee', 'rec_fee_range')
        )
        AND (
          :uniFilter::boolean = false

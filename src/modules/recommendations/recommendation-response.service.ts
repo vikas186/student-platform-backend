@@ -21,11 +21,15 @@ export const buildPublicSuggestions = (
     .map(pick => {
       const c = byRef.get(pick.refId);
       if (!c) return null;
+      const matchReasons = [...pick.matchReasons];
+      if (c.scholarshipHint && !matchReasons.some(r => /scholarship/i.test(r))) {
+        matchReasons.push(`Scholarship: ${c.scholarshipHint}`);
+      }
       return {
         title: c.courseName,
         feeBand: formatFeeBand(c.fee, c.feeRange),
         careers: lookupCareers(input.field, input.level, input.country, c.careerTags),
-        matchReasons: pick.matchReasons,
+        matchReasons,
         matchScore: c.rerankScore,
         university: null as null,
       };
@@ -44,6 +48,10 @@ export const buildAgentPathways = (
     .map(pick => {
       const c = byRef.get(pick.refId);
       if (!c || !c.universityName?.trim()) return null;
+      const matchReasons = [...pick.matchReasons];
+      if (c.scholarshipHint && !matchReasons.some(r => /scholarship/i.test(r))) {
+        matchReasons.push(`Scholarship: ${c.scholarshipHint}`);
+      }
       return {
         title: c.courseName,
         universityName: c.universityName,
@@ -52,7 +60,7 @@ export const buildAgentPathways = (
         feeBand: formatFeeBand(c.fee, c.feeRange),
         careers: lookupCareers(input.field, input.level, input.country, c.careerTags),
         commissionPercent: c.commissionPercent,
-        matchReasons: pick.matchReasons,
+        matchReasons,
         matchScore: c.rerankScore,
       };
     })
