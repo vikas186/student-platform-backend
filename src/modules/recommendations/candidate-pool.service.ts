@@ -29,6 +29,21 @@ const buildScrapeLevelWhere = (input: NormalizedMatchInput): Record<string, unkn
   return { [Op.or]: orClauses };
 };
 
+const buildFieldWhere = (
+  input: NormalizedMatchInput,
+  column: 'courseName' | 'degree',
+): Record<string, unknown> | undefined => {
+  if (input.audience === 'agent' || !input.fieldKeywords.length) return undefined;
+  const orClauses = input.fieldKeywords.map(k => ({ [column]: { [Op.iLike]: `%${k}%` } }));
+  return { [Op.or]: orClauses };
+};
+
+const buildScrapeFieldWhere = (input: NormalizedMatchInput): Record<string, unknown> | undefined => {
+  if (input.audience === 'agent' || !input.fieldKeywords.length) return undefined;
+  const orClauses = input.fieldKeywords.map(k => ({ courseName: { [Op.iLike]: `%${k}%` } }));
+  return { [Op.or]: orClauses };
+};
+
 export const buildCandidatePool = async (input: NormalizedMatchInput): Promise<RecommendationCandidate[]> => {
   const poolLimit = input.audience === 'agent' ? AGENT_POOL_LIMIT : PUBLIC_POOL_LIMIT;
   const countryPattern = `%${input.country}%`;
@@ -70,28 +85,28 @@ export const buildCandidatePool = async (input: NormalizedMatchInput): Promise<R
 
   const levelWhere = buildLevelWhere(input);
   const scrapeLevel = buildScrapeLevelWhere(input);
-  const scrapeCourseWhere = scrapeLevel
-    ? {
-        [Op.and]: [
-          {
-            recordStatus: 'cleaned',
-            cleaningStatus: 'high_quality',
-            isDuplicate: false,
-            country: { [Op.iLike]: countryPattern },
-          },
-          scrapeLevel,
-        ],
-      }
-    : {
-        recordStatus: 'cleaned',
-        cleaningStatus: 'high_quality',
-        isDuplicate: false,
-        country: { [Op.iLike]: countryPattern },
-      };
+  const catalogField = buildFieldWhere(input, 'courseName');
+  const scrapeField = buildScrapeFieldWhere(input);
+
+  const catalogWhere =
+    levelWhere && catalogField
+      ? { [Op.and]: [levelWhere, catalogField] }
+      : levelWhere || catalogField;
+
+  const scrapeBase = {
+    recordStatus: 'cleaned',
+    cleaningStatus: 'high_quality',
+    isDuplicate: false,
+    country: { [Op.iLike]: countryPattern },
+  };
+  const scrapeAnd: unknown[] = [scrapeBase];
+  if (scrapeLevel) scrapeAnd.push(scrapeLevel);
+  if (scrapeField) scrapeAnd.push(scrapeField);
+  const scrapeCourseWhere = scrapeAnd.length > 1 ? { [Op.and]: scrapeAnd } : scrapeBase;
 
   const [catalogCourses, scrapedCourses, scrapeCtx] = await Promise.all([
     db.Course.findAll({
-      where: levelWhere,
+      where: catalogWhere,
       include: [
         {
           model: db.University,

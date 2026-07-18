@@ -8,21 +8,34 @@ const parseBudget = (value?: number | string): number | null => {
 };
 
 const levelKeywords = (level: string): string[] => {
-  const l = level.toLowerCase();
-  if (/undergrad|bachelor|ug/i.test(l)) return ['undergraduate', 'bachelor', 'ug'];
-  if (/postgrad|master|pg|graduate|mba/i.test(l)) return ['postgraduate', 'master', 'graduate', 'mba', 'pg'];
+  const l = level.toLowerCase().trim();
+  if (/high[_\s-]?school|secondary|foundation|pathway/i.test(l)) {
+    return ['diploma', 'certificate', 'foundation', 'pathway', 'associate', 'undergraduate', 'bachelor'];
+  }
+  if (/undergrad|bachelor|ug|bsc|ba\b|beng/i.test(l)) {
+    return ['undergraduate', 'bachelor', 'bachelors', 'ug', 'bsc', 'ba', 'beng'];
+  }
+  if (/postgrad|master|pg|graduate|mba|msc|meng/i.test(l)) {
+    return ['postgraduate', 'master', 'masters', 'graduate', 'mba', 'msc', 'meng', 'pg'];
+  }
   return [l];
 };
 
 const fieldKeywords = (field: string): string[] => {
   const f = field.toLowerCase().trim();
-  const words = f.split(/[\s,/]+/).filter(Boolean);
+  const words = f.split(/[\s,/]+/).filter(w => w.length >= 2);
   const extras: string[] = [];
-  if (/business|commerce|mba|management|finance/i.test(f)) extras.push('business', 'commerce', 'management', 'mba');
-  if (/computer|software|cs|it|tech|data/i.test(f)) extras.push('computer', 'software', 'technology', 'data');
-  if (/stem|engineering|science|math/i.test(f)) extras.push('stem', 'engineering', 'science');
+  if (/business|commerce|mba|management|finance/i.test(f)) {
+    extras.push('business', 'commerce', 'management', 'mba', 'finance');
+  }
+  if (/computer|software|cs\b|it\b|tech|data|informatics/i.test(f)) {
+    extras.push('computer', 'software', 'technology', 'computing', 'informatics', 'data', 'programming');
+  }
+  if (/\bstem\b|engineering|math/i.test(f)) extras.push('stem', 'engineering', 'mathematics');
   if (/engineer/i.test(f)) extras.push('engineering', 'engineer');
-  return [...new Set([...words, ...extras])];
+  // Avoid bare "science" — it matches almost every BSc and empties CS-specific pools after a quality-ranked limit.
+  const filteredWords = words.filter(w => w !== 'science' || /computer|data|political|social/.test(f));
+  return [...new Set([...filteredWords, ...extras])];
 };
 
 const programFocusWords = (text: string): string[] => {
