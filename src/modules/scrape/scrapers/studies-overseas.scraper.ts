@@ -28,6 +28,43 @@ async function runWithLimit(concurrency: number, tasks: (() => Promise<void>)[])
   await Promise.all(executing);
 }
 
+type UniSeed = { name: string; country: string; url: string };
+
+/**
+ * Pick up to `limit` universities with round-robin across countries so USA-first
+ * catalog order does not exclude other destinations.
+ */
+function sampleUniversitiesAcrossCountries(unis: UniSeed[], limit: number): UniSeed[] {
+  if (limit <= 0 || unis.length <= limit) return unis;
+
+  const byCountry = new Map<string, UniSeed[]>();
+  for (const uni of unis) {
+    const key = (uni.country || 'Unknown').trim() || 'Unknown';
+    const list = byCountry.get(key);
+    if (list) list.push(uni);
+    else byCountry.set(key, [uni]);
+  }
+
+  const countryQueues = [...byCountry.values()];
+  const selected: UniSeed[] = [];
+  let round = 0;
+
+  while (selected.length < limit) {
+    let addedThisRound = false;
+    for (const queue of countryQueues) {
+      if (selected.length >= limit) break;
+      if (round < queue.length) {
+        selected.push(queue[round]);
+        addedThisRound = true;
+      }
+    }
+    if (!addedThisRound) break;
+    round++;
+  }
+
+  return selected;
+}
+
 /** Standardized slugification fallback */
 function slugify(text: string): string {
   return text
@@ -192,24 +229,29 @@ export const scrapeStudiesOverseas = async (
   // UNIVERSITY DETAIL PAGES CRAWL PHASE (Step 4 onwards)
   // ----------------------------------------------------
   const detailOffset = Math.max(0, Number((config as { detailOffset?: number }).detailOffset) || 0);
-  const allDiscovered = Array.from(discoveredUnisMap.values());
-  // maxDetailPages <= 0 means unlimited (scrape every discovered university).
-  const detailLimit =
-    config.maxDetailPages > 0 ? config.maxDetailPages : allDiscovered.length - detailOffset;
-  const unisToScrape = allDiscovered.slice(
-    detailOffset,
-    detailOffset + Math.max(0, detailLimit),
-  );
+  const allDiscovered = Array.from(discoveredUnisMap.values()).slice(detailOffset);
+  // maxDetailPages <= 0 means unlimited; otherwise sample evenly across countries.
+  const unisToScrape =
+    config.maxDetailPages > 0
+      ? sampleUniversitiesAcrossCountries(allDiscovered, config.maxDetailPages)
+      : allDiscovered;
+  const countryCounts = new Map<string, number>();
+  for (const uni of unisToScrape) {
+    const key = uni.country || 'Unknown';
+    countryCounts.set(key, (countryCounts.get(key) || 0) + 1);
+  }
   scrapeLogger.info('Starting details extraction phase', {
     totalToScrape: unisToScrape.length,
     detailOffset,
-    catalogSize: allDiscovered.length,
+    catalogSize: allDiscovered.length + detailOffset,
     unlimited: !(config.maxDetailPages > 0),
+    countries: countryCounts.size,
+    perCountry: Object.fromEntries(countryCounts),
   });
 
   const browser = await getPlaywrightBrowser();
 
-  const scrapeUniTask = (uniSeed: { name: string; country: string; url: string }) => async () => {
+  const scrapeUniTask = (uniSeed: UniSeed) => async () => {
     scrapeLogger.info('University scraping started', { name: uniSeed.name, url: uniSeed.url });
 
     let attemptSuccess = false;

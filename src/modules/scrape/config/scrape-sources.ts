@@ -73,9 +73,9 @@ export const PRESET_CONFIG: Record<string, SourceConfig> = {
     label: 'Studies Overseas',
     baseUrl: 'https://www.studies-overseas.com/universities',
     seeds: ['https://www.studies-overseas.com/universities'],
-    // Listing is a single catalog page; 0 = unlimited university detail pages.
+    // Listing is a single catalog page; detail pages are sampled across countries (default 400).
     maxPages: parseInt(process.env.SCRAPE_STUDIES_OVERSEAS_MAX_PAGES || '1', 10),
-    maxDetailPages: parseInt(process.env.SCRAPE_STUDIES_OVERSEAS_MAX_DETAIL || '0', 10),
+    maxDetailPages: parseInt(process.env.SCRAPE_STUDIES_OVERSEAS_MAX_DETAIL || '400', 10),
   },
   EDWISE: partnerPreset('EDWISE', 'Edwise', 'https://www.edwiseinternational.com/'),
   CHOPRAS: partnerPreset('CHOPRAS', 'The Chopras', 'https://www.thechopras.com/'),
