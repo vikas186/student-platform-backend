@@ -1,4 +1,3 @@
-import { getOpenAiClient, scrapeAiModel, scrapeAiEnabled } from '../enrichment/openai.client';
 import { scrapeLogger } from '../logger';
 import { Op } from 'sequelize';
 import { db } from '../../../../config/database';
@@ -88,68 +87,15 @@ export function isAcronym(s1: string, s2: string): boolean {
   return false;
 }
 
-/** Calls OpenAI to determine if two slightly different university names refer to the same entity. */
+/** Rule-based name duplicate check (Jaro-Winkler). No OpenAI. */
 export const checkSemanticDuplicate = async (
   scrapedName: string,
   candidateName: string,
-  country: string,
-  city: string | null
+  _country: string,
+  _city: string | null
 ): Promise<boolean> => {
-  if (!scrapeAiEnabled()) {
-    scrapeLogger.debug('AI duplicate checking is disabled or key is missing. Falling back.');
-    const score = getJaroWinkler(scrapedName, candidateName);
-    return score >= 0.92;
-  }
-
-  try {
-    const openai = getOpenAiClient();
-    const model = scrapeAiModel();
-
-    const prompt = `You are a professional database cleaning assistant.
-Compare the following two university records in the location "${city || 'Unknown'}, ${country}" and decide if they refer to the exact same university entity (even if formatted, abbreviated, or translated differently), or if they are separate/distinct institutions.
-
-Record A:
-- Name: "${scrapedName}"
-
-Record B:
-- Name: "${candidateName}"
-
-Examples of duplicates:
-- "University of Connecticut" and "UConn"
-- "University of Connecticut" and "University of Connecticut, Storrs"
-- "University of Connecticut" and "University of Connecticut (Public Ivy)"
-
-Provide your decision in JSON format with the following keys:
-1. "isDuplicate": boolean (true if they are the same university entity, false if they are different/distinct universities)
-2. "explanation": string (short reasoning)
-
-JSON:`;
-
-    const completion = await openai.chat.completions.create({
-      model,
-      messages: [{ role: 'user', content: prompt }],
-      response_format: { type: 'json_object' },
-      temperature: 0.1,
-    });
-
-    const resText = completion.choices[0]?.message?.content || '{}';
-    const result = JSON.parse(resText);
-
-    scrapeLogger.info('AI duplicate match result', {
-      scrapedName,
-      candidateName,
-      isDuplicate: result.isDuplicate,
-      explanation: result.explanation,
-    });
-
-    return !!result.isDuplicate;
-  } catch (err) {
-    scrapeLogger.warn('AI duplicate detection check failed, falling back to Jaro-Winkler score', {
-      error: err instanceof Error ? err.message : String(err),
-    });
-    const score = getJaroWinkler(scrapedName, candidateName);
-    return score >= 0.92;
-  }
+  const score = getJaroWinkler(scrapedName, candidateName);
+  return score >= 0.92;
 };
 
 /** Finds a duplicate in the master Universities table using Jaro-Winkler and semantic check. */
@@ -215,7 +161,7 @@ export async function findMasterUniversityDuplicate(
     if (score >= 0.70 || isAbbr) {
       const isDuplicate = await checkSemanticDuplicate(normName, candidate.name, normCountry, null);
       if (isDuplicate) {
-        scrapeLogger.info('AI semantic master university duplicate matched', {
+        scrapeLogger.info('Fuzzy master university duplicate matched', {
           name: normName,
           matchedAs: candidate.name,
           score,

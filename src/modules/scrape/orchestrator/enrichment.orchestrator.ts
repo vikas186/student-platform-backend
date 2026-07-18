@@ -1,6 +1,7 @@
 import { scrapeLogger } from '../logger';
 import { validateRawBatch, chunkArray } from '../buffer/raw-buffer.service';
-import { enrichEntity, mergeRecord } from '../enrichment/enrichment.service';
+import { enrichEntity, mergeRecord, type EnrichmentResult } from '../enrichment/enrichment.service';
+import { scrapeAiEnabled } from '../enrichment/openai.client';
 import { cleanCourseData } from '../cleaners/clean-course.service';
 import { cleanUniversityData } from '../cleaners/university.cleaner';
 import { cleanScholarshipData } from '../cleaners/scholarship.cleaner';
@@ -19,6 +20,14 @@ import type { EntityCleaningStats } from '../cleaners/entity.cleaner';
 const pageTextFrom = (...parts: Array<string | undefined>): string =>
   parts.filter(Boolean).join('\n').slice(0, 15_000);
 
+const emptyEnrichment = (): EnrichmentResult => ({
+  subjectTags: [],
+  careerTags: [],
+  parserOutput: {},
+  categorizerOutput: {},
+});
+
+/** Rule-based clean + optional AI enrichment (off by default). */
 export const processEnrichmentPipeline = async (
   jobId: string,
   rawBatchId: string,
@@ -51,21 +60,23 @@ export const processEnrichmentPipeline = async (
   stats.feesFound = (raw.fees || []).length;
   stats.rejectedCount += validated.invalidCount;
 
-  scrapeLogger.info('Enrichment started', {
+  const useAi = scrapeAiEnabled();
+  scrapeLogger.info('Cleaning started', {
     jobId,
     source,
+    aiEnrichment: useAi,
     courses: validated.courses.length,
     universities: validated.universities.length,
     scholarships: validated.scholarships.length,
     fees: (raw.fees || []).length,
   });
 
-  const enrichedCourses: Array<{ entity: EnrichedCourse; enrichment: Awaited<ReturnType<typeof enrichEntity>> }> = [];
-  const enrichedUniversities: Array<{ entity: EnrichedUniversity; enrichment: Awaited<ReturnType<typeof enrichEntity>> }> = [];
-  const enrichedScholarships: Array<{ entity: EnrichedScholarship; enrichment: Awaited<ReturnType<typeof enrichEntity>> }> = [];
+  const enrichedCourses: Array<{ entity: EnrichedCourse; enrichment: EnrichmentResult }> = [];
+  const enrichedUniversities: Array<{ entity: EnrichedUniversity; enrichment: EnrichmentResult }> = [];
+  const enrichedScholarships: Array<{ entity: EnrichedScholarship; enrichment: EnrichmentResult }> = [];
 
   for (const chunk of chunkArray(validated.courses)) {
-    scrapeLogger.info('Enriching courses', { jobId, chunkSize: chunk.length, done: enrichedCourses.length });
+    scrapeLogger.info('Cleaning courses', { jobId, chunkSize: chunk.length, done: enrichedCourses.length });
     for (const rawCourse of chunk) {
       const cleaned = cleanCourseData(rawCourse);
       if (cleaned.cleaningStatus === 'rejected') {
@@ -75,18 +86,18 @@ export const processEnrichmentPipeline = async (
       if (cleaned.cleaningStatus === 'high_quality') stats.validCount++;
       else stats.needsReviewCount++;
 
-      const pageText = rawCourse.pageText || pageTextFrom(rawCourse.courseName, rawCourse.academicRequirement, rawCourse.tuitionFee);
-      const enrichment = await enrichEntity({
-        entityType: 'course',
-        url: rawCourse.courseUrl || '',
-        title: rawCourse.courseName,
-        pageText,
-      });
+      const enrichment = useAi
+        ? await enrichEntity({
+            entityType: 'course',
+            url: rawCourse.courseUrl || '',
+            title: rawCourse.courseName,
+            pageText:
+              rawCourse.pageText ||
+              pageTextFrom(rawCourse.courseName, rawCourse.academicRequirement, rawCourse.tuitionFee),
+          })
+        : emptyEnrichment();
 
-      const merged = mergeRecord(
-        { ...cleaned } as Record<string, unknown>,
-        enrichment.parserOutput,
-      );
+      const merged = mergeRecord({ ...cleaned } as Record<string, unknown>, enrichment.parserOutput);
       const entity = enrichedCourseSchema.parse({
         ...merged,
         qualityScore: cleaned.qualityScore,
@@ -111,27 +122,32 @@ export const processEnrichmentPipeline = async (
       if (cleaned.cleaningStatus === 'high_quality') stats.validCount++;
       else stats.needsReviewCount++;
 
-      const enrichment = await enrichEntity({
-        entityType: 'university',
-        url: rawUni.sourceUrl || '',
-        title: rawUni.universityName,
-        pageText: rawUni.pageText || pageTextFrom(rawUni.universityName, rawUni.overview, rawUni.ranking),
-      });
+      const enrichment = useAi
+        ? await enrichEntity({
+            entityType: 'university',
+            url: rawUni.sourceUrl || '',
+            title: rawUni.universityName,
+            pageText: rawUni.pageText || pageTextFrom(rawUni.universityName, rawUni.overview, rawUni.ranking),
+          })
+        : emptyEnrichment();
 
-      const merged = mergeRecord(
-        { ...cleaned } as Record<string, unknown>,
-        enrichment.parserOutput,
-      );
+      const merged = mergeRecord({ ...cleaned } as Record<string, unknown>, enrichment.parserOutput);
 
       const normalizeArray = (arr: unknown): string[] | undefined => {
         if (!arr || !Array.isArray(arr)) return undefined;
-        return arr.map(x => {
-          if (x == null) return '';
-          if (typeof x === 'object') {
-            return (x as any).name || (x as any).title || JSON.stringify(x);
-          }
-          return String(x).trim();
-        }).filter(Boolean);
+        return arr
+          .map(x => {
+            if (x == null) return '';
+            if (typeof x === 'object') {
+              return (
+                (x as { name?: string; title?: string }).name ||
+                (x as { title?: string }).title ||
+                JSON.stringify(x)
+              );
+            }
+            return String(x).trim();
+          })
+          .filter(Boolean);
       };
 
       if (merged.faculties) merged.faculties = normalizeArray(merged.faculties);
@@ -160,17 +176,17 @@ export const processEnrichmentPipeline = async (
       if (cleaned.cleaningStatus === 'high_quality') stats.validCount++;
       else stats.needsReviewCount++;
 
-      const enrichment = await enrichEntity({
-        entityType: 'scholarship',
-        url: rawSch.sourceUrl || '',
-        title: rawSch.scholarshipName,
-        pageText: rawSch.pageText || pageTextFrom(rawSch.scholarshipName, rawSch.eligibility, rawSch.description),
-      });
+      const enrichment = useAi
+        ? await enrichEntity({
+            entityType: 'scholarship',
+            url: rawSch.sourceUrl || '',
+            title: rawSch.scholarshipName,
+            pageText:
+              rawSch.pageText || pageTextFrom(rawSch.scholarshipName, rawSch.eligibility, rawSch.description),
+          })
+        : emptyEnrichment();
 
-      const merged = mergeRecord(
-        { ...cleaned } as Record<string, unknown>,
-        enrichment.parserOutput,
-      );
+      const merged = mergeRecord({ ...cleaned } as Record<string, unknown>, enrichment.parserOutput);
       const entity = enrichedScholarshipSchema.parse({
         ...merged,
         qualityScore: cleaned.qualityScore,
@@ -182,8 +198,8 @@ export const processEnrichmentPipeline = async (
     }
   }
 
-  const cleanedFees = ((raw.fees || []) as any[]).map(rawFee => {
-    const cleaned = cleanFeeData(rawFee);
+  const cleanedFees = ((raw.fees || []) as unknown[]).map(rawFee => {
+    const cleaned = cleanFeeData(rawFee as Parameters<typeof cleanFeeData>[0]);
     if (cleaned.cleaningStatus === 'rejected') {
       stats.rejectedCount++;
     } else if (cleaned.cleaningStatus === 'high_quality') {
@@ -202,6 +218,6 @@ export const processEnrichmentPipeline = async (
   });
 
   stats.persisted = { ...persisted, rejectedPages: stats.rejectedPages };
-  scrapeLogger.info('Enrichment pipeline complete', { jobId, ...stats });
+  scrapeLogger.info('Cleaning pipeline complete', { jobId, aiEnrichment: useAi, ...stats });
   return stats;
 };

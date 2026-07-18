@@ -32,17 +32,22 @@ const mergeRecord = <T extends Record<string, unknown>>(base: T, patch: Record<s
   return out;
 };
 
-export const enrichEntity = async (ctx: EnrichmentContext): Promise<EnrichmentResult> => {
-  const empty: EnrichmentResult = {
-    subjectTags: [],
-    careerTags: [],
-    parserOutput: {},
-    categorizerOutput: {},
-  };
+export { mergeRecord };
 
-  if (!scrapeAiEnabled() || (ctx.entityType === 'course' && process.env.SKIP_COURSE_AI_ENRICHMENT === 'true')) {
-    scrapeLogger.debug('AI enrichment skipped (disabled or bypassed for courses)');
-    return empty;
+const emptyEnrichment = (): EnrichmentResult => ({
+  subjectTags: [],
+  careerTags: [],
+  parserOutput: {},
+  categorizerOutput: {},
+});
+
+/**
+ * Optional AI enrichment. Disabled unless SCRAPE_AI_ENRICHMENT=true.
+ * Scraping uses rule-based cleaners for validation by default.
+ */
+export const enrichEntity = async (ctx: EnrichmentContext): Promise<EnrichmentResult> => {
+  if (!scrapeAiEnabled()) {
+    return emptyEnrichment();
   }
 
   try {
@@ -58,14 +63,14 @@ export const enrichEntity = async (ctx: EnrichmentContext): Promise<EnrichmentRe
     ]);
 
     return {
-      aiSummary,
-      subjectTags: categorizerOutput.subjectTags || [],
-      careerTags: categorizerOutput.careerTags || [],
-      ieltsRequired: categorizerOutput.ieltsRequired,
-      ieltsScore: categorizerOutput.ieltsScore,
-      pageCategory: categorizerOutput.pageType,
-      parserOutput,
-      categorizerOutput,
+      aiSummary: aiSummary || undefined,
+      subjectTags: (categorizerOutput as CategorizerOutput)?.subjectTags ?? [],
+      careerTags: (categorizerOutput as CategorizerOutput)?.careerTags ?? [],
+      ieltsRequired: (parserOutput as { ieltsRequired?: boolean })?.ieltsRequired,
+      ieltsScore: (parserOutput as { ieltsScore?: string })?.ieltsScore,
+      pageCategory: (categorizerOutput as CategorizerOutput)?.pageType,
+      parserOutput: (parserOutput as Record<string, unknown>) || {},
+      categorizerOutput: categorizerOutput || {},
       model: process.env.SCRAPE_OPENAI_MODEL || 'gpt-4o-mini',
     };
   } catch (err) {
@@ -74,8 +79,6 @@ export const enrichEntity = async (ctx: EnrichmentContext): Promise<EnrichmentRe
       url: ctx.url,
       error: err instanceof Error ? err.message : String(err),
     });
-    return empty;
+    return emptyEnrichment();
   }
 };
-
-export { mergeRecord };

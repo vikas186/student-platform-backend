@@ -169,7 +169,7 @@ export const upsertUniversity = async (
                      isAcronym(candidate.universityName, uni.universityName);
 
       if (score >= 0.70 || isAbbr) {
-        // AI semantic match fallback for near-duplicates or abbreviations
+        // Fuzzy name match for near-duplicates or abbreviations
         const isDuplicate = await checkSemanticDuplicate(
           uni.universityName,
           candidate.universityName,
@@ -178,7 +178,7 @@ export const upsertUniversity = async (
         );
         if (isDuplicate) {
           existing = candidate;
-          scrapeLogger.info('AI semantic duplicate university matched', {
+          scrapeLogger.info('Fuzzy duplicate university matched', {
             scrapedName: uni.universityName,
             matchedAs: candidate.universityName,
             score,
