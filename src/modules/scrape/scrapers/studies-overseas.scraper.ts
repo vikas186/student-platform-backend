@@ -32,9 +32,14 @@ async function gotoResilient(page: Page, url: string): Promise<void> {
 }
 
 /** Simple vanilla implementation of p-limit concurrency wrapper */
-async function runWithLimit(concurrency: number, tasks: (() => Promise<void>)[]) {
+async function runWithLimit(
+  concurrency: number,
+  tasks: (() => Promise<void>)[],
+  shouldStop?: () => boolean | Promise<boolean>,
+) {
   const executing: Promise<any>[] = [];
   for (const task of tasks) {
+    if (shouldStop && (await shouldStop())) break;
     const p = task();
     executing.push(p);
     p.then(() => executing.splice(executing.indexOf(p), 1));
@@ -581,19 +586,31 @@ export const scrapeStudiesOverseas = async (
     });
   };
 
-  // Run detail tasks concurrently (max 5 concurrent tasks)
+  // Run detail tasks concurrently (max 5 concurrent tasks).
+  // shouldStop skips remaining universities and keeps already-fetched data for cleaning.
   const detailTasks = unisToScrape.map(uni => scrapeUniTask(uni));
-  await runWithLimit(5, detailTasks);
+  await runWithLimit(5, detailTasks, options?.shouldStop);
 
-  scrapeLogger.info('Studies Overseas scraper pipeline completed', {
-    source: config.source,
-    pagesVisited,
-    coursesCount: courses.length,
-    unisCount: universities.length,
-    feesCount: fees.length,
-    scholarshipsCount: scholarships.length,
-    rejectedPagesCount: rejectedPages.length,
-  });
+  if (options?.shouldStop && (await options.shouldStop())) {
+    scrapeLogger.info('Studies Overseas scrape stopped early — returning partial results for cleaning', {
+      source: config.source,
+      pagesVisited,
+      coursesCount: courses.length,
+      unisCount: universities.length,
+      feesCount: fees.length,
+      scholarshipsCount: scholarships.length,
+    });
+  } else {
+    scrapeLogger.info('Studies Overseas scraper pipeline completed', {
+      source: config.source,
+      pagesVisited,
+      coursesCount: courses.length,
+      unisCount: universities.length,
+      feesCount: fees.length,
+      scholarshipsCount: scholarships.length,
+      rejectedPagesCount: rejectedPages.length,
+    });
+  }
 
   return {
     courses,

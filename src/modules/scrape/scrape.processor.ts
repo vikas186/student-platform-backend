@@ -30,6 +30,11 @@ export const processScrapeJob = async (payload: ScrapeJobMessage): Promise<void>
     return;
   }
 
+  if (['failed', 'completed', 'pending_cleaning', 'cleaning'].includes(job.status)) {
+    scrapeLogger.warn('Scrape job already finished or cancelled — skipping', { jobId, status: job.status });
+    return;
+  }
+
   const targetUrl = job.targetUrl || job.seedUrls?.[0] || '';
   const source = resolveJobSource(job);
 
@@ -90,7 +95,14 @@ export const processScrapeJob = async (payload: ScrapeJobMessage): Promise<void>
           },
         });
       },
+      shouldStop: async () => {
+        await job.reload();
+        const stats = (job.stats as Record<string, unknown>) || {};
+        return stats.stopRequested === true || stats.stopRequested === 'true';
+      },
     });
+    const stoppedEarly = ((await job.reload()).stats as Record<string, unknown>)?.stopRequested === true
+      || ((job.stats as Record<string, unknown>)?.stopRequested === 'true');
     const rawBatchId = randomUUID();
     const totalEntities =
       result.courses.length +
@@ -100,7 +112,7 @@ export const processScrapeJob = async (payload: ScrapeJobMessage): Promise<void>
 
     await saveRawScrapeJson(source, jobId, result, job.targetUrl);
 
-    scrapeLogger.info('Scrape completed', {
+    scrapeLogger.info(stoppedEarly ? 'Scrape stopped early — saving partial results' : 'Scrape completed', {
       source,
       targetUrl: job.targetUrl,
       jobId,
@@ -112,6 +124,7 @@ export const processScrapeJob = async (payload: ScrapeJobMessage): Promise<void>
       rejectedPages: result.rejectedPages.length,
       durationSec: Math.round((Date.now() - t0) / 1000),
       retryAttempt: retryCount,
+      stoppedEarly: Boolean(stoppedEarly),
     });
 
     const batch = await db.RawScrapeBatch.create({
@@ -123,6 +136,7 @@ export const processScrapeJob = async (payload: ScrapeJobMessage): Promise<void>
         targetName: job.targetName,
         pagesVisited: result.pagesVisited,
         apiResponseCount: result.apiResponseCount,
+        stoppedEarly: Boolean(stoppedEarly),
       },
       rawCourses: result.courses,
       rawUniversities: result.universities,
@@ -142,11 +156,15 @@ export const processScrapeJob = async (payload: ScrapeJobMessage): Promise<void>
         scholarshipsFound: result.scholarships.length,
         rejectedPages: result.rejectedPages.length,
         apiResponseCount: result.apiResponseCount,
+        maxPages: baseStats.maxPages,
+        maxDetailPages: baseStats.maxDetailPages,
+        stopRequested: Boolean(stoppedEarly),
+        stoppedEarly: Boolean(stoppedEarly),
       },
     });
 
     await publishCleaningJob({ jobId, rawBatchId, retryCount: 0 });
-    scrapeLogger.info('Raw scrape saved, cleaning queued', { jobId, rawBatchId, batchId: batch.id, totalEntities });
+    scrapeLogger.info('Raw scrape saved, cleaning queued', { jobId, rawBatchId, batchId: batch.id, totalEntities, stoppedEarly: Boolean(stoppedEarly) });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     scrapeLogger.error('Scrape job failed', {

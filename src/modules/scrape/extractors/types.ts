@@ -99,6 +99,8 @@ export type ScrapeProgress = {
 
 export type ScrapeRunOptions = {
   onProgress?: (progress: ScrapeProgress) => void | Promise<void>;
+  /** When true, scrapers should finish in-flight work and return partial results. */
+  shouldStop?: () => boolean | Promise<boolean>;
 };
 
 export type PageCapture = {
