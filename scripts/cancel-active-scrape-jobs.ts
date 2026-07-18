@@ -1,19 +1,45 @@
 /**
  * Marks in-flight scrape jobs as failed/cancelled.
- * Usage: npm run scrape:cancel
+ * Usage (from repo root):
+ *   NODE_ENV=production node dist/scripts/cancel-active-scrape-jobs.js
  */
-import dotenv from 'dotenv';
+import fs from 'fs';
 import path from 'path';
 import { Sequelize } from 'sequelize';
 
-const envFile = path.join(__dirname, '..', 'config', `.env.${process.env.NODE_ENV || 'development'}`);
-dotenv.config({ path: envFile });
-
-const { DB_HOST, DB_USERNAME, DB_PASSWORD, DB_NAME, DB_PORT } = process.env;
-
 const ACTIVE = ['pending', 'running', 'scraping', 'pending_cleaning', 'cleaning'];
 
+/** Load config/.env.* without requiring the dotenv package (prod may have a thin node_modules). */
+function loadEnvFile(envName: string): string {
+  const envFile = path.resolve(process.cwd(), 'config', `.env.${envName}`);
+  if (!fs.existsSync(envFile)) {
+    return envFile;
+  }
+  const text = fs.readFileSync(envFile, 'utf8');
+  for (const line of text.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eq = trimmed.indexOf('=');
+    if (eq <= 0) continue;
+    const key = trimmed.slice(0, eq).trim();
+    let value = trimmed.slice(eq + 1).trim();
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+    if (process.env[key] === undefined) process.env[key] = value;
+  }
+  return envFile;
+}
+
 async function main(): Promise<void> {
+  const envName = process.env.NODE_ENV || 'development';
+  const envFile = loadEnvFile(envName);
+
+  const { DB_HOST, DB_USERNAME, DB_PASSWORD, DB_NAME, DB_PORT } = process.env;
+
   if (!DB_HOST || !DB_USERNAME || !DB_PASSWORD || !DB_NAME) {
     console.error(`Missing DB_* variables. Expected file: ${envFile}`);
     process.exit(1);
