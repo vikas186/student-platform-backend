@@ -420,7 +420,7 @@ scrapeWebsite()          → generic.scraper.ts
 **Playwright behavior (`playwright.util.ts`):**
 
 - Singleton Chromium browser instance
-- Configurable timeout (`SCRAPE_TIMEOUT_MS`, default 120s)
+- Configurable timeout (`SCRAPE_TIMEOUT_MS`, default 180s)
 - Per-page retries (`SCRAPE_PAGE_RETRIES`, default 3)
 - User-agent rotation from a pool
 - XHR/fetch response listeners registered **before** navigation
@@ -530,7 +530,7 @@ Marks all jobs in active statuses as `failed` with message `"Cancelled by admin"
 | `SCRAPE_MAX_RETRIES` | `3` | Scrape retry cap |
 | `CLEAN_MAX_RETRIES` | `3` | Cleaning retry cap |
 | `SCRAPE_STALE_JOB_MS` | `120000` | Stale job recovery threshold |
-| `SCRAPE_TIMEOUT_MS` | `120000` | Playwright page timeout |
+| `SCRAPE_TIMEOUT_MS` | `180000` | Playwright page / navigation timeout |
 | `SCRAPE_RATE_LIMIT_MS` | `2000` | Delay between pages |
 | `SCRAPE_MAX_PAGES` | `25` | Generic page limit |
 | `SCRAPE_MAX_DETAIL_PAGES` | `15` | Detail page cap |

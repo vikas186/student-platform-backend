@@ -176,6 +176,8 @@ const capturePageOnce = async (
   const seenApiUrl = new Set<string>();
   const userAgent = pickRandomUserAgent();
   const page = await b.newPage({ userAgent, viewport: { width: 1280, height: 900 } });
+  page.setDefaultTimeout(SCRAPE_TIMEOUT_MS);
+  page.setDefaultNavigationTimeout(SCRAPE_TIMEOUT_MS);
 
   page.on('response', async res => {
     try {

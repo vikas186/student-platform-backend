@@ -1,4 +1,5 @@
 import type { SourceConfig } from '../config/scrape-sources';
+import { SCRAPE_TIMEOUT_MS } from '../config/scrape.constants';
 import type {
   ScrapePipelineResult,
   RawCourseRow,
@@ -13,6 +14,22 @@ import { getPlaywrightBrowser, capturePageWithPlaywright } from '../scrapers/pla
 import type { Page } from 'playwright';
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+
+/**
+ * Prefer domcontentloaded (avoids hanging on ads/analytics that block `load`).
+ * Falls back once if the first navigation still times out.
+ */
+async function gotoResilient(page: Page, url: string): Promise<void> {
+  try {
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: SCRAPE_TIMEOUT_MS });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (!/timeout|Timeout/i.test(msg)) throw err;
+    scrapeLogger.warn('Navigation timeout — retrying with commit', { url, timeoutMs: SCRAPE_TIMEOUT_MS });
+    await page.goto(url, { waitUntil: 'commit', timeout: SCRAPE_TIMEOUT_MS });
+    await page.waitForLoadState('domcontentloaded', { timeout: SCRAPE_TIMEOUT_MS }).catch(() => {});
+  }
+}
 
 /** Simple vanilla implementation of p-limit concurrency wrapper */
 async function runWithLimit(concurrency: number, tasks: (() => Promise<void>)[]) {
@@ -264,9 +281,11 @@ export const scrapeStudiesOverseas = async (
           userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
           viewport: { width: 1280, height: 900 },
         });
+        page.setDefaultTimeout(SCRAPE_TIMEOUT_MS);
+        page.setDefaultNavigationTimeout(SCRAPE_TIMEOUT_MS);
 
         // 1. Overview & JSON extraction
-        await page.goto(uniSeed.url, { waitUntil: 'load', timeout: 60000 });
+        await gotoResilient(page, uniSeed.url);
         await page.evaluate(() => {
           const style = document.createElement('style');
           style.innerHTML = '.poptin-popup-background, [id*="poptin"], [class*="poptin"], .modal-backdrop { display: none !important; pointer-events: none !important; }';
@@ -435,7 +454,7 @@ export const scrapeStudiesOverseas = async (
         // 2. Courses Tab clicking & DOM parsing
         const coursesStartIdx = courses.length;
         const coursesUrl = `${uniSeed.url}?section=courses`;
-        await page.goto(coursesUrl, { waitUntil: 'load', timeout: 60000 });
+        await gotoResilient(page, coursesUrl);
         await page.evaluate(() => {
           const style = document.createElement('style');
           style.innerHTML = '.poptin-popup-background, [id*="poptin"], [class*="poptin"], .modal-backdrop { display: none !important; pointer-events: none !important; }';

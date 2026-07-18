@@ -15,7 +15,8 @@ export const CLEAN_MAX_RETRIES = parseInt(
   process.env.CLEAN_MAX_RETRIES || process.env.SCRAPE_MAX_RETRIES || '3',
   10,
 );
-export const SCRAPE_TIMEOUT_MS = parseInt(process.env.SCRAPE_TIMEOUT_MS || '120000', 10);
+/** Playwright navigation / action timeout. Default 3 min — Studies Overseas pages are slow. */
+export const SCRAPE_TIMEOUT_MS = parseInt(process.env.SCRAPE_TIMEOUT_MS || '180000', 10);
 export const SCRAPE_DELAY_MS = parseInt(process.env.SCRAPE_RATE_LIMIT_MS || '2000', 10);
 export const SCRAPE_MAX_PAGES = parseInt(process.env.SCRAPE_MAX_PAGES || '0', 10);
 export const SCRAPE_MAX_DETAIL_PAGES = parseInt(process.env.SCRAPE_MAX_DETAIL_PAGES || '0', 10);
