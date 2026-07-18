@@ -44,6 +44,7 @@
     "sync:chat-knowledge": "cross-env NODE_ENV=development ts-node scripts/sync-chat-knowledge.ts",
     "prod:sync:chat-knowledge": "cross-env NODE_ENV=production ts-node scripts/sync-chat-knowledge.ts",
     "sync:recommendation-knowledge": "cross-env NODE_ENV=development ts-node scripts/sync-recommendation-knowledge.ts",
+    "prod:sync:recommendation-knowledge": "cross-env NODE_ENV=production ts-node scripts/sync-recommendation-knowledge.ts",
     "worker:scraper": "cross-env NODE_ENV=development SKIP_DB_SYNC=1 ts-node workers/scraper.worker.ts",
     "worker:cleaner": "cross-env NODE_ENV=development SKIP_DB_SYNC=1 ts-node workers/cleaner.worker.ts",
     "worker:enricher": "cross-env NODE_ENV=development SKIP_DB_SYNC=1 ts-node workers/cleaner.worker.ts",
