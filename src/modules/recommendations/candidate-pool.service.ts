@@ -2,7 +2,6 @@ import { Op } from 'sequelize';
 import { db } from '../../../config/database';
 import {
   FEE_RANGE_PROGRAMS,
-  fieldToFeeRangeKeys,
   namesMatch,
   parseFeeNumber,
 } from '../../../utils/catalogProgram.util';
@@ -325,39 +324,42 @@ export const buildCandidatePool = async (input: NormalizedMatchInput): Promise<R
     });
   }
 
-  const feeKeys =
-    input.audience === 'agent' ? Object.keys(FEE_RANGE_PROGRAMS) : fieldToFeeRangeKeys(input.field, input.level);
-  for (const uni of uniList) {
-    const ranges = uni.programFeeRanges;
-    if (!ranges) continue;
-    for (const key of feeKeys) {
-      const meta = FEE_RANGE_PROGRAMS[key];
-      const val = ranges[key];
-      if (!meta || val == null || String(val).trim() === '') continue;
-      if (!passesLevel(meta.courseName, meta.degree, input.wantedBand)) continue;
+  // Public Explore must show real program names (catalog/scrape). Fee-matrix rows are
+  // generic buckets ("Undergraduate Business Programs") — keep them for agents only.
+  if (input.audience === 'agent') {
+    const feeKeys = Object.keys(FEE_RANGE_PROGRAMS);
+    for (const uni of uniList) {
+      const ranges = uni.programFeeRanges;
+      if (!ranges) continue;
+      for (const key of feeKeys) {
+        const meta = FEE_RANGE_PROGRAMS[key];
+        const val = ranges[key];
+        if (!meta || val == null || String(val).trim() === '') continue;
+        if (!passesLevel(meta.courseName, meta.degree, input.wantedBand)) continue;
 
-      const comm = commissionMap.get(uni.id);
-      candidates.push({
-        refId: candidateRefKey('fee_range', key, uni.id),
-        source: 'fee_range',
-        courseId: key,
-        courseName: meta.courseName,
-        degree: meta.degree,
-        country: uni.country,
-        universityId: uni.id,
-        universityName: uni.name,
-        fee: parseFeeNumber(val),
-        feeRange: String(val),
-        duration: meta.duration,
-        intake: null,
-        qualityScore: FEE_RANGE_DEFAULT_QUALITY,
-        commissionPercent: comm?.percentage ?? null,
-        subjectTags: [],
-        careerTags: [],
-        scholarshipHint: null,
-        vectorSimilarity: 0,
-        rerankScore: 0,
-      });
+        const comm = commissionMap.get(uni.id);
+        candidates.push({
+          refId: candidateRefKey('fee_range', key, uni.id),
+          source: 'fee_range',
+          courseId: key,
+          courseName: meta.courseName,
+          degree: meta.degree,
+          country: uni.country,
+          universityId: uni.id,
+          universityName: uni.name,
+          fee: parseFeeNumber(val),
+          feeRange: String(val),
+          duration: meta.duration,
+          intake: null,
+          qualityScore: FEE_RANGE_DEFAULT_QUALITY,
+          commissionPercent: comm?.percentage ?? null,
+          subjectTags: [],
+          careerTags: [],
+          scholarshipHint: null,
+          vectorSimilarity: 0,
+          rerankScore: 0,
+        });
+      }
     }
   }
 

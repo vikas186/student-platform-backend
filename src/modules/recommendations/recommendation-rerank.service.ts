@@ -25,7 +25,8 @@ const scoreField = (c: RecommendationCandidate, input: NormalizedMatchInput, aud
 const scoreQuality = (c: RecommendationCandidate): number => {
   const base = Math.min(1, c.qualityScore / 100);
   if (c.source === 'catalog') return Math.min(1, base + 0.12);
-  if (c.source === 'fee_range') return Math.min(1, base + 0.08);
+  // Fee-matrix rows are generic labels, not real courses — keep them below named programs.
+  if (c.source === 'fee_range') return Math.min(1, base * 0.35);
   return base;
 };
 
@@ -75,22 +76,27 @@ export const intersectWithVectorHits = (
   refSimilarity: Map<string, number>,
   audience: RerankAudience = 'public',
 ): RecommendationCandidate[] => {
-  if (refSimilarity.size === 0) return pool;
+  if (refSimilarity.size === 0) {
+    return audience === 'public' ? pool.filter(c => c.source !== 'fee_range') : pool;
+  }
 
   // Agent: keep full country pool; vector similarity boosts ranking only.
   if (audience === 'agent') {
     return mergeVectorScores(pool, refSimilarity);
   }
 
-  /** Admin-uploaded catalog courses + fee matrix — always keep in the candidate set */
-  const manualRows = pool.filter(c => c.source === 'catalog' || c.source === 'fee_range');
+  /** Admin-uploaded catalog courses always stay in the set; fee-matrix generics do not. */
+  const manualRows = pool.filter(c => c.source === 'catalog');
+  const namedRows = pool.filter(c => c.source === 'catalog' || c.source === 'scrape');
   const hitIds = new Set(refSimilarity.keys());
-  const vectorMatched = pool.filter(c => hitIds.has(c.refId));
+  const vectorMatched = pool.filter(c => hitIds.has(c.refId) && c.source !== 'fee_range');
 
   const byRef = new Map<string, RecommendationCandidate>();
   for (const c of manualRows) byRef.set(c.refId, c);
   for (const c of vectorMatched) byRef.set(c.refId, c);
 
-  const merged = byRef.size > 0 ? [...byRef.values()] : pool;
-  return mergeVectorScores(merged, refSimilarity);
+  // Prefer real program titles when available; only fall back to full pool if empty.
+  const merged =
+    byRef.size > 0 ? [...byRef.values()] : namedRows.length > 0 ? namedRows : pool.filter(c => c.source !== 'fee_range');
+  return mergeVectorScores(merged.length ? merged : namedRows, refSimilarity);
 };

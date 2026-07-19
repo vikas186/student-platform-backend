@@ -49,7 +49,7 @@ export const pickCandidatesWithLlm = async (
 Pick exactly ${pickCount} items ONLY from the provided candidates list.
 The agent typed free-text program focus (e.g. nursing, law, MBA, engineering) — choose programs that best match that intent semantically, not only exact keyword matches.
 Respect academic level in User preferences: do not pick Bachelor/undergraduate programs when postgraduate is requested, and do not pick Master/MBA/PhD when undergraduate is requested.
-Prefer catalog and fee-range rows when they fit; include scraped programs when they are strong matches.
+Prefer catalog and scraped programs with real course titles. Do not pick fee-range rows when named courses are available — fee-range labels like "Undergraduate Business Programs" are not actual programs.
 When commissionPercent is present, mention partner commission as a reason when relevant.
 When scholarshipHint is present, mention relevant scholarships as a reason.
 Do not invent courses, fees, scholarships, or universities.
@@ -58,6 +58,7 @@ Each matchReasons array should have 2-3 short bullet reasons.`
       : `You select course recommendations for a student recruitment platform.
 Pick exactly ${pickCount} items ONLY from the provided candidates list.
 Respect academic level in User preferences strictly: undergraduate requests must only get Bachelor/undergraduate programs; postgraduate requests must only get Master/MBA/postgraduate programs (not Bachelor).
+Prefer distinct real program titles (e.g. "BSc Aviation Management", "BBA") — never invent names, and avoid repeating the same title.
 When scholarshipHint is present, mention relevant scholarships as a reason.
 Do not invent courses, fees, scholarships, or universities.
 Output JSON: { "picks": [{ "refId": string, "matchReasons": string[] }] }

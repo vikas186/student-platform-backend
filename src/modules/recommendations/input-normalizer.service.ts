@@ -189,6 +189,10 @@ const fieldKeywords = (field: string): string[] => {
   }
   if (/\bstem\b|engineering|math/i.test(f)) extras.push('stem', 'engineering', 'mathematics');
   if (/engineer/i.test(f)) extras.push('engineering', 'engineer');
+  if (/aviation|aeronaut|aerospace|pilot|airline/i.test(f)) {
+    extras.push('aviation', 'aeronautical', 'aerospace', 'pilot', 'airline', 'aircraft');
+  }
+  if (/nurs/i.test(f)) extras.push('nursing', 'nurse');
   const filteredWords = words.filter(w => w !== 'science' || /computer|data|political|social/.test(f));
   return [...new Set([...filteredWords, ...extras])];
 };

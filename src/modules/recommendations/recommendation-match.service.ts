@@ -45,6 +45,47 @@ const enforceLevel = (
   return candidates.filter(c => levelMatchesProgram(c.courseName, c.degree, input.wantedBand));
 };
 
+const preferNamedPrograms = (candidates: RecommendationCandidate[]): RecommendationCandidate[] => {
+  const named = candidates.filter(c => c.source === 'catalog' || c.source === 'scrape');
+  return named.length ? named : candidates.filter(c => c.source !== 'fee_range');
+};
+
+const diversifyByTitle = (
+  picks: { refId: string; matchReasons: string[] }[],
+  ranked: RecommendationCandidate[],
+  pickCount: number,
+): { refId: string; matchReasons: string[] }[] => {
+  const byRef = new Map(ranked.map(c => [c.refId, c]));
+  const seen = new Set<string>();
+  const out: { refId: string; matchReasons: string[] }[] = [];
+
+  const tryAdd = (pick: { refId: string; matchReasons: string[] }) => {
+    const c = byRef.get(pick.refId);
+    if (!c) return;
+    const key = c.courseName.toLowerCase().replace(/\s+/g, ' ').trim();
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(pick);
+  };
+
+  for (const pick of picks) {
+    if (out.length >= pickCount) break;
+    tryAdd(pick);
+  }
+
+  if (out.length < pickCount) {
+    for (const c of ranked) {
+      if (out.length >= pickCount) break;
+      tryAdd({
+        refId: c.refId,
+        matchReasons: [`Matches your ${c.degree} level preference`, `Available in ${c.country}`],
+      });
+    }
+  }
+
+  return out;
+};
+
 const safeEmbed = async (text: string): Promise<number[] | null> => {
   try {
     return await embedText(text);
@@ -69,8 +110,8 @@ export const matchPublicRecommendations = async (body: PublicMatchBody) => {
   }
 
   const refSimilarity = await boostCandidatesFromContextHits(pool, hits, buildRefSimilarityMap(hits));
-  let merged = enforceLevel(intersectWithVectorHits(pool, refSimilarity, 'public'), input);
-  if (!merged.length) merged = enforceLevel(pool, input);
+  let merged = enforceLevel(preferNamedPrograms(intersectWithVectorHits(pool, refSimilarity, 'public')), input);
+  if (!merged.length) merged = enforceLevel(preferNamedPrograms(pool), input);
 
   const reranked = enforceLevel(rerankCandidates(merged, input, 'public', 8), input);
   const ranked = reranked.length ? reranked : merged;
@@ -92,6 +133,7 @@ export const matchPublicRecommendations = async (body: PublicMatchBody) => {
       matchReasons: [`Matches your ${input.level} level preference`, `Available in ${c.country}`],
     }));
   }
+  picks = diversifyByTitle(picks, ranked, pickCount);
   const suggestions = buildPublicSuggestions(picks, ranked, input);
 
   return wrapMatchResponse(suggestions);

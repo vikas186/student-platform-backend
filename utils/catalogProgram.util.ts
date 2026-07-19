@@ -309,8 +309,7 @@ export const fieldToFeeRangeKeys = (field: string, level: string): string[] => {
   if (/engineer/i.test(f) && !keys.length) {
     keys.push(`${prefix || 'pg'}StemUsdYear`, `${prefix || 'ug'}StemUsdYear`);
   }
-  if (keys.length === 0) {
-    return Object.keys(FEE_RANGE_PROGRAMS);
-  }
+  // Do not fall back to every fee bucket — those labels ("Undergraduate STEM Programs")
+  // are fee-matrix placeholders, not real course titles for Explore mapping.
   return [...new Set(keys.filter(k => k in FEE_RANGE_PROGRAMS))];
 };
