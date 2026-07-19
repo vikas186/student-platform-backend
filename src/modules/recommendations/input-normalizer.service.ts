@@ -13,6 +13,59 @@ const parseBudget = (value?: number | string): number | null => {
   return Number.isFinite(n) ? n : null;
 };
 
+/** Map short / alternate country names to DB country ILIKE patterns. */
+const COUNTRY_ALIAS_PATTERNS: Record<string, string[]> = {
+  uk: ['United Kingdom', 'UK', 'England', 'Scotland', 'Wales', 'Britain'],
+  'u.k.': ['United Kingdom', 'UK', 'England', 'Scotland', 'Wales', 'Britain'],
+  'united kingdom': ['United Kingdom', 'UK', 'England', 'Scotland', 'Wales', 'Britain'],
+  britain: ['United Kingdom', 'Britain', 'England'],
+  england: ['United Kingdom', 'England'],
+  scotland: ['United Kingdom', 'Scotland'],
+  wales: ['United Kingdom', 'Wales'],
+  usa: ['United States', 'USA', 'US', 'America'],
+  us: ['United States', 'USA', 'US'],
+  'u.s.': ['United States', 'USA', 'US'],
+  'u.s.a.': ['United States', 'USA', 'US'],
+  'united states': ['United States', 'USA', 'US'],
+  america: ['United States', 'USA', 'America'],
+  uae: ['United Arab Emirates', 'UAE', 'Dubai'],
+  'united arab emirates': ['United Arab Emirates', 'UAE', 'Dubai'],
+  dubai: ['Dubai', 'United Arab Emirates', 'UAE'],
+  nz: ['New Zealand', 'NewZealand', 'NZ'],
+  'new zealand': ['New Zealand', 'NewZealand', 'NZ'],
+  newzealand: ['New Zealand', 'NewZealand', 'NZ'],
+  australia: ['Australia'],
+  au: ['Australia'],
+  canada: ['Canada'],
+  ca: ['Canada'],
+  ireland: ['Ireland'],
+  germany: ['Germany'],
+  france: ['France'],
+  spain: ['Spain'],
+  singapore: ['Singapore'],
+  india: ['India'],
+  netherlands: ['Netherlands', 'Holland'],
+  holland: ['Netherlands', 'Holland'],
+};
+
+/** Build ILIKE patterns so "UK" matches "United Kingdom", "USA" matches "United States", etc. */
+export const countrySearchPatterns = (raw: string): string[] => {
+  const trimmed = raw.trim();
+  if (!trimmed) return [];
+  const key = trimmed.toLowerCase();
+  const aliases = COUNTRY_ALIAS_PATTERNS[key];
+  if (aliases?.length) {
+    return [...new Set(aliases.map(a => `%${a}%`))];
+  }
+  const collapsed = key.replace(/[^a-z]/g, '');
+  for (const [alias, vals] of Object.entries(COUNTRY_ALIAS_PATTERNS)) {
+    if (alias.replace(/[^a-z]/g, '') === collapsed) {
+      return [...new Set(vals.map(a => `%${a}%`))];
+    }
+  }
+  return [`%${trimmed}%`];
+};
+
 /** Map UI / API level string to a strict academic band. */
 export const wantedBandFromLevel = (level: string): AcademicBand => {
   const l = level.toLowerCase().trim();
@@ -70,6 +123,8 @@ export const inferAcademicBand = (...parts: Array<string | null | undefined>): A
     /\bb\.?\s?eng\b/.test(t) ||
     /\bbeng\b/.test(t) ||
     /\bbba\b/.test(t) ||
+    /\bba\b/.test(t) ||
+    /\bbnurs\b/.test(t) ||
     /\bundergraduate\b/.test(t) ||
     /\bundergrad\b/.test(t)
   ) {
@@ -116,8 +171,18 @@ const fieldKeywords = (field: string): string[] => {
   const f = field.toLowerCase().trim();
   const words = f.split(/[\s,/]+/).filter(w => w.length >= 2);
   const extras: string[] = [];
-  if (/business|commerce|mba|management|finance/i.test(f)) {
-    extras.push('business', 'commerce', 'management', 'mba', 'finance');
+  if (/business|commerce|mba|management|finance|bba|administration|accounting|marketing/i.test(f)) {
+    extras.push(
+      'business',
+      'commerce',
+      'management',
+      'mba',
+      'finance',
+      'bba',
+      'administration',
+      'accounting',
+      'marketing',
+    );
   }
   if (/computer|software|cs\b|it\b|tech|data|informatics/i.test(f)) {
     extras.push('computer', 'software', 'technology', 'computing', 'informatics', 'data', 'programming');
@@ -146,6 +211,7 @@ export const normalizePublicInput = (body: PublicMatchBody): NormalizedMatchInpu
   const wantedBand = wantedBandFromLevel(level);
   const budget = parseBudget(body.budget);
   const score = body.score != null && Number.isFinite(body.score) ? body.score : null;
+  const countryPatterns = countrySearchPatterns(country);
 
   return {
     audience: 'public',
@@ -158,6 +224,7 @@ export const normalizePublicInput = (body: PublicMatchBody): NormalizedMatchInpu
     fieldKeywords: fk,
     levelKeywords: lk,
     wantedBand,
+    countryPatterns,
     programFocusWords: programFocusWords(field),
     querySummary: `Level: ${level} (${wantedBand}). Field: ${field}. Country: ${country}.${budget ? ` Budget up to USD ${budget}.` : ''}${body.intake ? ` Intake: ${body.intake}.` : ''}${score != null ? ` Academic score: ${score}.` : ''} Only suggest programs at the ${wantedBand} academic level.`,
   };
@@ -169,6 +236,7 @@ export const normalizeAgentInput = (body: AgentMatchBody): NormalizedMatchInput 
   const words = programFocusWords(field);
   // Infer band from free-text focus when agent mentions MBA / masters / bachelor etc.
   const wantedBand = wantedBandFromLevel(field);
+  const countryPatterns = countrySearchPatterns(country);
 
   return {
     audience: 'agent',
@@ -181,6 +249,7 @@ export const normalizeAgentInput = (body: AgentMatchBody): NormalizedMatchInput 
     fieldKeywords: fieldKeywords(field),
     levelKeywords: wantedBand === 'any' ? [] : levelKeywords(wantedBand),
     wantedBand,
+    countryPatterns,
     programFocusWords: words,
     querySummary: `Find partner university programs in ${country} matching: "${field}".${wantedBand !== 'any' ? ` Prefer ${wantedBand} level programs.` : ''} Include admin catalog courses, fee ranges, and high-quality scraped programs. Prioritize semantic fit to the program focus.`,
   };

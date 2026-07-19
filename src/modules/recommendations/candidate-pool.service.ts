@@ -24,9 +24,19 @@ const undergradNameInclude = [
   { courseName: { [Op.iLike]: '%bsc%' } },
   { courseName: { [Op.iLike]: '%b.eng%' } },
   { courseName: { [Op.iLike]: '%beng%' } },
+  { courseName: { [Op.iLike]: 'BA %' } },
+  { courseName: { [Op.iLike]: 'BA(%' } },
+  { courseName: { [Op.iLike]: 'BSc %' } },
+  { courseName: { [Op.iLike]: 'BEng %' } },
+  { courseName: { [Op.iLike]: 'BBA %' } },
   { studyLevel: { [Op.iLike]: '%bachelor%' } },
   { studyLevel: { [Op.iLike]: '%undergrad%' } },
 ];
+
+const countryWhereClause = (patterns: string[]) => {
+  const list = patterns.length ? patterns : ['%'];
+  return { [Op.or]: list.map(p => ({ country: { [Op.iLike]: p } })) };
+};
 
 const postgradNameInclude = [
   { courseName: { [Op.iLike]: '%master%' } },
@@ -147,11 +157,13 @@ const passesLevel = (
 
 export const buildCandidatePool = async (input: NormalizedMatchInput): Promise<RecommendationCandidate[]> => {
   const poolLimit = input.audience === 'agent' ? AGENT_POOL_LIMIT : PUBLIC_POOL_LIMIT;
-  const countryPattern = `%${input.country}%`;
+  const countryPatterns =
+    input.countryPatterns?.length > 0 ? input.countryPatterns : [`%${input.country}%`];
+  const countryFilter = countryWhereClause(countryPatterns);
   const commissionMap = await fetchLatestCommissionByUniversity();
 
   const activeUniversities = await db.University.findAll({
-    where: { status: true, country: { [Op.iLike]: countryPattern } },
+    where: { status: true, ...countryFilter },
     attributes: ['id', 'name', 'country', 'programFeeRanges'],
     limit: poolLimit,
   });
@@ -198,7 +210,7 @@ export const buildCandidatePool = async (input: NormalizedMatchInput): Promise<R
     recordStatus: 'cleaned',
     cleaningStatus: 'high_quality',
     isDuplicate: false,
-    country: { [Op.iLike]: countryPattern },
+    ...countryFilter,
   };
   const scrapeAnd: unknown[] = [scrapeBase];
   if (scrapeLevel) scrapeAnd.push(scrapeLevel);
@@ -213,7 +225,7 @@ export const buildCandidatePool = async (input: NormalizedMatchInput): Promise<R
           model: db.University,
           as: 'university',
           required: true,
-          where: { status: true, country: { [Op.iLike]: countryPattern } },
+          where: { status: true, ...countryFilter },
           attributes: ['id', 'name', 'country'],
         },
       ],

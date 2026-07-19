@@ -40,6 +40,8 @@ export type NormalizedMatchInput = {
   levelKeywords: string[];
   /** Strict academic band for UG/PG filtering (never drop for public matches) */
   wantedBand: AcademicBand;
+  /** ILIKE patterns for country matching (aliases like UK → United Kingdom) */
+  countryPatterns: string[];
   /** Lowercase words from program focus / field (length >= 2) for soft text scoring */
   programFocusWords: string[];
   querySummary: string;

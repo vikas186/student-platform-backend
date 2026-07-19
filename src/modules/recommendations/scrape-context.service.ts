@@ -59,10 +59,6 @@ export type ScrapeContextBundle = {
   fees: ScrapeFeePlain[];
 };
 
-const countryWhere = (countryPattern: string) => ({
-  [Op.or]: [{ country: { [Op.iLike]: countryPattern } }, { country: null }],
-});
-
 const countryLooseMatch = (a: string, b: string): boolean => {
   const x = a.toLowerCase().trim();
   const y = b.toLowerCase().trim();
@@ -72,13 +68,17 @@ const countryLooseMatch = (a: string, b: string): boolean => {
 
 /** Load high-quality scrape universities, scholarships, and fees for a match country. */
 export const loadScrapeContext = async (input: NormalizedMatchInput): Promise<ScrapeContextBundle> => {
-  const countryPattern = `%${input.country}%`;
+  const patterns =
+    input.countryPatterns?.length > 0 ? input.countryPatterns : [`%${input.country}%`];
+  const countryFilter = {
+    [Op.or]: patterns.map(p => ({ country: { [Op.iLike]: p } })),
+  };
 
   const [universities, scholarships, fees] = await Promise.all([
     db.ScrapeUniversity.findAll({
       where: {
         ...SCRAPE_CLEANED,
-        country: { [Op.iLike]: countryPattern },
+        ...countryFilter,
       },
       limit: 200,
       order: [['qualityScore', 'DESC']],
@@ -86,7 +86,7 @@ export const loadScrapeContext = async (input: NormalizedMatchInput): Promise<Sc
     db.ScrapeScholarship.findAll({
       where: {
         ...SCRAPE_CLEANED,
-        ...countryWhere(countryPattern),
+        [Op.or]: [...patterns.map(p => ({ country: { [Op.iLike]: p } })), { country: null }],
       },
       limit: 200,
       order: [['qualityScore', 'DESC']],
@@ -94,7 +94,7 @@ export const loadScrapeContext = async (input: NormalizedMatchInput): Promise<Sc
     db.ScrapeFee.findAll({
       where: {
         ...SCRAPE_CLEANED,
-        country: { [Op.iLike]: countryPattern },
+        ...countryFilter,
       },
       limit: 100,
       order: [['qualityScore', 'DESC']],
