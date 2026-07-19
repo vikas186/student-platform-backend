@@ -214,10 +214,17 @@ export const listUniversitiesForAdmin = async (query?: {
   search?: string;
   page?: string | number;
   limit?: string | number;
+  lite?: string | boolean;
 }) => {
   const page = Math.max(1, Number(query?.page) || 1);
   const limit = Math.min(200, Math.max(1, Number(query?.limit) || 100));
   const offset = (page - 1) * limit;
+  const liteRaw = query?.lite;
+  const lite =
+    liteRaw === true ||
+    liteRaw === 1 ||
+    liteRaw === '1' ||
+    String(liteRaw ?? '').toLowerCase() === 'true';
 
   const q = query?.search && String(query.search).trim() ? `%${String(query.search).trim()}%` : null;
   const where = q
@@ -232,6 +239,11 @@ export const listUniversitiesForAdmin = async (query?: {
     limit,
     offset,
   });
+
+  if (lite) {
+    const universities = rows.map(uni => uni.get({ plain: true }));
+    return { universities, page, limit, total: count };
+  }
 
   const universities = await Promise.all(
     rows.map(async uni => {

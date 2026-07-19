@@ -205,6 +205,9 @@ const listUniversitiesQueryJoiSchema = {
     limit: Joi.alternatives()
       .try(Joi.number().integer().min(1).max(200), Joi.string().pattern(/^\d+$/))
       .optional(),
+    lite: Joi.alternatives()
+      .try(Joi.boolean(), Joi.string().valid('1', 'true', '0', 'false'))
+      .optional(),
   }),
 };
 
