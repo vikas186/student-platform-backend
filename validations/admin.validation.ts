@@ -197,18 +197,20 @@ const listCoursesQueryJoiSchema = {
 
 /** Admin Universities grid — search by name/country + pagination; metrics included in response. */
 const listUniversitiesQueryJoiSchema = {
-  query: Joi.object().keys({
-    search: Joi.string().trim().max(300).optional().allow(''),
-    page: Joi.alternatives()
-      .try(Joi.number().integer().min(1), Joi.string().pattern(/^\d+$/))
-      .optional(),
-    limit: Joi.alternatives()
-      .try(Joi.number().integer().min(1).max(200), Joi.string().pattern(/^\d+$/))
-      .optional(),
-    lite: Joi.alternatives()
-      .try(Joi.boolean(), Joi.string().valid('1', 'true', '0', 'false'))
-      .optional(),
-  }),
+  query: Joi.object()
+    .keys({
+      search: Joi.string().trim().max(300).optional().allow(''),
+      page: Joi.alternatives()
+        .try(Joi.number().integer().min(1), Joi.string().pattern(/^\d+$/))
+        .optional(),
+      limit: Joi.alternatives()
+        .try(Joi.number().integer().min(1).max(200), Joi.string().pattern(/^\d+$/))
+        .optional(),
+      lite: Joi.alternatives()
+        .try(Joi.boolean(), Joi.string().valid('1', 'true', '0', 'false'))
+        .optional(),
+    })
+    .unknown(true),
 };
 
 const universityCoursesImportParamsJoiSchema = {
