@@ -1,3 +1,8 @@
+import {
+  alignFeeRangeCurrency,
+  currencyCodeForCountry,
+} from './universityCatalogImport';
+
 export const FEE_RANGE_PROGRAMS: Record<
   string,
   { courseName: string; degree: string; duration: string }
@@ -46,6 +51,9 @@ export type ProgramAdmissionRequirements = {
   workExperienceYears?: number | null;
   workExperienceRequired?: boolean | null;
   workExperienceNotes?: string | null;
+  /** Display band for ranges like "NZD 38,310 – 45,000/year" (from sheet imports). */
+  feeRange?: string | null;
+  feeNote?: string | null;
   /** Optional scrape / CSV import extras stored on Course.admissionRequirements. */
   intake?: string | null;
   applicationFee?: string | null;
@@ -102,8 +110,8 @@ export const namesMatch = (catalogName: string, scrapedName: string): boolean =>
   const hits = ta.filter(t => setB.has(t));
   if (!hits.length) return false;
 
-  // Short catalog names (e.g. "toronto") may match a longer scraped title.
-  if (ta.length === 1) return hits.length === 1;
+  // Short single-token names must be exact (not "auckland" ⊂ "auckland technology"/AUT).
+  if (ta.length === 1) return tb.length === 1 && hits.length === 1;
   // Long catalog vs short scrape core should not match on a single shared token.
   if (tb.length === 1 && ta.length > 1) return false;
   return hits.length >= 2;
@@ -126,10 +134,17 @@ export const parseFeeNumber = (value: unknown): number | null => {
   return match ? Number(match[0]) : null;
 };
 
-export const formatFeeBand = (fee: number | null, feeRange?: string | null): string => {
-  if (feeRange?.trim()) return feeRange.trim();
+export const formatFeeBand = (
+  fee: number | null,
+  feeRange?: string | null,
+  country?: string | null,
+): string => {
+  if (feeRange?.trim()) {
+    return alignFeeRangeCurrency(feeRange, country) || feeRange.trim();
+  }
   if (fee != null && Number.isFinite(fee)) {
-    return `$${Math.round(fee).toLocaleString('en-US')}/year`;
+    const code = currencyCodeForCountry(country);
+    return `${code} ${Math.round(fee).toLocaleString('en-US')}/year`;
   }
   return 'Contact for fee details';
 };
@@ -214,22 +229,32 @@ export const buildAdmissionRequirementsFromScrape = (course: {
   return hasAny ? req : null;
 };
 
-export const mapDbCourse = (course: {
-  id: number;
-  courseName: string;
-  degree: string;
-  fee: number;
-  duration: string;
-  admissionRequirements?: ProgramAdmissionRequirements | null;
-}): PublicProgram => ({
-  id: course.id,
-  courseName: course.courseName,
-  degree: course.degree,
-  fee: course.fee,
-  duration: course.duration,
-  source: 'course',
-  admissionRequirements: course.admissionRequirements ?? null,
-});
+export const mapDbCourse = (
+  course: {
+    id: number;
+    courseName: string;
+    degree: string;
+    fee: number;
+    duration: string;
+    admissionRequirements?: ProgramAdmissionRequirements | null;
+  },
+  country?: string | null,
+): PublicProgram => {
+  const rawRange = course.admissionRequirements?.feeRange?.trim() || null;
+  const feeRange = alignFeeRangeCurrency(rawRange, country) || rawRange;
+  return {
+    id: course.id,
+    courseName: course.courseName,
+    degree: course.degree,
+    fee: course.fee,
+    feeRange,
+    duration: course.duration,
+    source: 'course',
+    admissionRequirements: course.admissionRequirements
+      ? { ...course.admissionRequirements, feeRange: feeRange || course.admissionRequirements.feeRange }
+      : null,
+  };
+};
 
 export const mapScrapedCourse = (
   course: {
@@ -298,18 +323,141 @@ export const programsFromFeeRanges = (ranges: Record<string, unknown> | null): P
     }));
 };
 
+/** Priority when the same programme exists in catalog sheet + scrape (+ fee matrix). */
+const SOURCE_PRIORITY: Record<PublicProgram['source'], number> = {
+  course: 3,
+  scrape: 2,
+  fee_range: 1,
+};
+
+export const normalizeProgramTitle = (name: string): string =>
+  name
+    .toLowerCase()
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+
+/** Collapse UG/PG wording so "UG" and "Undergraduate" dedupe together. */
+export const normalizeDegreeBand = (degree: string): string => {
+  const d = degree.toLowerCase().trim();
+  if (!d || d === '—' || d === 'program' || d === 'programme') return 'program';
+  if (/undergrad|bachelor|\bug\b|^ba\b|^b\.?a\.?\b|^bsc|^b\.?sc|^beng|^b\.?eng|^bba|^b\.?s\.?\b/.test(d)) {
+    return 'ug';
+  }
+  if (
+    /postgrad|master|\bpg\b|graduate|^mba|^msc|^m\.?sc|^meng|^m\.?eng|^m\.?s\.?\b|phd|doctoral|llm/.test(d)
+  ) {
+    return 'pg';
+  }
+  return normalizeProgramTitle(d);
+};
+
+/** Prefer band from programme title so mislabeled scrape studyLevel can't block dedupe. */
+export const inferBandFromTitle = (courseName: string): 'ug' | 'pg' | null => {
+  const n = courseName.toLowerCase();
+  if (/\b(master|masters|mba|m\.?sc|m\.?eng|m\.?s\.?\b|postgrad|phd|doctor|llm|graduate diploma)\b/.test(n)) {
+    return 'pg';
+  }
+  if (/\b(bachelor|bachelors|b\.?sc|b\.?a\b|b\.?eng|bba|undergrad|associate)\b/.test(n)) {
+    return 'ug';
+  }
+  return null;
+};
+
+/** Identity key across sources — must NOT include `source` or sheet+scrape duplicates both appear. */
+export const programDedupeKey = (program: Pick<PublicProgram, 'courseName' | 'degree'>): string => {
+  const title = normalizeProgramTitle(program.courseName);
+  const band = inferBandFromTitle(program.courseName) || normalizeDegreeBand(program.degree);
+  return `${title}::${band}`;
+};
+
+const admissionRichness = (req: ProgramAdmissionRequirements | null | undefined): number => {
+  if (!req) return 0;
+  let n = 0;
+  if (req.academicRequirement?.trim()) n += 2;
+  if (req.englishRequirement?.trim()) n += 2;
+  if (req.ielts != null) n += 1;
+  if (req.ieltsMinBand != null) n += 1;
+  if (req.toefl != null) n += 1;
+  if (req.pte != null) n += 1;
+  if (req.duolingo != null) n += 1;
+  if (req.academicMinPercent != null) n += 1;
+  if (req.applicationFee?.trim()) n += 1;
+  if (req.intake?.trim()) n += 1;
+  return n;
+};
+
+const mergeAdmissionRequirements = (
+  primary: ProgramAdmissionRequirements | null | undefined,
+  secondary: ProgramAdmissionRequirements | null | undefined,
+): ProgramAdmissionRequirements | null => {
+  if (!primary && !secondary) return null;
+  if (!primary) return secondary ?? null;
+  if (!secondary) return primary;
+  const pick = <T,>(a: T | null | undefined, b: T | null | undefined): T | null | undefined =>
+    a != null && a !== '' ? a : b;
+  return {
+    academicMinPercent: pick(primary.academicMinPercent, secondary.academicMinPercent) ?? null,
+    academicRequirement: pick(primary.academicRequirement, secondary.academicRequirement) ?? null,
+    ielts: pick(primary.ielts, secondary.ielts) ?? null,
+    ieltsMinBand: pick(primary.ieltsMinBand, secondary.ieltsMinBand) ?? null,
+    toefl: pick(primary.toefl, secondary.toefl) ?? null,
+    pte: pick(primary.pte, secondary.pte) ?? null,
+    duolingo: pick(primary.duolingo, secondary.duolingo) ?? null,
+    englishRequirement: pick(primary.englishRequirement, secondary.englishRequirement) ?? null,
+    workExperienceYears: pick(primary.workExperienceYears, secondary.workExperienceYears) ?? null,
+    workExperienceRequired: pick(primary.workExperienceRequired, secondary.workExperienceRequired) ?? null,
+    workExperienceNotes: pick(primary.workExperienceNotes, secondary.workExperienceNotes) ?? null,
+    intake: pick(primary.intake, secondary.intake) ?? null,
+    applicationFee: pick(primary.applicationFee, secondary.applicationFee) ?? null,
+    scholarship: pick(primary.scholarship, secondary.scholarship) ?? null,
+    courseUrl: pick(primary.courseUrl, secondary.courseUrl) ?? null,
+    feeRange: pick(primary.feeRange, secondary.feeRange) ?? null,
+    feeNote: pick(primary.feeNote, secondary.feeNote) ?? null,
+  };
+};
+
+/**
+ * Collapse duplicate programmes across catalog / scrape / fee_range.
+ * Sheet (`course`) always wins over scrape for the same title; missing fee/admission
+ * fields on the winner are filled from the loser so students still see requirements.
+ */
 export const dedupePrograms = (programs: PublicProgram[]): PublicProgram[] => {
-  const seen = new Set<string>();
-  const result: PublicProgram[] = [];
+  const byKey = new Map<string, PublicProgram>();
 
   for (const program of programs) {
-    const key = `${program.courseName}::${program.degree}::${program.source}`.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    result.push(program);
+    const key = programDedupeKey(program);
+    const existing = byKey.get(key);
+    if (!existing) {
+      byKey.set(key, program);
+      continue;
+    }
+
+    const incomingPri = SOURCE_PRIORITY[program.source];
+    const existingPri = SOURCE_PRIORITY[existing.source];
+    const preferIncoming =
+      incomingPri > existingPri ||
+      (incomingPri === existingPri &&
+        admissionRichness(program.admissionRequirements) > admissionRichness(existing.admissionRequirements));
+
+    const winner = preferIncoming ? program : existing;
+    const loser = preferIncoming ? existing : program;
+
+    byKey.set(key, {
+      ...winner,
+      fee: winner.fee ?? loser.fee,
+      feeRange: winner.feeRange?.trim() ? winner.feeRange : loser.feeRange ?? null,
+      duration:
+        winner.duration && winner.duration !== '—' ? winner.duration : loser.duration || winner.duration,
+      admissionRequirements: mergeAdmissionRequirements(
+        winner.admissionRequirements,
+        loser.admissionRequirements,
+      ),
+    });
   }
 
-  return result;
+  return Array.from(byKey.values());
 };
 
 export const buildProgramsForUniversity = (
@@ -340,6 +488,7 @@ export const buildProgramsForUniversity = (
     admissionRequirements?: string | null;
     acceptanceCriteria?: string | null;
   }> = [],
+  country?: string | null,
 ): PublicProgram[] => {
   const uniAdmissionFor = (scrapedUniName: string): string | null => {
     for (const u of scrapeUniversityAdmissions) {
@@ -352,7 +501,9 @@ export const buildProgramsForUniversity = (
     return null;
   };
 
-  const fromDb = dbCourses.map(mapDbCourse);
+  const fromDb = dbCourses.map(c => mapDbCourse(c, country));
+  // Scrape fills gaps only — same title as a sheet/catalog course is dropped in dedupePrograms
+  // (catalog `course` source wins; admission/fee gaps may be filled from scrape).
   const fromScrape = scrapedCourses
     .filter(row => namesMatch(catalogName, row.universityName))
     .map(row => mapScrapedCourse(row, uniAdmissionFor(row.universityName)));

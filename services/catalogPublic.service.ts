@@ -11,6 +11,7 @@ import {
   universityScrapeNeedles,
   type PublicProgram,
 } from '../utils/catalogProgram.util';
+import { alignFeeRangeCurrency } from '../utils/universityCatalogImport';
 
 export type { PublicProgram } from '../utils/catalogProgram.util';
 
@@ -49,6 +50,8 @@ const SCRAPED_PROGRAM_ATTRIBUTES = [
 export type PublicUniversitiesQuery = {
   search?: string;
   country?: string;
+  /** Comma-separated list, e.g. `United Kingdom,Australia,Canada`. */
+  countries?: string;
   page?: string | number;
   limit?: string | number;
 };
@@ -66,6 +69,45 @@ export const looksLikeProgramAsCountry = (value: string): boolean => {
   return false;
 };
 
+const parseCountriesQuery = (query: PublicUniversitiesQuery): string[] => {
+  const fromList = String(query.countries ?? '')
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean);
+  const single = query.country?.trim();
+  if (single) fromList.push(single);
+  return [...new Set(fromList)].slice(0, 40);
+};
+
+/** Distinct destination countries from active catalog universities (for apply forms). */
+export const listPublicCatalogCountries = async () => {
+  const rows = await db.University.findAll({
+    attributes: ['country'],
+    where: {
+      status: true,
+      country: { [Op.and]: [{ [Op.ne]: null }, { [Op.ne]: '' }] },
+    },
+    group: ['country'],
+    order: [['country', 'ASC']],
+    raw: true,
+  });
+
+  const countries = rows
+    .map(r => String((r as { country?: string }).country ?? '').trim())
+    .filter(c => c && !looksLikeProgramAsCountry(c));
+
+  const seen = new Set<string>();
+  const unique: string[] = [];
+  for (const c of countries) {
+    const key = c.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(c);
+  }
+
+  return { countries: unique };
+};
+
 export const listPublicUniversitiesWithPrograms = async (query: PublicUniversitiesQuery) => {
   const page = Math.max(1, Number(query.page) || 1);
   const limit = Math.min(100, Math.max(1, Number(query.limit) || 20));
@@ -74,8 +116,13 @@ export const listPublicUniversitiesWithPrograms = async (query: PublicUniversiti
   const where: Record<string, unknown> = { status: true };
   const andClauses: Record<string, unknown>[] = [];
 
-  if (query.country?.trim()) {
-    andClauses.push({ country: { [Op.iLike]: `%${query.country.trim()}%` } });
+  const countries = parseCountriesQuery(query);
+  if (countries.length === 1) {
+    andClauses.push({ country: { [Op.iLike]: countries[0] } });
+  } else if (countries.length > 1) {
+    andClauses.push({
+      [Op.or]: countries.map(c => ({ country: { [Op.iLike]: c } })),
+    });
   }
   if (query.search?.trim()) {
     const term = `%${query.search.trim()}%`;
@@ -291,7 +338,21 @@ export const listPublicUniversitiesWithPrograms = async (query: PublicUniversiti
       scrapedPlain,
       mergedFeeRanges,
       scrapeUniPlain,
+      bestCountry,
     );
+
+    const withCurrency = programs.map(p => {
+      if (p.source !== 'course') return p;
+      const aligned = alignFeeRangeCurrency(p.feeRange, bestCountry);
+      if (!aligned || aligned === p.feeRange) return p;
+      return {
+        ...p,
+        feeRange: aligned,
+        admissionRequirements: p.admissionRequirements
+          ? { ...p.admissionRequirements, feeRange: aligned }
+          : p.admissionRequirements,
+      };
+    });
 
     return {
       id: plain.id,
@@ -299,8 +360,8 @@ export const listPublicUniversitiesWithPrograms = async (query: PublicUniversiti
       country: bestCountry,
       status: plain.status,
       programFeeRanges: mergedFeeRanges,
-      programsCount: programs.length,
-      programs,
+      programsCount: withCurrency.length,
+      programs: withCurrency,
       createdAt: plain.createdAt,
       updatedAt: plain.updatedAt,
     };
@@ -328,43 +389,69 @@ type PublicUniversityRow = {
   updatedAt: Date;
 };
 
+const catalogProgramCount = (uni: PublicUniversityRow): number =>
+  (uni.programs ?? []).filter(p => p.source === 'course').length;
+
+const pickBetterCountry = (a: string, b: string): string => {
+  const aOk = !looksLikeProgramAsCountry(a || '') && (a || '').trim();
+  const bOk = !looksLikeProgramAsCountry(b || '') && (b || '').trim();
+  if (aOk && !bOk) return a;
+  if (bOk && !aOk) return b;
+  // Prefer a real destination over the catalog-import default "United Kingdom".
+  const aDefault = /^united kingdom$/i.test((a || '').trim());
+  const bDefault = /^united kingdom$/i.test((b || '').trim());
+  if (aOk && bOk && aDefault && !bDefault) return b;
+  if (aOk && bOk && bDefault && !aDefault) return a;
+  return aOk ? a : bOk ? b : a || b;
+};
+
+const findFuzzyUniversityIndex = (rows: PublicUniversityRow[], name: string): number => {
+  const exact = universityNameKey(name);
+  for (let i = 0; i < rows.length; i++) {
+    if (universityNameKey(rows[i].name) === exact) return i;
+    if (namesMatch(rows[i].name, name)) return i;
+  }
+  return -1;
+};
+
+/**
+ * One row per institution. Exact name + fuzzy name match (sheet vs scrape aliases).
+ * Prefer the row with more catalog (`course`) programmes; merge programmes with sheet-first dedupe.
+ */
 const dedupeUniversitiesByNameCountry = (rows: PublicUniversityRow[]): PublicUniversityRow[] => {
-  const byKey = new Map<string, PublicUniversityRow>();
+  const merged: PublicUniversityRow[] = [];
 
   for (const uni of rows) {
-    const key = universityNameKey(uni.name);
-    const existing = byKey.get(key);
-    if (!existing) {
-      byKey.set(key, uni);
+    const idx = findFuzzyUniversityIndex(merged, uni.name);
+    if (idx < 0) {
+      merged.push(uni);
       continue;
     }
 
+    const existing = merged[idx];
     const mergedPrograms = dedupePrograms([...existing.programs, ...uni.programs]);
+    const existingCatalog = catalogProgramCount(existing);
+    const incomingCatalog = catalogProgramCount(uni);
     const preferIncoming =
-      (uni.programsCount ?? 0) > (existing.programsCount ?? 0) ||
-      (uni.programsCount === existing.programsCount && uni.id > existing.id);
+      incomingCatalog > existingCatalog ||
+      (incomingCatalog === existingCatalog && (uni.programsCount ?? 0) > (existing.programsCount ?? 0)) ||
+      (incomingCatalog === existingCatalog &&
+        uni.programsCount === existing.programsCount &&
+        uni.id > existing.id);
 
     const winner = preferIncoming ? uni : existing;
     const loser = preferIncoming ? existing : uni;
-    const country =
-      !looksLikeProgramAsCountry(winner.country || '') && (winner.country || '').trim()
-        ? winner.country
-        : !looksLikeProgramAsCountry(loser.country || '') && (loser.country || '').trim()
-          ? loser.country
-          : winner.country;
 
-    byKey.set(key, {
+    merged[idx] = {
       ...winner,
-      country,
+      country: pickBetterCountry(winner.country, loser.country),
       programs: mergedPrograms,
       programsCount: mergedPrograms.length,
-      programFeeRanges: winner.programFeeRanges ?? existing.programFeeRanges ?? uni.programFeeRanges,
-    });
+      programFeeRanges: winner.programFeeRanges ?? loser.programFeeRanges ?? null,
+    };
   }
 
-  return Array.from(byKey.values()).sort((a, b) =>
-    a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
-  );
+  return merged.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
 };
 
 // Re-export for tests / other modules

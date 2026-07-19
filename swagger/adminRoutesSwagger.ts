@@ -369,8 +369,11 @@
  *     summary: Import courses for one university (CSV)
  *     description: |
  *       For **course rows** linked to a **selected** `universityId` only. For a **full fee matrix** (one row per university, no pre-selected school), use **`POST /admin/universities/import-catalog`** instead.
- *       Multipart field **file** (`.csv`, max 10 MB). Header row must map to **course name**, **degree**, **fee**, **duration**
- *       (flexible column names e.g. courseName, program, tuition). Upserts **Course** by `universityId` + course name.
+ *       Multipart field **file** (`.csv`, max 10 MB). **Required** headers: university name + course/program name.
+ *       Each row must include `universityName` matching an existing catalog university (no dropdown fallback).
+ *       Optional scrape-style columns: country, studyLevel/degree, tuitionFee/fee, duration, intake, ieltsRequirement,
+ *       academicRequirement, applicationFee, scholarship, courseUrl.
+ *       Upserts **Course** by resolved `universityId` + course name; IELTS/academic/intake/etc. saved on `admissionRequirements`.
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - in: path

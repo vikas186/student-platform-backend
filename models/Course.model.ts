@@ -29,10 +29,10 @@ export default (sequelize: Sequelize) => {
         references: { model: 'universities', key: 'id' },
         onDelete: 'CASCADE',
       },
-      courseName: { type: DataTypes.STRING, allowNull: false },
-      degree: { type: DataTypes.STRING, allowNull: false },
+      courseName: { type: DataTypes.TEXT, allowNull: false },
+      degree: { type: DataTypes.STRING(255), allowNull: false },
       fee: { type: DataTypes.FLOAT, allowNull: false },
-      duration: { type: DataTypes.STRING, allowNull: false },
+      duration: { type: DataTypes.STRING(255), allowNull: false },
       admissionRequirements: {
         type: DataTypes.JSONB,
         allowNull: true,

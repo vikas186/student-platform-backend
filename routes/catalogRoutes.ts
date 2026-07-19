@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
   listCourses,
+  listPublicCatalogCountriesHandler,
   listPublicUniversitiesWithProgramsHandler,
   listUniversities,
 } from '../controller/catalogController';
@@ -10,6 +11,8 @@ import validateMiddleware from '../middleware/validate';
 import { publicUniversitiesQueryJoiSchema } from '../validations/catalog.validation';
 
 const catalogRouter = Router();
+
+catalogRouter.get('/public/countries', listPublicCatalogCountriesHandler);
 
 catalogRouter.get(
   '/public/universities-with-programs',

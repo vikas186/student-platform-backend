@@ -18,12 +18,33 @@ import { parseSimpleCsvLines } from '../utils/spreadsheetParse';
 import { findMasterUniversityDuplicate } from '../src/modules/scrape/utils/similarity.util';
 import { looksLikeProgramAsCountry } from './catalogPublic.service';
 import {
+  catalogImportAiEnabled,
+  normalizeFeeMatrixImportRows,
+  normalizeProgrammeImportRows,
+  type RawProgrammeNormInput,
+} from '../utils/catalogImportAiNormalize';
+import {
   buildColumnIndexMap,
+  buildProgrammeColumnIndex,
+  currencyCodeForCountry,
+  currencyFromFeeHeader,
+  extractAdmissionsByUniversity,
   findCatalogHeaderRowIndex,
+  findProgrammeHeaderRowIndex,
+  inferCountryFromCatalogContext,
+  looksLikeNonProgrammeRow,
+  normalizeDegreeLabel,
+  parseCommissionValue,
+  parseFeeRangeText,
+  readCatalogSpreadsheetSheets,
   readCatalogSpreadsheetToMatrix,
   rowToFeeRanges,
-  parseCommissionValue,
 } from '../utils/universityCatalogImport';
+import {
+  buildAdmissionRequirementsFromScrape,
+  parseFeeNumber,
+  type ProgramAdmissionRequirements,
+} from '../utils/catalogProgram.util';
 import { syncKnowledgeBase } from '../src/modules/chat/knowledge-sync.service';
 
 const applicationWhereByIdOrRef = (idOrRef: string) => {
@@ -241,28 +262,168 @@ export const listUniversitiesForAdmin = async (query?: {
   return { universities, page, limit, total: count };
 };
 
-const mapCsvHeaderToCourseField = (
-  h: string,
-): 'courseName' | 'degree' | 'fee' | 'duration' | null => {
-  const k = h.trim().toLowerCase().replace(/\s+/g, '_');
-  if (['course_name', 'coursename', 'program', 'course', 'program_name'].includes(k)) {
+type CourseCsvField =
+  | 'courseName'
+  | 'degree'
+  | 'fee'
+  | 'duration'
+  | 'intake'
+  | 'ieltsRequirement'
+  | 'academicRequirement'
+  | 'applicationFee'
+  | 'scholarship'
+  | 'courseUrl'
+  | 'country'
+  | 'city'
+  | 'universityName';
+
+const mapCsvHeaderToCourseField = (h: string): CourseCsvField | null => {
+  const k = h
+    .trim()
+    .toLowerCase()
+    .replace(/[\u2013\u2014]/g, '-')
+    .replace(/\s+/g, '_')
+    .replace(/[^a-z0-9_]/g, '');
+
+  if (
+    [
+      'course_name',
+      'coursename',
+      'program',
+      'programme',
+      'course',
+      'program_name',
+      'programname',
+      'programme_name',
+      'programmename',
+      'title',
+    ].includes(k) ||
+    k.includes('programme_name') ||
+    k.includes('program_name')
+  ) {
     return 'courseName';
   }
-  if (k === 'degree' || k === 'qualification') {
+  if (
+    k === 'degree' ||
+    k === 'qualification' ||
+    k === 'study_level' ||
+    k === 'studylevel' ||
+    k === 'level'
+  ) {
     return 'degree';
   }
-  if (k === 'fee' || k === 'tuition') {
+  if (
+    k === 'fee' ||
+    k === 'tuition' ||
+    k === 'tuition_fee' ||
+    k === 'tuitionfee' ||
+    k === 'fees' ||
+    k.includes('tuition') ||
+    (k.includes('fee') && !k.includes('application') && !k.includes('basis'))
+  ) {
     return 'fee';
   }
-  if (k === 'duration' || k === 'length') {
+  if (k === 'duration' || k === 'length' || k === 'course_duration') {
     return 'duration';
+  }
+  if (k === 'intake' || k === 'intakes' || k === 'start_date' || k === 'startdate') {
+    return 'intake';
+  }
+  if (
+    k === 'ielts' ||
+    k === 'ielts_requirement' ||
+    k === 'ieltsrequirement' ||
+    k === 'english' ||
+    k === 'english_requirement' ||
+    k === 'englishrequirement'
+  ) {
+    return 'ieltsRequirement';
+  }
+  if (
+    k === 'academic' ||
+    k === 'academic_requirement' ||
+    k === 'academicrequirement' ||
+    k === 'entry_requirement' ||
+    k === 'entryrequirement'
+  ) {
+    return 'academicRequirement';
+  }
+  if (
+    k === 'application_fee' ||
+    k === 'applicationfee' ||
+    k === 'app_fee' ||
+    k === 'appfee'
+  ) {
+    return 'applicationFee';
+  }
+  if (k === 'scholarship' || k === 'scholarships') {
+    return 'scholarship';
+  }
+  if (
+    k === 'course_url' ||
+    k === 'courseurl' ||
+    k === 'url' ||
+    k === 'program_url' ||
+    k === 'programurl' ||
+    k === 'link'
+  ) {
+    return 'courseUrl';
+  }
+  if (k === 'country' || k === 'nation') {
+    return 'country';
+  }
+  if (k === 'city' || k === 'location') {
+    return 'city';
+  }
+  if (
+    k === 'university' ||
+    k === 'university_name' ||
+    k === 'universityname' ||
+    k === 'institution' ||
+    k === 'institution_name'
+  ) {
+    return 'universityName';
   }
   return null;
 };
 
+const cellAt = (row: string[], idx: number | undefined): string => {
+  if (idx === undefined) return '';
+  return String(row[idx] ?? '').trim();
+};
+
+const buildCourseAdmissionFromCsv = (parts: {
+  ieltsRequirement: string;
+  academicRequirement: string;
+  intake: string;
+  applicationFee: string;
+  scholarship: string;
+  courseUrl: string;
+}): ProgramAdmissionRequirements | null => {
+  const base = buildAdmissionRequirementsFromScrape({
+    ieltsRequirement: parts.ieltsRequirement || null,
+    academicRequirement: parts.academicRequirement || null,
+  });
+  const extras: ProgramAdmissionRequirements = {
+    ...(base ?? {}),
+    intake: parts.intake || null,
+    applicationFee: parts.applicationFee || null,
+    scholarship: parts.scholarship || null,
+    courseUrl: parts.courseUrl || null,
+  };
+  const hasAny =
+    Boolean(base) ||
+    Boolean(extras.intake) ||
+    Boolean(extras.applicationFee) ||
+    Boolean(extras.scholarship) ||
+    Boolean(extras.courseUrl);
+  return hasAny ? extras : null;
+};
+
 /**
- * Bulk-import **courses** for a university from a CSV file (admin “Upload university data”).
- * Required columns: course name, degree, fee, duration (flexible header names).
+ * Bulk-import **courses** from a CSV file (admin Courses upload).
+ * Required per row: `universityName` + `courseName`. University must already exist in the catalog.
+ * Optional scrape-style columns: studyLevel, tuitionFee, intake, IELTS, academic requirements, etc.
  */
 export const importUniversityCoursesCsvForAdmin = async (
   universityId: number,
@@ -275,8 +436,9 @@ export const importUniversityCoursesCsvForAdmin = async (
   if (!Number.isFinite(uid) || uid < 1) {
     throw new AppError('Invalid universityId', 400);
   }
-  const uni = await db.University.findByPk(uid);
-  if (!uni) {
+  // Path universityId keeps the existing admin route/auth shape; rows resolve by universityName.
+  const defaultUni = await db.University.findByPk(uid);
+  if (!defaultUni) {
     throw new AppError('University not found', 404);
   }
 
@@ -287,21 +449,22 @@ export const importUniversityCoursesCsvForAdmin = async (
   }
 
   const headerRow = table[0];
-  const colIndex: Partial<Record<'courseName' | 'degree' | 'fee' | 'duration', number>> = {};
+  const colIndex: Partial<Record<CourseCsvField, number>> = {};
   headerRow.forEach((cell, idx) => {
     const f = mapCsvHeaderToCourseField(cell);
-    if (f) {
+    if (f && colIndex[f] === undefined) {
       colIndex[f] = idx;
     }
   });
-  if (
-    colIndex.courseName == null ||
-    colIndex.degree == null ||
-    colIndex.fee == null ||
-    colIndex.duration == null
-  ) {
+  if (colIndex.courseName == null) {
     throw new AppError(
-      'CSV headers must map to course name, degree, fee, and duration (e.g. courseName, degree, fee, duration)',
+      'CSV headers must include a course/program name column (e.g. courseName, program, course)',
+      400,
+    );
+  }
+  if (colIndex.universityName == null) {
+    throw new AppError(
+      'CSV headers must include a university name column (e.g. universityName, university, institution)',
       400,
     );
   }
@@ -309,34 +472,105 @@ export const importUniversityCoursesCsvForAdmin = async (
   let created = 0;
   let updated = 0;
   const rowErrors: { line: number; message: string }[] = [];
+  const uniCache = new Map<string, { id: number } | null>();
+
+  const resolveUniversityId = async (
+    universityName: string,
+    country: string,
+  ): Promise<number | null> => {
+    const name = universityName.trim();
+    if (!name) return null;
+    const cacheKey = `${name.toLowerCase()}::${country.trim().toLowerCase()}`;
+    if (uniCache.has(cacheKey)) {
+      const hit = uniCache.get(cacheKey);
+      return hit?.id ?? null;
+    }
+    const match = await findMasterUniversityDuplicate(name, country);
+    if (match?.id) {
+      uniCache.set(cacheKey, { id: Number(match.id) });
+      return Number(match.id);
+    }
+    uniCache.set(cacheKey, null);
+    return null;
+  };
 
   for (let r = 1; r < table.length; r++) {
     const row = table[r];
-    const courseName = row[colIndex.courseName!]?.trim();
-    const degree = row[colIndex.degree!]?.trim();
-    const feeRaw = row[colIndex.fee!]?.trim();
-    const duration = row[colIndex.duration!]?.trim();
-    if (!courseName && !degree && !feeRaw && !duration) {
+    const courseName = cellAt(row, colIndex.courseName);
+    const degreeRaw = cellAt(row, colIndex.degree);
+    const feeRaw = cellAt(row, colIndex.fee);
+    const durationRaw = cellAt(row, colIndex.duration);
+    const intake = cellAt(row, colIndex.intake);
+    const ieltsRequirement = cellAt(row, colIndex.ieltsRequirement);
+    const academicRequirement = cellAt(row, colIndex.academicRequirement);
+    const applicationFee = cellAt(row, colIndex.applicationFee);
+    const scholarship = cellAt(row, colIndex.scholarship);
+    const courseUrl = cellAt(row, colIndex.courseUrl);
+    const universityName = cellAt(row, colIndex.universityName);
+    const country = cellAt(row, colIndex.country);
+
+    const anyValue = [
+      courseName,
+      degreeRaw,
+      feeRaw,
+      durationRaw,
+      intake,
+      ieltsRequirement,
+      academicRequirement,
+      applicationFee,
+      scholarship,
+      courseUrl,
+      universityName,
+    ].some(Boolean);
+    if (!anyValue) {
       continue;
     }
-    if (!courseName || !degree || !duration) {
-      rowErrors.push({ line: r + 1, message: 'Missing course name, degree, or duration' });
+    if (!universityName) {
+      rowErrors.push({
+        line: r + 1,
+        message: 'Missing universityName — each program row must name an existing university',
+      });
       continue;
     }
-    const fee = parseFloat(String(feeRaw).replace(/[^0-9.-]/g, ''));
-    if (!Number.isFinite(fee)) {
-      rowErrors.push({ line: r + 1, message: 'Invalid fee' });
+    if (!courseName) {
+      rowErrors.push({ line: r + 1, message: 'Missing course name' });
       continue;
     }
 
+    const targetUniversityId = await resolveUniversityId(universityName, country);
+    if (targetUniversityId == null) {
+      rowErrors.push({
+        line: r + 1,
+        message: `University not found: "${universityName}". Create it first (Admin → Universities) or match the exact catalog name.`,
+      });
+      continue;
+    }
+
+    const degree = degreeRaw || 'Program';
+    const duration = durationRaw || '—';
+    const fee = parseFeeNumber(feeRaw) ?? 0;
+    if (feeRaw && fee === 0 && !/\d/.test(feeRaw)) {
+      rowErrors.push({ line: r + 1, message: `Could not parse fee "${feeRaw}"; stored as 0` });
+    }
+
+    const admissionRequirements = buildCourseAdmissionFromCsv({
+      ieltsRequirement,
+      academicRequirement,
+      intake,
+      applicationFee,
+      scholarship,
+      courseUrl,
+    });
+
     const [course, isCreated] = await db.Course.findOrCreate({
-      where: { universityId: uid, courseName },
+      where: { universityId: targetUniversityId, courseName },
       defaults: {
-        universityId: uid,
+        universityId: targetUniversityId,
         courseName,
         degree,
         fee,
         duration,
+        admissionRequirements,
       },
     });
 
@@ -346,6 +580,7 @@ export const importUniversityCoursesCsvForAdmin = async (
       course.degree = degree;
       course.fee = fee;
       course.duration = duration;
+      course.admissionRequirements = admissionRequirements;
       await course.save();
       updated += 1;
     }
@@ -370,8 +605,10 @@ export const importUniversityCoursesCsvForAdmin = async (
 };
 
 /**
- * Bulk catalog import: each row is its own university (name + country + fee columns).
- * No `universityId` — creates or updates institutions and stores **programFeeRanges** (Excel/CSV).
+ * Bulk catalog import:
+ * - Fee-matrix sheets (one row per university + UG/PG fee columns), OR
+ * - Programme sheets (NZ format: University | Level | Programme Name | Tuition fee | …)
+ *   which create/update universities and real Course rows (country inferred, e.g. New Zealand).
  */
 export const importUniversityCatalogFileForAdmin = async (file: Express.Multer.File) => {
   if (!file) {
@@ -390,6 +627,15 @@ export const importUniversityCatalogFileForAdmin = async (file: Express.Multer.F
     throw new AppError('File must include a header row and at least one data row', 400);
   }
 
+  const programmeHeaderIdx = findProgrammeHeaderRowIndex(matrix);
+  if (programmeHeaderIdx >= 0) {
+    const programmeCols = buildProgrammeColumnIndex(matrix[programmeHeaderIdx] ?? []);
+    // Programme Name present → treat as course-per-row workbook (not fee matrix).
+    if (programmeCols.courseName != null && programmeCols.university != null) {
+      return importProgrammeRowsCatalogForAdmin(file, matrix, programmeHeaderIdx);
+    }
+  }
+
   const headerIdx = findCatalogHeaderRowIndex(matrix);
   const headerRow = (matrix[headerIdx] ?? []).map(c => String(c));
   const colIndex = buildColumnIndexMap(headerRow);
@@ -402,7 +648,7 @@ export const importUniversityCatalogFileForAdmin = async (file: Express.Multer.F
 
   if (colIndex.university == null) {
     throw new AppError(
-      'Could not find University column. First sheet must include at least a University column.',
+      'Could not find University column. Use fee-matrix columns, or a programme sheet with University + Programme Name.',
       400,
     );
   }
@@ -410,6 +656,12 @@ export const importUniversityCatalogFileForAdmin = async (file: Express.Multer.F
   let created = 0;
   let updated = 0;
   const rowErrors: { line: number; message: string }[] = [];
+
+  type FeeMatrixWorkRow = {
+    line: number;
+    parsed: NonNullable<ReturnType<typeof rowToFeeRanges>>;
+  };
+  const workRows: FeeMatrixWorkRow[] = [];
 
   for (let r = headerIdx + 1; r < matrix.length; r++) {
     const row = matrix[r];
@@ -425,55 +677,88 @@ export const importUniversityCatalogFileForAdmin = async (file: Express.Multer.F
       rowErrors.push({ line: r + 1, message: 'Missing university name or country' });
       continue;
     }
+    workRows.push({ line: r + 1, parsed });
+  }
 
-    let parsedName = parsed.name.trim();
-    let countryRaw = parsed.country.trim();
-    if (looksLikeProgramAsCountry(countryRaw)) {
-      // Bad spreadsheet mapping: program title was put in the country column.
-      countryRaw = '';
-    }
-    let uni = await findMasterUniversityDuplicate(parsedName, countryRaw || 'General');
+  const inferredCountry = inferCountryFromCatalogContext(
+    matrix,
+    file.originalname || file.path || '',
+  );
+  const { rows: normUnis, aiUsed: feeMatrixAi } = await normalizeFeeMatrixImportRows(
+    workRows.map(w => ({
+      line: w.line,
+      universityName: w.parsed.name,
+      country: looksLikeProgramAsCountry(w.parsed.country) ? '' : w.parsed.country,
+    })),
+    { fileName: file.originalname, inferredCountry },
+  );
+  (debugInfo as any).aiUsed = feeMatrixAi;
+  (debugInfo as any).inferredCountry = inferredCountry;
 
-    if (!uni) {
-      uni = await db.University.create({
-        name: parsedName,
-        country: (countryRaw || 'General').slice(0, 200),
-        status: true,
-        programFeeRanges: parsed.ranges,
-      });
-      created += 1;
-    } else {
-      const patch: Record<string, unknown> = { programFeeRanges: parsed.ranges };
-      if (countryRaw && looksLikeProgramAsCountry(String(uni.country || ''))) {
-        patch.country = countryRaw.slice(0, 200);
-      }
-      await uni.update(patch);
-      updated += 1;
-    }
+  const normByLine = new Map(normUnis.map(n => [n.line, n]));
 
-    if (parsed.commission || Object.keys(parsed.rates).length > 0) {
-      const pct = parseCommissionValue(parsed.commission) ?? 0;
-      const commission = await db.Commission.findOne({
-        where: { universityId: uni.id },
-      });
-      const slabDetails = JSON.stringify({
-        partnerCommissionPercent: pct,
-        rates: parsed.rates,
-        source: 'catalog-import',
-        rawFormat: parsed.commission ? parsed.commission.trim() : '',
-      });
-      if (commission) {
-        await commission.update({
-          percentage: pct,
-          slabDetails,
+  for (const work of workRows) {
+    try {
+      const norm = normByLine.get(work.line);
+      if (!norm || norm.skip) {
+        rowErrors.push({
+          line: work.line,
+          message: norm?.skipReason || 'Skipped university row',
         });
+        continue;
+      }
+
+      const parsedName = norm.universityName.trim();
+      let countryRaw = norm.country.trim();
+      if (looksLikeProgramAsCountry(countryRaw)) {
+        countryRaw = '';
+      }
+      let uni = await findMasterUniversityDuplicate(parsedName, countryRaw || 'General');
+
+      if (!uni) {
+        uni = await db.University.create({
+          name: parsedName,
+          country: (countryRaw || 'General').slice(0, 200),
+          status: true,
+          programFeeRanges: work.parsed.ranges,
+        });
+        created += 1;
       } else {
-        await db.Commission.create({
-          universityId: uni.id,
-          percentage: pct,
-          slabDetails,
-        });
+        const patch: Record<string, unknown> = { programFeeRanges: work.parsed.ranges };
+        if (countryRaw && (!uni.country || /^general$/i.test(String(uni.country)) || looksLikeProgramAsCountry(String(uni.country || '')))) {
+          patch.country = countryRaw.slice(0, 200);
+        }
+        await uni.update(patch);
+        updated += 1;
       }
+
+      if (work.parsed.commission || Object.keys(work.parsed.rates).length > 0) {
+        const pct = parseCommissionValue(work.parsed.commission) ?? 0;
+        const commission = await db.Commission.findOne({
+          where: { universityId: uni.id },
+        });
+        const slabDetails = JSON.stringify({
+          partnerCommissionPercent: pct,
+          rates: work.parsed.rates,
+          source: 'catalog-import',
+          rawFormat: work.parsed.commission ? work.parsed.commission.trim() : '',
+        });
+        if (commission) {
+          await commission.update({
+            percentage: pct,
+            slabDetails,
+          });
+        } else {
+          await db.Commission.create({
+            universityId: uni.id,
+            percentage: pct,
+            slabDetails,
+          });
+        }
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      rowErrors.push({ line: work.line, message: msg.slice(0, 300) });
     }
   }
 
@@ -497,10 +782,325 @@ export const importUniversityCatalogFileForAdmin = async (file: Express.Multer.F
     created,
     updated,
     rowErrors,
+    aiUsed: feeMatrixAi,
     message:
       rowErrors.length === 0
-        ? 'Catalog import completed'
-        : `Catalog import completed with ${rowErrors.length} row warning(s)`,
+        ? `Import completed${feeMatrixAi ? ' (AI-normalized)' : ''}`
+        : `Import completed with ${rowErrors.length} row warning(s)${feeMatrixAi ? ' (AI-normalized)' : ''}`,
+  };
+};
+
+const countriesClearlyDifferent = (a: string, b: string): boolean => {
+  const x = a.trim().toLowerCase();
+  const y = b.trim().toLowerCase();
+  if (!x || !y) return false;
+  if (x === y) return false;
+  if (x.includes(y) || y.includes(x)) return false;
+  const aliases: Record<string, string> = {
+    uk: 'united kingdom',
+    'u.k.': 'united kingdom',
+    'united kingdom': 'united kingdom',
+    britain: 'united kingdom',
+    nz: 'new zealand',
+    'new zealand': 'new zealand',
+    usa: 'united states',
+    us: 'united states',
+    'u.s.': 'united states',
+    'u.s.a.': 'united states',
+    'united states': 'united states',
+    'united states of america': 'united states',
+  };
+  const nx = aliases[x] ?? x;
+  const ny = aliases[y] ?? y;
+  return nx !== ny;
+};
+
+/**
+ * Resolve a catalog university for programme-row imports without merging
+ * "Lincoln University" (NZ) into "Lincoln University" (USA).
+ */
+const findOrCreateUniversityForProgrammeImport = async (
+  name: string,
+  country: string,
+): Promise<{ uni: Awaited<ReturnType<typeof db.University.create>>; created: boolean }> => {
+  const countryNorm = country.slice(0, 200);
+
+  const sameCountry = await db.University.findOne({
+    where: {
+      name: { [Op.iLike]: name },
+      country: { [Op.iLike]: countryNorm },
+    },
+    order: [['id', 'ASC']],
+  });
+  if (sameCountry) {
+    if (!sameCountry.status) await sameCountry.update({ status: true });
+    return { uni: sameCountry, created: false };
+  }
+
+  const byName = await db.University.findOne({
+    where: { name: { [Op.iLike]: name } },
+    order: [['id', 'ASC']],
+  });
+  if (byName) {
+    const existingCountry = String(byName.country || '').trim();
+    // Do NOT treat "United Kingdom" as a blank country — NZ/AU imports were overwriting UK rows.
+    const sameOrEmpty =
+      !existingCountry ||
+      /^general$/i.test(existingCountry) ||
+      !countriesClearlyDifferent(existingCountry, countryNorm);
+    if (sameOrEmpty) {
+      const patch: Record<string, unknown> = { status: true };
+      if (countryNorm && !/^general$/i.test(countryNorm)) {
+        if (!existingCountry || /^general$/i.test(existingCountry)) {
+          patch.country = countryNorm;
+        } else if (!countriesClearlyDifferent(existingCountry, countryNorm)) {
+          patch.country = countryNorm;
+        }
+      }
+      await byName.update(patch);
+      return { uni: byName, created: false };
+    }
+  }
+
+  const uni = await db.University.create({
+    name,
+    country: countryNorm,
+    status: true,
+    programFeeRanges: null,
+  });
+  return { uni, created: true };
+};
+
+/**
+ * NZ / programme workbook: one row per course.
+ * AI-normalizes university, country, currency, degree, and programme titles before save.
+ */
+const importProgrammeRowsCatalogForAdmin = async (
+  file: Express.Multer.File,
+  matrix: string[][],
+  headerIdx: number,
+) => {
+  const headerRow = (matrix[headerIdx] ?? []).map(c => String(c));
+  const colIndex = buildProgrammeColumnIndex(headerRow);
+  const inferredCountry = inferCountryFromCatalogContext(
+    matrix,
+    file.originalname || file.path || '',
+  );
+
+  let sheets: { name: string; rows: string[][] }[] = [];
+  try {
+    sheets = await readCatalogSpreadsheetSheets(file.path);
+  } catch {
+    sheets = [{ name: 'Sheet1', rows: matrix }];
+  }
+  const admissionsByUni = extractAdmissionsByUniversity(sheets);
+
+  const feeHeader =
+    colIndex.fee != null ? String(headerRow[colIndex.fee] ?? '') : '';
+  const headerCurrency = currencyFromFeeHeader(feeHeader);
+
+  const debugInfo: Record<string, unknown> = {
+    mode: 'programme-rows',
+    headerRow,
+    colIndex,
+    inferredCountry,
+    headerCurrency,
+    aiEnabled: catalogImportAiEnabled(),
+    firstRows: [] as any[],
+  };
+
+  let universitiesCreated = 0;
+  let universitiesUpdated = 0;
+  let coursesCreated = 0;
+  let coursesUpdated = 0;
+  let skippedNotes = 0;
+  const rowErrors: { line: number; message: string }[] = [];
+  const touchedUnis = new Set<number>();
+
+  const cell = (row: string[], key: keyof typeof colIndex): string => {
+    const i = colIndex[key];
+    if (i === undefined) return '';
+    return String(row[i] ?? '').trim();
+  };
+
+  const rawRows: RawProgrammeNormInput[] = [];
+
+  for (let r = headerIdx + 1; r < matrix.length; r++) {
+    const row = (matrix[r] ?? []).map(c => String(c ?? ''));
+    if (!row.some(c => c.trim())) continue;
+
+    const universityName = cell(row, 'university');
+    const courseName = cell(row, 'courseName');
+    const degreeRaw = cell(row, 'degree');
+    const feeRaw = cell(row, 'fee');
+    const feeNote = cell(row, 'feeNote');
+    const countryCell = cell(row, 'country');
+    const durationRaw = cell(row, 'duration');
+    const intake = cell(row, 'intake');
+    let ieltsRequirement = cell(row, 'ieltsRequirement');
+    let academicRequirement = cell(row, 'academicRequirement');
+    let applicationFee = cell(row, 'applicationFee');
+
+    if (r <= headerIdx + 5) {
+      (debugInfo.firstRows as any[]).push({
+        rowIndex: r,
+        universityName,
+        courseName: courseName.slice(0, 120),
+        degreeRaw,
+        feeRaw,
+        countryCell,
+      });
+    }
+
+    if (!universityName) {
+      rowErrors.push({ line: r + 1, message: 'Missing university name' });
+      continue;
+    }
+    if (!courseName) {
+      rowErrors.push({ line: r + 1, message: 'Missing programme / course name' });
+      continue;
+    }
+
+    const adm = admissionsByUni.get(universityName.toLowerCase());
+    if (adm) {
+      if (!ieltsRequirement) ieltsRequirement = adm.ieltsRequirement;
+      if (!academicRequirement) academicRequirement = adm.academicRequirement;
+      if (!applicationFee) applicationFee = adm.applicationFee;
+    }
+
+    rawRows.push({
+      line: r + 1,
+      universityName,
+      country: looksLikeProgramAsCountry(countryCell) ? '' : countryCell,
+      degree: degreeRaw,
+      courseName,
+      feeRaw,
+      feeNote,
+      duration: durationRaw,
+      intake,
+      ieltsRequirement,
+      academicRequirement,
+      applicationFee,
+    });
+  }
+
+  const {
+    rows: normalized,
+    aiUsed,
+    aiBatches,
+    aiFailures,
+  } = await normalizeProgrammeImportRows(rawRows, {
+    headerCurrency,
+    inferredCountry,
+    fileName: file.originalname,
+  });
+  debugInfo.aiUsed = aiUsed;
+  debugInfo.aiBatches = aiBatches;
+  debugInfo.aiFailures = aiFailures;
+
+  for (const norm of normalized) {
+    try {
+      if (norm.skip) {
+        skippedNotes += 1;
+        continue;
+      }
+
+      const { uni, created: uniCreated } = await findOrCreateUniversityForProgrammeImport(
+        norm.universityName.slice(0, 500),
+        norm.country || inferredCountry || 'General',
+      );
+      if (uniCreated) universitiesCreated += 1;
+      else if (!touchedUnis.has(Number(uni.id))) universitiesUpdated += 1;
+      touchedUnis.add(Number(uni.id));
+
+      const degree = norm.degree.slice(0, 255);
+      const duration = (norm.duration || '—').slice(0, 255);
+      const fee = norm.fee;
+      const feeRange = norm.feeRange;
+
+      const baseAdmission = buildCourseAdmissionFromCsv({
+        ieltsRequirement: norm.ieltsRequirement,
+        academicRequirement: norm.academicRequirement,
+        intake: norm.intake,
+        applicationFee: norm.applicationFee,
+        scholarship: '',
+        courseUrl: '',
+      });
+      const admissionRequirements: ProgramAdmissionRequirements | null = {
+        ...(baseAdmission ?? {}),
+        feeRange: feeRange || null,
+        feeNote: norm.feeNote || null,
+      };
+      const hasAdmission = Boolean(baseAdmission) || Boolean(feeRange) || Boolean(norm.feeNote);
+      const admissionPayload = hasAdmission ? admissionRequirements : null;
+
+      const [course, isCreated] = await db.Course.findOrCreate({
+        where: { universityId: uni.id, courseName: norm.courseName },
+        defaults: {
+          universityId: uni.id,
+          courseName: norm.courseName,
+          degree,
+          fee,
+          duration,
+          admissionRequirements: admissionPayload,
+        },
+      });
+
+      if (isCreated) {
+        coursesCreated += 1;
+      } else {
+        course.degree = degree;
+        course.fee = fee;
+        course.duration = duration;
+        course.admissionRequirements = admissionPayload;
+        await course.save();
+        coursesUpdated += 1;
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      rowErrors.push({ line: norm.line, message: msg.slice(0, 300) });
+    }
+  }
+
+  try {
+    fs.writeFileSync(
+      path.join(__dirname, '..', 'debug_import.json'),
+      JSON.stringify(debugInfo, null, 2),
+      'utf8',
+    );
+  } catch {
+    /* ignore */
+  }
+
+  try {
+    fs.unlinkSync(file.path);
+  } catch {
+    /* ignore */
+  }
+
+  const created = universitiesCreated + coursesCreated;
+  const updated = universitiesUpdated + coursesUpdated;
+  const countryLabel = inferredCountry || 'mixed/General';
+  const aiLabel = aiUsed
+    ? `AI-normalized (${aiBatches} batch${aiBatches === 1 ? '' : 'es'}${aiFailures ? `, ${aiFailures} fallback` : ''})`
+    : 'rules-normalized';
+
+  return {
+    created,
+    updated,
+    universitiesCreated,
+    universitiesUpdated,
+    coursesCreated,
+    coursesUpdated,
+    skippedNotes,
+    aiUsed,
+    aiBatches,
+    aiFailures,
+    rowErrors,
+    message:
+      rowErrors.length === 0
+        ? `Programme catalog import completed (${countryLabel}, ${aiLabel})`
+        : `Programme catalog import completed with ${rowErrors.length} row warning(s) (${aiLabel})`,
   };
 };
 
