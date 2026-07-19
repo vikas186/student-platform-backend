@@ -62,16 +62,46 @@ export type PublicProgram = {
 export const normalizeUniName = (value: string): string =>
   value
     .toLowerCase()
-    .replace(/\b(university|college|institute|of|the)\b/g, ' ')
+    .replace(/\([^)]*\)/g, ' ')
+    .split(',')[0]
+    .replace(/\b(university|college|institute|of|the|and|through)\b/g, ' ')
     .replace(/[^a-z0-9]+/g, '');
+
+const significantUniTokens = (value: string): string[] =>
+  value
+    .toLowerCase()
+    .replace(/\([^)]*\)/g, ' ')
+    .split(',')[0]
+    .replace(/\b(university|college|institute|of|the|and|through|only|ug|pg|campus)\b/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(t => t.length > 2);
 
 export const namesMatch = (catalogName: string, scrapedName: string): boolean => {
   const a = normalizeUniName(catalogName);
   const b = normalizeUniName(scrapedName);
   if (!a || !b) return false;
   if (a === b) return true;
-  if (a.length >= 8 && b.length >= 8 && (a.includes(b) || b.includes(a))) return true;
-  return catalogName.toLowerCase().trim() === scrapedName.toLowerCase().trim();
+  if (a.length >= 6 && b.length >= 6 && (a.includes(b) || b.includes(a))) return true;
+
+  const ta = significantUniTokens(catalogName);
+  const tb = significantUniTokens(scrapedName);
+  if (!ta.length || !tb.length) return false;
+  const setB = new Set(tb);
+  const hits = ta.filter(t => setB.has(t));
+  const ratio = hits.length / Math.min(ta.length, tb.length);
+  return hits.length >= 1 && ratio >= 0.5;
+};
+
+/** Short search needles used to preload scrape courses for a catalog university page. */
+export const universityScrapeNeedles = (catalogName: string): string[] => {
+  const core = catalogName.replace(/\([^)]*\)/g, ' ').split(',')[0].trim();
+  const words = significantUniTokens(catalogName);
+  const out = [core];
+  if (words[0]) out.push(words[0]);
+  if (words.length >= 2) out.push(`${words[0]} ${words[1]}`);
+  return [...new Set(out.map(s => s.trim()).filter(s => s.length >= 3))];
 };
 
 export const parseFeeNumber = (value: unknown): number | null => {

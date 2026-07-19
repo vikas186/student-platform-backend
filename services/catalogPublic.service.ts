@@ -8,6 +8,7 @@ import {
   namesMatch,
   parseFeeNumber,
   programsFromFeeRanges,
+  universityScrapeNeedles,
   type PublicProgram,
 } from '../utils/catalogProgram.util';
 
@@ -165,14 +166,17 @@ export const listPublicUniversitiesWithPrograms = async (query: PublicUniversiti
     cleaningStatus: { [Op.in]: ['high_quality', 'needs_review'] },
     isDuplicate: false,
   };
-  if (pageNames.length) {
-    (scrapedWhere as Record<symbol, unknown>)[Op.or] = pageNames.map(name => ({
-      universityName: { [Op.iLike]: name },
+  const scrapeNeedles = [
+    ...new Set(pageNames.flatMap(name => universityScrapeNeedles(name))),
+  ];
+  if (scrapeNeedles.length) {
+    (scrapedWhere as Record<symbol, unknown>)[Op.or] = scrapeNeedles.map(needle => ({
+      universityName: { [Op.iLike]: `%${needle}%` },
     }));
   }
 
   const scrapedRows =
-    pageNames.length > 0
+    scrapeNeedles.length > 0
       ? await db.ScrapedCourse.findAll({
           where: scrapedWhere,
           attributes: [...SCRAPED_PROGRAM_ATTRIBUTES],
@@ -180,6 +184,7 @@ export const listPublicUniversitiesWithPrograms = async (query: PublicUniversiti
             ['universityName', 'ASC'],
             ['courseName', 'ASC'],
           ],
+          limit: 3000,
         })
       : [];
 
