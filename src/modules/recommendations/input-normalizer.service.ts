@@ -116,50 +116,73 @@ const levelKeywords = (level: string): string[] => {
 
 /**
  * Infer academic band from course title + study level.
- * Course title wins when study_level is wrong (e.g. Masters stored as "Bachelors").
+ * Course title is checked first so mislabeled study_level (e.g. Masters stored as "Bachelors")
+ * cannot override clear title cues like "M.S." / "M.S.E.".
  */
 export const inferAcademicBand = (...parts: Array<string | null | undefined>): AcademicBand => {
-  const t = parts.filter(Boolean).join(' ').toLowerCase().replace(/\s+/g, ' ').trim();
-  if (!t) return 'unknown';
+  const inferFromText = (raw: string): AcademicBand => {
+    const t = raw.toLowerCase().replace(/\s+/g, ' ').trim();
+    if (!t) return 'unknown';
 
-  if (/\b(ph\.?\s?d|dphil|doctorate|doctoral)\b/.test(t)) return 'doctoral';
+    if (/\b(ph\.?\s?d|dphil|doctorate|doctoral)\b/.test(t)) return 'doctoral';
 
-  // Postgrad title cues first — catches Masters mislabeled as Bachelor in study_level
-  if (
-    /\bmaster of\b/.test(t) ||
-    /\bmasters?\b/.test(t) ||
-    /\bm\.?\s?sc\b/.test(t) ||
-    /\bm\.?\s?eng\b/.test(t) ||
-    /\bmeng\b/.test(t) ||
-    /\bmba\b/.test(t) ||
-    /\bmphil\b/.test(t) ||
-    /\bmacs\b/.test(t) ||
-    /\bpost-?\s*grad/.test(t) ||
-    /\bpostgraduate\b/.test(t) ||
-    /\bgraduate (certificate|diploma|program|programme)\b/.test(t) ||
-    /\bpg(dip|cert|de)\b/.test(t)
-  ) {
-    return 'postgrad';
-  }
+    // Postgrad title cues — include US-style M.S. / M.S.E. / MS abbreviations
+    if (
+      /\bmaster of\b/.test(t) ||
+      /\bmasters?\b/.test(t) ||
+      /\bm\.?\s?sc\b/.test(t) ||
+      /\bm\.?\s?eng\b/.test(t) ||
+      /\bm\.?\s?s\.?\s?e\b/.test(t) ||
+      /\bmse\b/.test(t) ||
+      /\bm\.?\s?s\b/.test(t) ||
+      /\bms\b/.test(t) ||
+      /\bmeng\b/.test(t) ||
+      /\bmba\b/.test(t) ||
+      /\bmphil\b/.test(t) ||
+      /\bm\.?\s?fin\b/.test(t) ||
+      /\bm\.?\s?c\.?\s?s\b/.test(t) ||
+      /\bm\.?\s?c\.?\s?i\.?\s?s\b/.test(t) ||
+      /\bllm\b/.test(t) ||
+      /\bmacs\b/.test(t) ||
+      /\bpost-?\s*grad/.test(t) ||
+      /\bpostgraduate\b/.test(t) ||
+      /\bgraduate (certificate|diploma|program|programme)\b/.test(t) ||
+      /\bpg(dip|cert|de)\b/.test(t)
+    ) {
+      return 'postgrad';
+    }
 
-  if (
-    /\bbachelor of\b/.test(t) ||
-    /\bbachelors?\b/.test(t) ||
-    /\bb\.?\s?sc\b/.test(t) ||
-    /\bb\.?\s?eng\b/.test(t) ||
-    /\bbeng\b/.test(t) ||
-    /\bbba\b/.test(t) ||
-    /\bba\b/.test(t) ||
-    /\bbnurs\b/.test(t) ||
-    /\bundergraduate\b/.test(t) ||
-    /\bundergrad\b/.test(t)
-  ) {
-    return 'undergrad';
-  }
+    if (
+      /\bbachelor of\b/.test(t) ||
+      /\bbachelors?\b/.test(t) ||
+      /\bb\.?\s?sc\b/.test(t) ||
+      /\bb\.?\s?eng\b/.test(t) ||
+      /\bb\.?\s?s\b/.test(t) ||
+      /\bbs\b/.test(t) ||
+      /\bbeng\b/.test(t) ||
+      /\bbba\b/.test(t) ||
+      /\bba\b/.test(t) ||
+      /\bbnurs\b/.test(t) ||
+      /\bundergraduate\b/.test(t) ||
+      /\bundergrad\b/.test(t)
+    ) {
+      return 'undergrad';
+    }
 
-  if (/\b(diploma|certificate|foundation|associate|pathway|hnd|hnc)\b/.test(t)) return 'diploma';
+    if (/\b(diploma|certificate|foundation|associate|pathway|hnd|hnc)\b/.test(t)) return 'diploma';
 
-  return 'unknown';
+    return 'unknown';
+  };
+
+  const title = (parts[0] || '').toString();
+  const fromTitle = inferFromText(title);
+  if (fromTitle !== 'unknown') return fromTitle;
+
+  const rest = parts
+    .slice(1)
+    .filter(Boolean)
+    .join(' ');
+  return inferFromText(rest);
 };
 
 /** Strict level check using course name + degree/studyLevel (title preferred). */

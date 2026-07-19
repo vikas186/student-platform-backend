@@ -28,6 +28,9 @@ const undergradNameInclude = [
   { courseName: { [Op.iLike]: 'BSc %' } },
   { courseName: { [Op.iLike]: 'BEng %' } },
   { courseName: { [Op.iLike]: 'BBA %' } },
+  { courseName: { [Op.iLike]: 'B.S.%' } },
+  { courseName: { [Op.iLike]: 'B.S %' } },
+  { courseName: { [Op.iLike]: 'BS %' } },
   { studyLevel: { [Op.iLike]: '%bachelor%' } },
   { studyLevel: { [Op.iLike]: '%undergrad%' } },
 ];
@@ -45,6 +48,12 @@ const postgradNameInclude = [
   { courseName: { [Op.iLike]: '%msc%' } },
   { courseName: { [Op.iLike]: '%m.eng%' } },
   { courseName: { [Op.iLike]: '%meng%' } },
+  { courseName: { [Op.iLike]: 'M.S.%' } },
+  { courseName: { [Op.iLike]: 'M.S %' } },
+  { courseName: { [Op.iLike]: 'MS %' } },
+  { courseName: { [Op.iLike]: 'M.S.E%' } },
+  { courseName: { [Op.iLike]: '%M.S.E%' } },
+  { courseName: { [Op.iLike]: '%mse%' } },
   { studyLevel: { [Op.iLike]: '%master%' } },
   { studyLevel: { [Op.iLike]: '%postgrad%' } },
 ];
@@ -59,6 +68,12 @@ const undergradNameExclude = {
     { courseName: { [Op.notILike]: '%m.eng%' } },
     { courseName: { [Op.notILike]: '%meng%' } },
     { courseName: { [Op.notILike]: '%phd%' } },
+    { courseName: { [Op.notILike]: '%m.s.%' } },
+    { courseName: { [Op.notILike]: 'M.S %' } },
+    { courseName: { [Op.notILike]: 'MS %' } },
+    { courseName: { [Op.notILike]: '%m.s.e%' } },
+    { courseName: { [Op.notILike]: '%mse%' } },
+    { courseName: { [Op.notILike]: '%llm%' } },
   ],
 };
 
@@ -70,6 +85,10 @@ const postgradNameExclude = {
     { courseName: { [Op.notILike]: '% bsc%' } },
     { courseName: { [Op.notILike]: '%b.eng%' } },
     { courseName: { [Op.notILike]: '%beng%' } },
+    { courseName: { [Op.notILike]: 'B.S.%' } },
+    { courseName: { [Op.notILike]: 'B.S %' } },
+    { courseName: { [Op.notILike]: 'BS %' } },
+    { courseName: { [Op.notILike]: '%bba%' } },
   ],
 };
 
