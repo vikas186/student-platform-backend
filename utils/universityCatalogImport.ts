@@ -172,6 +172,349 @@ IMPORTANT:
   return csvContent;
 }
 
+const sheetRowsToMatrix = (sheet: XLSX.WorkSheet): string[][] => {
+  const rows = XLSX.utils.sheet_to_json<(string | number | boolean | null | undefined)[]>(sheet, {
+    header: 1,
+    defval: '',
+    raw: false,
+  }) as unknown[][];
+  return rows.map(row =>
+    (Array.isArray(row) ? row : []).map(cell =>
+      cell === null || cell === undefined ? '' : String(cell).trim(),
+    ),
+  );
+};
+
+/** Prefer "Programmes & Fees" style tabs over fee-matrix or admissions summary. */
+const pickPreferredSheetName = (names: string[]): string => {
+  const scored = names.map((name, idx) => {
+    const n = name.toLowerCase();
+    let score = 0;
+    if (/programme|program/.test(n) && /fee/.test(n)) score += 50;
+    else if (/programme|program/.test(n)) score += 40;
+    else if (/fee/.test(n) && !/admission/.test(n)) score += 20;
+    if (/admission/.test(n)) score -= 30;
+    return { name, score: score - idx * 0.01 };
+  });
+  scored.sort((a, b) => b.score - a.score);
+  return scored[0]?.name ?? names[0];
+};
+
+export type ProgrammeCatalogField =
+  | 'university'
+  | 'country'
+  | 'degree'
+  | 'courseName'
+  | 'fee'
+  | 'feeNote'
+  | 'ieltsRequirement'
+  | 'academicRequirement'
+  | 'applicationFee'
+  | 'duration'
+  | 'intake';
+
+/**
+ * Maps NZ / programme-row workbook headers, e.g.
+ * University | Level | Programme Name | Indicative Annual Tuition Fee (NZD, International) | Fee Basis / Note
+ */
+export function mapProgrammeCatalogColumn(header: string): ProgrammeCatalogField | null {
+  const h = normalizeCatalogHeader(header)
+    .toLowerCase()
+    .replace(/[\u2013\u2014]/g, '-')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const k = h.replace(/[^a-z0-9]+/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
+
+  if (
+    k === 'university' ||
+    k === 'university_name' ||
+    k === 'universityname' ||
+    k === 'institution' ||
+    k === 'institution_name' ||
+    k === 'college'
+  ) {
+    return 'university';
+  }
+  if (k === 'country' || k === 'nation' || k === 'destination') {
+    return 'country';
+  }
+  if (
+    k === 'level' ||
+    k === 'study_level' ||
+    k === 'studylevel' ||
+    k === 'degree' ||
+    k === 'qualification'
+  ) {
+    return 'degree';
+  }
+  if (
+    k === 'programme_name' ||
+    k === 'program_name' ||
+    k === 'programmename' ||
+    k === 'programname' ||
+    k === 'course_name' ||
+    k === 'coursename' ||
+    k === 'programme' ||
+    k === 'program' ||
+    k === 'course' ||
+    h.includes('programme name') ||
+    h.includes('program name')
+  ) {
+    return 'courseName';
+  }
+  if (
+    (h.includes('tuition') || h.includes('fee')) &&
+    !h.includes('basis') &&
+    !h.includes('application') &&
+    !h.includes('note')
+  ) {
+    return 'fee';
+  }
+  if (h.includes('fee basis') || k === 'note' || k === 'fee_note' || k === 'feenote' || h.endsWith('/ note')) {
+    return 'feeNote';
+  }
+  if (k.includes('ielts') || k.includes('english')) {
+    return 'ieltsRequirement';
+  }
+  if (k.includes('academic') || k.includes('entry_requirement')) {
+    return 'academicRequirement';
+  }
+  if (k.includes('application_fee') || k.includes('app_fee')) {
+    return 'applicationFee';
+  }
+  if (k === 'duration' || k === 'length') {
+    return 'duration';
+  }
+  if (k === 'intake' || k === 'intakes') {
+    return 'intake';
+  }
+  return null;
+}
+
+export function isProgrammeRowHeader(headerRow: string[]): boolean {
+  const fields = new Set(
+    headerRow.map(cell => mapProgrammeCatalogColumn(String(cell))).filter(Boolean),
+  );
+  return fields.has('university') && fields.has('courseName');
+}
+
+export function findProgrammeHeaderRowIndex(matrix: string[][]): number {
+  for (let i = 0; i < Math.min(matrix.length, 45); i++) {
+    if (isProgrammeRowHeader(matrix[i] ?? [])) return i;
+  }
+  return -1;
+}
+
+export function buildProgrammeColumnIndex(
+  headerRow: string[],
+): Partial<Record<ProgrammeCatalogField, number>> {
+  const colIndex: Partial<Record<ProgrammeCatalogField, number>> = {};
+  headerRow.forEach((cell, idx) => {
+    const key = mapProgrammeCatalogColumn(String(cell));
+    if (key && colIndex[key] === undefined) colIndex[key] = idx;
+  });
+  return colIndex;
+}
+
+export function normalizeDegreeLabel(raw: string): string {
+  const d = raw.trim();
+  if (!d) return 'Program';
+  if (/^ug$/i.test(d) || /^under-?grad/i.test(d)) return 'Undergraduate';
+  if (/^pg$/i.test(d) || /^post-?grad/i.test(d) || /^graduate$/i.test(d)) return 'Postgraduate';
+  return d;
+}
+
+/** ISO-ish currency code for catalog fee display by destination country. */
+export function currencyCodeForCountry(country: string | null | undefined): string {
+  const c = (country || '').trim().toLowerCase();
+  if (!c || c === 'general') return 'USD';
+  if (/new\s*zealand|\bnz\b/.test(c)) return 'NZD';
+  if (/united\s*kingdom|\buk\b|england|scotland|wales|britain/.test(c)) return 'GBP';
+  if (/australia|\bau\b/.test(c)) return 'AUD';
+  if (/canada|\bca\b/.test(c)) return 'CAD';
+  if (/united\s*states|\busa\b|\bus\b/.test(c)) return 'USD';
+  if (/ireland/.test(c)) return 'EUR';
+  if (/germany|france|italy|spain|netherlands|europe|euro/.test(c)) return 'EUR';
+  if (/switzerland/.test(c)) return 'CHF';
+  if (/singapore/.test(c)) return 'SGD';
+  if (/india/.test(c)) return 'INR';
+  if (/uae|dubai|emirates/.test(c)) return 'AED';
+  return 'USD';
+}
+
+/** Detect currency from a fee column header, e.g. "Indicative Annual Tuition Fee (NZD, International)". */
+export function currencyFromFeeHeader(header: string | null | undefined): string | null {
+  const h = String(header || '');
+  const m = h.match(/\b(NZD|AUD|USD|GBP|CAD|EUR|CHF|SGD|INR|AED|HKD|JPY)\b/i);
+  if (m) return m[1].toUpperCase();
+  if (/£|pound/i.test(h)) return 'GBP';
+  if (/€|euro/i.test(h)) return 'EUR';
+  if (/a\$|aud/i.test(h)) return 'AUD';
+  if (/c\$|cad/i.test(h)) return 'CAD';
+  if (/nz\$|nzd/i.test(h)) return 'NZD';
+  if (/\$|usd|dollar/i.test(h) && !/nzd|aud|cad|hkd|sgd/i.test(h)) return 'USD';
+  return null;
+}
+
+const CURRENCY_IN_TEXT = /\b(NZD|AUD|USD|GBP|CAD|EUR|CHF|SGD|INR|AED|HKD|JPY)\b|£|€|NZ\$|A\$|C\$|US\$/i;
+
+/**
+ * Parse "38,310 – 45,000" into a display range + numeric midpoint.
+ * Currency comes from header / country — never hardcode NZD.
+ */
+export function parseFeeRangeText(
+  raw: string,
+  currencyCode: string = 'USD',
+): { fee: number; feeRange: string | null } {
+  const text = String(raw ?? '').trim();
+  if (!text) return { fee: 0, feeRange: null };
+  const cleaned = text.replace(/,/g, '');
+  const nums = [...cleaned.matchAll(/(\d+(?:\.\d+)?)/g)].map(m => Number(m[1])).filter(n => Number.isFinite(n));
+  if (!nums.length) return { fee: 0, feeRange: text };
+
+  const fee = nums.length >= 2 ? Math.round((nums[0] + nums[1]) / 2) : Math.round(nums[0]);
+  const code = (currencyCode || 'USD').toUpperCase();
+
+  // If the cell already names a currency, keep the original text (normalized lightly).
+  if (CURRENCY_IN_TEXT.test(text)) {
+    const withYear = /\/\s*year|per\s*year|p\.?a\.?/i.test(text) ? text : `${text}/year`;
+    return { fee, feeRange: withYear };
+  }
+
+  const lo = Math.round(nums[0]).toLocaleString('en-US');
+  const feeRange =
+    nums.length >= 2
+      ? `${code} ${lo} – ${Math.round(nums[1]).toLocaleString('en-US')}/year`
+      : `${code} ${lo}/year`;
+  return { fee, feeRange };
+}
+
+/** Rewrite a stored feeRange that was wrongly prefixed (e.g. NZD on a UK course). */
+export function alignFeeRangeCurrency(
+  feeRange: string | null | undefined,
+  country: string | null | undefined,
+): string | null {
+  const text = (feeRange || '').trim();
+  if (!text) return null;
+  const wanted = currencyCodeForCountry(country);
+  const replaced = text.replace(/\b(NZD|AUD|USD|GBP|CAD|EUR|CHF|SGD|INR|AED|HKD|JPY)\b/i, wanted);
+  if (replaced !== text) return replaced;
+  if (!CURRENCY_IN_TEXT.test(text) && /\d/.test(text)) {
+    return `${wanted} ${text.replace(/\/year$/i, '').trim()}/year`.replace(/\/year\/year$/i, '/year');
+  }
+  return text;
+}
+
+export function inferCountryFromCatalogContext(
+  matrix: string[][],
+  fileName: string,
+): string | null {
+  const name = fileName || '';
+  if (/new\s*zealand|\bnz[_-\s]/i.test(name)) return 'New Zealand';
+  if (/\buk[_-\s.]|united[_\s-]?kingdom|uk\s*universit/i.test(name)) return 'United Kingdom';
+  if (/\bau[_-\s.]|australia/i.test(name)) return 'Australia';
+  if (/\bca[_-\s.]|canada/i.test(name)) return 'Canada';
+  if (/\bus[_-\s.]|usa|united[_\s-]?states/i.test(name)) return 'USA';
+  for (const row of matrix.slice(0, 8)) {
+    const text = (row ?? []).join(' ');
+    if (/new\s*zealand/i.test(text)) return 'New Zealand';
+    if (/united\s*kingdom|\buk\b/i.test(text) && /universit/i.test(text)) return 'United Kingdom';
+    if (/australia/i.test(text) && /universit/i.test(text)) return 'Australia';
+  }
+  return null;
+}
+
+/** Skip disclaimer / due-diligence blobs that are not real programme titles. */
+export function looksLikeNonProgrammeRow(courseName: string): boolean {
+  const t = courseName.trim();
+  if (!t) return true;
+  if (
+    /^(important|note|disclaimer|warning|due[-\s]?diligence|recommend|please note)\b/i.test(t)
+  ) {
+    return true;
+  }
+  if (t.length > 180 && !/\b(bachelor|master|diploma|certificate|mba|phd|honours|hons|bsc|ba|msc|ma)\b/i.test(t)) {
+    return true;
+  }
+  return false;
+}
+
+export async function readCatalogSpreadsheetSheets(
+  filePath: string,
+): Promise<{ name: string; rows: string[][] }[]> {
+  const ext = path.extname(filePath).toLowerCase();
+  if (ext === '.csv') {
+    return [{ name: 'Sheet1', rows: await readCatalogSpreadsheetToMatrix(filePath) }];
+  }
+  if (ext === '.xlsx' || ext === '.xls') {
+    const wb = XLSX.readFile(filePath, { type: 'file', cellDates: false });
+    return wb.SheetNames.map(name => ({
+      name,
+      rows: sheetRowsToMatrix(wb.Sheets[name]),
+    }));
+  }
+  return [{ name: 'Sheet1', rows: await readCatalogSpreadsheetToMatrix(filePath) }];
+}
+
+/** Best-effort map of university name → admissions text from an "Admissions Summary" tab. */
+export function extractAdmissionsByUniversity(
+  sheets: { name: string; rows: string[][] }[],
+): Map<string, { ieltsRequirement: string; academicRequirement: string; applicationFee: string }> {
+  const out = new Map<
+    string,
+    { ieltsRequirement: string; academicRequirement: string; applicationFee: string }
+  >();
+
+  for (const sheet of sheets) {
+    if (!/admission/i.test(sheet.name) && sheets.length > 1) {
+      // Still try if this sheet looks like admissions and programmes sheet was preferred elsewhere.
+    }
+    const headerIdx = findProgrammeHeaderRowIndex(sheet.rows);
+    // Also scan for university + ielts without programme name
+    let hIdx = headerIdx;
+    if (hIdx < 0) {
+      for (let i = 0; i < Math.min(sheet.rows.length, 45); i++) {
+        const mapped = (sheet.rows[i] ?? []).map(c => mapProgrammeCatalogColumn(String(c)));
+        if (mapped.includes('university') && (mapped.includes('ieltsRequirement') || mapped.includes('academicRequirement'))) {
+          hIdx = i;
+          break;
+        }
+      }
+    }
+    if (hIdx < 0) continue;
+    const colIndex = buildProgrammeColumnIndex(sheet.rows[hIdx] ?? []);
+    if (colIndex.university == null) continue;
+    if (colIndex.ieltsRequirement == null && colIndex.academicRequirement == null) continue;
+
+    for (let r = hIdx + 1; r < sheet.rows.length; r++) {
+      const row = sheet.rows[r] ?? [];
+      const name = String(row[colIndex.university!] ?? '').trim();
+      if (!name) continue;
+      const key = name.toLowerCase();
+      const prev = out.get(key) ?? {
+        ieltsRequirement: '',
+        academicRequirement: '',
+        applicationFee: '',
+      };
+      const ielts =
+        colIndex.ieltsRequirement != null ? String(row[colIndex.ieltsRequirement] ?? '').trim() : '';
+      const academic =
+        colIndex.academicRequirement != null
+          ? String(row[colIndex.academicRequirement] ?? '').trim()
+          : '';
+      const appFee =
+        colIndex.applicationFee != null ? String(row[colIndex.applicationFee] ?? '').trim() : '';
+      out.set(key, {
+        ieltsRequirement: ielts || prev.ieltsRequirement,
+        academicRequirement: academic || prev.academicRequirement,
+        applicationFee: appFee || prev.applicationFee,
+      });
+    }
+  }
+
+  return out;
+}
+
 export async function readCatalogSpreadsheetToMatrix(filePath: string): Promise<string[][]> {
   const ext = path.extname(filePath).toLowerCase();
   if (ext === '.csv') {
@@ -183,18 +526,9 @@ export async function readCatalogSpreadsheetToMatrix(filePath: string): Promise<
   }
   if (ext === '.xlsx' || ext === '.xls') {
     const wb = XLSX.readFile(filePath, { type: 'file', cellDates: false });
-    const sheetName = wb.SheetNames[0];
+    const sheetName = pickPreferredSheetName(wb.SheetNames);
     const sheet = wb.Sheets[sheetName];
-    const rows = XLSX.utils.sheet_to_json<(string | number | boolean | null | undefined)[]>(sheet, {
-      header: 1,
-      defval: '',
-      raw: false,
-    }) as unknown[][];
-    return rows.map(row =>
-      (Array.isArray(row) ? row : []).map(cell =>
-        cell === null || cell === undefined ? '' : String(cell).trim(),
-      ),
-    );
+    return sheetRowsToMatrix(sheet);
   }
   if (ext === '.pdf') {
     const pdfParse = require('pdf-parse');

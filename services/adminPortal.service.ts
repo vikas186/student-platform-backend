@@ -222,7 +222,6 @@ export const listUniversitiesForAdmin = async (query?: {
   const liteRaw = query?.lite;
   const lite =
     liteRaw === true ||
-    liteRaw === 1 ||
     liteRaw === '1' ||
     String(liteRaw ?? '').toLowerCase() === 'true';
 
