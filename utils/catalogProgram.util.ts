@@ -90,8 +90,14 @@ export const namesMatch = (catalogName: string, scrapedName: string): boolean =>
   if (!ta.length || !tb.length) return false;
   const setB = new Set(tb);
   const hits = ta.filter(t => setB.has(t));
-  const ratio = hits.length / Math.min(ta.length, tb.length);
-  return hits.length >= 1 && ratio >= 0.5;
+  if (!hits.length) return false;
+
+  // One-token catalog names (e.g. "toronto") may match a longer scraped title.
+  if (Math.min(ta.length, tb.length) === 1) return hits.length === 1;
+
+  // Multi-token names need at least two shared tokens to avoid
+  // "Canterbury Christ Church" matching "University of Canterbury, Christchurch".
+  return hits.length >= 2;
 };
 
 /** Short search needles used to preload scrape courses for a catalog university page. */
@@ -170,7 +176,9 @@ export const buildAdmissionRequirementsFromScrape = (course: {
     if (m) req.duolingo = parseInt(m[1], 10);
   }
   if (req.academicMinPercent == null && academicText) {
-    const m = academicText.match(/(\d{2,3}(?:\.\d+)?)\s*%/);
+    const m =
+      academicText.match(/(\d{2,3}(?:\.\d+)?)\s*%/) ||
+      academicText.match(/(?:minimum|min\.?|at least)\s*(?:of\s*)?(\d{2,3}(?:\.\d+)?)\s*(?:percent|percentage|%)/i);
     if (m) req.academicMinPercent = parseFloat(m[1]);
   }
   if (req.workExperienceYears == null && academicText) {
@@ -214,17 +222,20 @@ export const mapDbCourse = (course: {
   admissionRequirements: course.admissionRequirements ?? null,
 });
 
-export const mapScrapedCourse = (course: {
-  id: string;
-  courseName: string;
-  studyLevel: string | null;
-  tuitionFee: string | null;
-  duration: string | null;
-  ieltsRequirement?: string | null;
-  academicRequirement?: string | null;
-  normalizedTuition?: Record<string, unknown> | null;
-  normalizedRequirements?: Record<string, unknown> | null;
-}): PublicProgram => {
+export const mapScrapedCourse = (
+  course: {
+    id: string;
+    courseName: string;
+    studyLevel: string | null;
+    tuitionFee: string | null;
+    duration: string | null;
+    ieltsRequirement?: string | null;
+    academicRequirement?: string | null;
+    normalizedTuition?: Record<string, unknown> | null;
+    normalizedRequirements?: Record<string, unknown> | null;
+  },
+  universityAdmissionFallback?: string | null,
+): PublicProgram => {
   const normTuition = course.normalizedTuition ?? {};
   const amount = asFiniteNumber(normTuition.amount);
   const minAmount = asFiniteNumber(normTuition.minAmount);
@@ -238,6 +249,14 @@ export const mapScrapedCourse = (course: {
     feeRange = `${currency} ${Math.round(amount).toLocaleString('en-US')}/year`;
   }
 
+  let admissionRequirements = buildAdmissionRequirementsFromScrape(course);
+  if (!admissionRequirements && universityAdmissionFallback?.trim()) {
+    admissionRequirements = buildAdmissionRequirementsFromScrape({
+      academicRequirement: universityAdmissionFallback,
+      ieltsRequirement: universityAdmissionFallback,
+    });
+  }
+
   return {
     id: course.id,
     courseName: course.courseName,
@@ -246,7 +265,7 @@ export const mapScrapedCourse = (course: {
     feeRange,
     duration: course.duration || '—',
     source: 'scrape',
-    admissionRequirements: buildAdmissionRequirementsFromScrape(course),
+    admissionRequirements,
   };
 };
 
@@ -307,11 +326,27 @@ export const buildProgramsForUniversity = (
     normalizedRequirements?: Record<string, unknown> | null;
   }>,
   programFeeRanges: Record<string, unknown> | null,
+  scrapeUniversityAdmissions: Array<{
+    universityName: string;
+    admissionRequirements?: string | null;
+    acceptanceCriteria?: string | null;
+  }> = [],
 ): PublicProgram[] => {
+  const uniAdmissionFor = (scrapedUniName: string): string | null => {
+    for (const u of scrapeUniversityAdmissions) {
+      if (!namesMatch(catalogName, u.universityName) && !namesMatch(scrapedUniName, u.universityName)) {
+        continue;
+      }
+      const text = [u.admissionRequirements, u.acceptanceCriteria].filter(Boolean).join('\n').trim();
+      if (text) return text;
+    }
+    return null;
+  };
+
   const fromDb = dbCourses.map(mapDbCourse);
   const fromScrape = scrapedCourses
     .filter(row => namesMatch(catalogName, row.universityName))
-    .map(mapScrapedCourse);
+    .map(row => mapScrapedCourse(row, uniAdmissionFor(row.universityName)));
 
   const namedPrograms = dedupePrograms([...fromDb, ...fromScrape]);
   if (namedPrograms.length > 0) return namedPrograms;

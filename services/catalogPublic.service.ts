@@ -188,6 +188,22 @@ export const listPublicUniversitiesWithPrograms = async (query: PublicUniversiti
         })
       : [];
 
+  const scrapeUniRows =
+    scrapeNeedles.length > 0
+      ? await db.ScrapeUniversity.findAll({
+          where: {
+            recordStatus: 'cleaned',
+            cleaningStatus: { [Op.in]: ['high_quality', 'needs_review'] },
+            isDuplicate: false,
+            [Op.or]: scrapeNeedles.map(needle => ({
+              universityName: { [Op.iLike]: `%${needle}%` },
+            })),
+          },
+          attributes: ['universityName', 'admissionRequirements', 'acceptanceCriteria'],
+          limit: 500,
+        })
+      : [];
+
   const scrapedPlain = scrapedRows.map(row =>
     row.get({ plain: true }),
   ) as Array<{
@@ -201,6 +217,14 @@ export const listPublicUniversitiesWithPrograms = async (query: PublicUniversiti
     academicRequirement: string | null;
     normalizedTuition: Record<string, unknown> | null;
     normalizedRequirements: Record<string, unknown> | null;
+  }>;
+
+  const scrapeUniPlain = scrapeUniRows.map(row =>
+    row.get({ plain: true }),
+  ) as Array<{
+    universityName: string;
+    admissionRequirements: string | null;
+    acceptanceCriteria: string | null;
   }>;
 
   const siblingsByName = new Map<string, typeof siblingRows>();
@@ -266,6 +290,7 @@ export const listPublicUniversitiesWithPrograms = async (query: PublicUniversiti
       })),
       scrapedPlain,
       mergedFeeRanges,
+      scrapeUniPlain,
     );
 
     return {
