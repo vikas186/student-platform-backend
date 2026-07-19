@@ -65,16 +65,12 @@ export const normalizeUniName = (value: string): string =>
     .replace(/\([^)]*\)/g, ' ')
     .split(',')[0]
     .replace(/\b(university|college|institute|of|the|and|through)\b/g, ' ')
-    .replace(/[^a-z0-9]+/g, '');
-
-const significantUniTokens = (value: string): string[] =>
-  value
-    .toLowerCase()
-    .replace(/\([^)]*\)/g, ' ')
-    .split(',')[0]
-    .replace(/\b(university|college|institute|of|the|and|through|only|ug|pg|campus)\b/g, ' ')
     .replace(/[^a-z0-9]+/g, ' ')
     .trim()
+    .replace(/\s+/g, ' ');
+
+const significantUniTokens = (value: string): string[] =>
+  normalizeUniName(value)
     .split(/\s+/)
     .filter(t => t.length > 2);
 
@@ -83,7 +79,12 @@ export const namesMatch = (catalogName: string, scrapedName: string): boolean =>
   const b = normalizeUniName(scrapedName);
   if (!a || !b) return false;
   if (a === b) return true;
-  if (a.length >= 6 && b.length >= 6 && (a.includes(b) || b.includes(a))) return true;
+  // Whole-phrase containment only (avoid "christ church" collapsing into "christchurch").
+  if (a.length >= 6 && b.length >= 6) {
+    const aPad = ` ${a} `;
+    const bPad = ` ${b} `;
+    if (aPad.includes(` ${b} `) || bPad.includes(` ${a} `)) return true;
+  }
 
   const ta = significantUniTokens(catalogName);
   const tb = significantUniTokens(scrapedName);
@@ -92,11 +93,7 @@ export const namesMatch = (catalogName: string, scrapedName: string): boolean =>
   const hits = ta.filter(t => setB.has(t));
   if (!hits.length) return false;
 
-  // One-token catalog names (e.g. "toronto") may match a longer scraped title.
   if (Math.min(ta.length, tb.length) === 1) return hits.length === 1;
-
-  // Multi-token names need at least two shared tokens to avoid
-  // "Canterbury Christ Church" matching "University of Canterbury, Christchurch".
   return hits.length >= 2;
 };
 
