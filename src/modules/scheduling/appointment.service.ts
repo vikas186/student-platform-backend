@@ -17,6 +17,7 @@ import {
   formatAppointmentWhen,
   sendAppointmentCancelledEmail,
   sendAppointmentConfirmationEmail,
+  sendAppointmentRescheduledEmail,
 } from '../../../services/email.service';
 import type {
   AppointmentSummary,
@@ -383,6 +384,7 @@ export const rescheduleAppointment = async (
     throw new AppError('Only scheduled appointments can be rescheduled', 400);
   }
 
+  const previousWhen = formatAppointmentWhen(row.startsAt, row.timezone);
   const startsAt = new Date(startsAtIso);
   const slotMs = schedulingConfig().slotMinutes * 60_000;
   const endsAt = new Date(startsAt.getTime() + slotMs);
@@ -404,8 +406,55 @@ export const rescheduleAppointment = async (
   row.endsAt = endsAt;
   await row.save();
 
-  await notifyUser(userId, `Appointment rescheduled to ${startsAt.toISOString()}.`, 'scheduling_rescheduled');
+  const student = await db.User.findByPk(row.studentUserId);
+  const hostAdmin = await db.User.findByPk(row.hostAdminUserId);
   const hostDetails = await getHostAdminDetails(row.hostAdminUserId);
+  const hostEmail = hostDetails?.counsellorEmail || hostAdmin?.email;
+  const label = row.type === 'counselling' ? 'Counselling' : 'Mock interview';
+  const newWhen = formatAppointmentWhen(startsAt, row.timezone);
+
+  await notifyUser(
+    userId,
+    `${label} rescheduled to ${newWhen}.${row.meetLink ? ` Join: ${row.meetLink}` : ''}`,
+    'scheduling_rescheduled',
+  );
+  if (hostAdmin?.id) {
+    await notifyUser(
+      hostAdmin.id,
+      `${label} with ${student?.name || 'student'} rescheduled to ${newWhen}.`,
+      'scheduling_rescheduled',
+    );
+  }
+
+  if (student?.email) {
+    dispatchEmail(
+      () =>
+        sendAppointmentRescheduledEmail({
+          to: student.email,
+          name: student.name,
+          sessionLabel: label,
+          previousWhenLabel: previousWhen,
+          newWhenLabel: newWhen,
+          meetLink: row.meetLink,
+        }),
+      'appointment rescheduled (student)',
+    );
+  }
+  if (hostEmail) {
+    dispatchEmail(
+      () =>
+        sendAppointmentRescheduledEmail({
+          to: hostEmail,
+          name: hostDetails?.counsellorName || hostAdmin?.name || 'Counsellor',
+          sessionLabel: `${label} with ${student?.name || 'student'}`,
+          previousWhenLabel: previousWhen,
+          newWhenLabel: newWhen,
+          meetLink: row.meetLink,
+        }),
+      'appointment rescheduled (host)',
+    );
+  }
+
   return toSummary(row.get({ plain: true }) as AppointmentRow, hostDetails);
 };
 

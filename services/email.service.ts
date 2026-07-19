@@ -7,6 +7,7 @@ import {
   appointmentCancelledTemplate,
   appointmentConfirmationTemplate,
   appointmentReminderTemplate,
+  appointmentRescheduledTemplate,
   applicationStatusTemplate,
   agentEmailVerificationTemplate,
   agentAgreementReminderTemplate,
@@ -352,6 +353,27 @@ export const sendAppointmentCancelledEmail = async (params: {
     params.name,
     params.sessionLabel,
     params.whenLabel,
+    buildStudentPortalUrl(),
+  );
+  await sendMail({ to: params.to, subject: tpl.subject, html: tpl.html, text: tpl.text });
+};
+
+export const sendAppointmentRescheduledEmail = async (params: {
+  to: string;
+  name: string;
+  sessionLabel: string;
+  previousWhenLabel: string;
+  newWhenLabel: string;
+  meetLink?: string | null;
+}): Promise<void> => {
+  const cfg = emailConfig();
+  const tpl = appointmentRescheduledTemplate(
+    cfg,
+    params.name,
+    params.sessionLabel,
+    params.previousWhenLabel,
+    params.newWhenLabel,
+    params.meetLink ?? null,
     buildStudentPortalUrl(),
   );
   await sendMail({ to: params.to, subject: tpl.subject, html: tpl.html, text: tpl.text });

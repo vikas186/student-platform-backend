@@ -59,22 +59,38 @@ const diversifyByTitle = (
   const seen = new Set<string>();
   const out: { refId: string; matchReasons: string[] }[] = [];
 
+  const titleKey = (c: RecommendationCandidate): string => {
+    const uni = (c.universityName || String(c.universityId ?? '')).toLowerCase().trim();
+    const title = c.courseName.toLowerCase().replace(/\s+/g, ' ').trim();
+    return `${uni}::${title}`;
+  };
+
   const tryAdd = (pick: { refId: string; matchReasons: string[] }) => {
     const c = byRef.get(pick.refId);
     if (!c) return;
-    const key = c.courseName.toLowerCase().replace(/\s+/g, ' ').trim();
+    const key = titleKey(c);
     if (seen.has(key)) return;
     seen.add(key);
     out.push(pick);
   };
 
-  for (const pick of picks) {
+  // Prefer catalog picks first so sheet data wins when scrape has the same programme.
+  const orderedPicks = [
+    ...picks.filter(p => byRef.get(p.refId)?.source === 'catalog'),
+    ...picks.filter(p => byRef.get(p.refId)?.source !== 'catalog'),
+  ];
+
+  for (const pick of orderedPicks) {
     if (out.length >= pickCount) break;
     tryAdd(pick);
   }
 
   if (out.length < pickCount) {
-    for (const c of ranked) {
+    const rankedPreferCatalog = [
+      ...ranked.filter(c => c.source === 'catalog'),
+      ...ranked.filter(c => c.source !== 'catalog'),
+    ];
+    for (const c of rankedPreferCatalog) {
       if (out.length >= pickCount) break;
       tryAdd({
         refId: c.refId,

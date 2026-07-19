@@ -635,9 +635,12 @@ export const createAgentDocument = async (
 
   const fileUrl = file.path.replace(/\\/g, '/');
   const rawType = (opts.documentType || 'general').trim();
-  const { normalizeDocumentType, isDigilockerImportableType, DOCUMENT_TYPE_LABELS } = await import(
-    '../src/modules/document-verification/document-types'
-  );
+  const {
+    normalizeDocumentType,
+    isDigilockerImportableType,
+    isVerificationDocumentType,
+    DOCUMENT_TYPE_LABELS,
+  } = await import('../src/modules/document-verification/document-types');
   const { isDigilockerConfigured, isDigilockerDocumentsImportEnabled } = await import(
     '../src/modules/digilocker/digilocker.config'
   );
@@ -653,15 +656,38 @@ export const createAgentDocument = async (
     );
   }
 
-  return db.Document.create({
+  const doc = await db.Document.create({
     studentProfileId: appRow.studentId,
     applicationId: appRow.id,
     fileUrl,
     originalFileName: file.originalname,
-    type: (opts.documentType || 'general').slice(0, 64),
+    type: normalizedType.slice(0, 64),
     fileSize: file.size,
     status: 'pending',
   });
+
+  // Queue admin review (Open original document) for passport / bank / ITR, same as student uploads.
+  if (isVerificationDocumentType(normalizedType)) {
+    const student = await db.StudentProfile.findByPk(appRow.studentId, {
+      include: [{ model: db.User, as: 'user', attributes: ['id', 'email'] }],
+    });
+    const studentUser = (student as { user?: { id?: string; email?: string } } | null)?.user;
+    const studentUserId = studentUser?.id;
+    if (studentUserId) {
+      const { processVerificationUpload } = await import(
+        '../src/modules/document-verification/document-verification.processor'
+      );
+      await processVerificationUpload({
+        userId: studentUserId,
+        userEmail: studentUser?.email ?? null,
+        documentId: doc.id,
+        fileUrl,
+        documentType: normalizedType,
+      });
+    }
+  }
+
+  return doc;
 };
 
 export const patchAgentDocument = async (

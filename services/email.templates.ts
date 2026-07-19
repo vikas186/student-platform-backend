@@ -270,6 +270,35 @@ export const appointmentCancelledTemplate = (
   };
 };
 
+export const appointmentRescheduledTemplate = (
+  cfg: EmailConfig,
+  name: string,
+  sessionLabel: string,
+  previousWhenLabel: string,
+  newWhenLabel: string,
+  meetLink: string | null,
+  portalUrl: string,
+) => {
+  const meetBlock = meetLink
+    ? `${button(meetLink, 'Join Google Meet')}`
+    : `<p style="margin:16px 0 0;font-size:14px;color:#3d4f72;">Your Meet link will appear in your student portal before the session.</p>`;
+  const body = `
+    <p style="margin:0 0 12px;font-size:15px;line-height:1.6;color:#3d4f72;">Hi ${name},</p>
+    <p style="margin:0 0 12px;font-size:15px;line-height:1.6;color:#3d4f72;">
+      Your <strong>${sessionLabel}</strong> has been rescheduled.
+    </p>
+    <p style="margin:0 0 8px;font-size:15px;line-height:1.6;color:#3d4f72;"><strong>Previous:</strong> ${previousWhenLabel} (IST)</p>
+    <p style="margin:0 0 8px;font-size:15px;line-height:1.6;color:#1a2b5e;"><strong>New time:</strong> ${newWhenLabel} (IST)</p>
+    ${meetBlock}
+    ${button(portalUrl, 'Open student portal')}
+  `;
+  return {
+    subject: `${sessionLabel} rescheduled — ${cfg.brandName}`,
+    html: layout(cfg, `${sessionLabel} rescheduled`, body),
+    text: `Hi ${name},\n\nYour ${sessionLabel} has been rescheduled.\nPrevious: ${previousWhenLabel} (IST)\nNew time: ${newWhenLabel} (IST).${meetLink ? `\nJoin: ${meetLink}` : ''}\n\nPortal: ${portalUrl}`,
+  };
+};
+
 const STATUS_COPY: Record<string, { headline: string; detail: string }> = {
   submitted: {
     headline: 'Application submitted',

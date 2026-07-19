@@ -4,6 +4,7 @@ import {
   FEE_RANGE_PROGRAMS,
   namesMatch,
   parseFeeNumber,
+  programDedupeKey,
 } from '../../../utils/catalogProgram.util';
 import { fetchLatestCommissionByUniversity } from '../../../utils/commissionLookup.util';
 import type { AcademicBand, NormalizedMatchInput, RecommendationCandidate } from './recommendation.types';
@@ -383,7 +384,39 @@ export const buildCandidatePool = async (input: NormalizedMatchInput): Promise<R
     }
   }
 
-  return enrichCandidatesWithScrapeContext(candidates, scrapeCtx);
+  // Sheet/catalog wins when scrape has the same university + programme title.
+  return enrichCandidatesWithScrapeContext(dedupeCandidatesPreferCatalog(candidates), scrapeCtx);
+};
+
+const CANDIDATE_SOURCE_PRIORITY: Record<RecommendationCandidate['source'], number> = {
+  catalog: 3,
+  scrape: 2,
+  fee_range: 1,
+};
+
+/** Drop scrape/fee_range rows that duplicate a catalog (sheet) programme at the same uni. */
+const dedupeCandidatesPreferCatalog = (
+  candidates: RecommendationCandidate[],
+): RecommendationCandidate[] => {
+  const byKey = new Map<string, RecommendationCandidate>();
+
+  for (const c of candidates) {
+    const uniPart =
+      c.universityId != null
+        ? `id:${c.universityId}`
+        : `name:${(c.universityName || '').toLowerCase().trim()}`;
+    const key = `${uniPart}::${programDedupeKey({ courseName: c.courseName, degree: c.degree })}`;
+    const existing = byKey.get(key);
+    if (!existing) {
+      byKey.set(key, c);
+      continue;
+    }
+    if (CANDIDATE_SOURCE_PRIORITY[c.source] > CANDIDATE_SOURCE_PRIORITY[existing.source]) {
+      byKey.set(key, c);
+    }
+  }
+
+  return Array.from(byKey.values());
 };
 
 export const loadCandidatesByRefIds = async (refIds: string[]): Promise<RecommendationCandidate[]> => {
