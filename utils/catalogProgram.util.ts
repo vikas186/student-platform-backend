@@ -46,6 +46,11 @@ export type ProgramAdmissionRequirements = {
   workExperienceYears?: number | null;
   workExperienceRequired?: boolean | null;
   workExperienceNotes?: string | null;
+  /** Optional scrape / CSV import extras stored on Course.admissionRequirements. */
+  intake?: string | null;
+  applicationFee?: string | null;
+  scholarship?: string | null;
+  courseUrl?: string | null;
 };
 
 export type PublicProgram = {
@@ -79,11 +84,15 @@ export const namesMatch = (catalogName: string, scrapedName: string): boolean =>
   const b = normalizeUniName(scrapedName);
   if (!a || !b) return false;
   if (a === b) return true;
-  // Whole-phrase containment only (avoid "christ church" collapsing into "christchurch").
+
+  // Whole-phrase containment only when the shorter side is multi-token
+  // (avoids "canterbury" matching "canterbury christ church").
   if (a.length >= 6 && b.length >= 6) {
-    const aPad = ` ${a} `;
-    const bPad = ` ${b} `;
-    if (aPad.includes(` ${b} `) || bPad.includes(` ${a} `)) return true;
+    const shorter = a.length <= b.length ? a : b;
+    const longer = a.length <= b.length ? b : a;
+    if (shorter.split(/\s+/).filter(Boolean).length >= 2 && ` ${longer} `.includes(` ${shorter} `)) {
+      return true;
+    }
   }
 
   const ta = significantUniTokens(catalogName);
@@ -93,7 +102,10 @@ export const namesMatch = (catalogName: string, scrapedName: string): boolean =>
   const hits = ta.filter(t => setB.has(t));
   if (!hits.length) return false;
 
-  if (Math.min(ta.length, tb.length) === 1) return hits.length === 1;
+  // Short catalog names (e.g. "toronto") may match a longer scraped title.
+  if (ta.length === 1) return hits.length === 1;
+  // Long catalog vs short scrape core should not match on a single shared token.
+  if (tb.length === 1 && ta.length > 1) return false;
   return hits.length >= 2;
 };
 
