@@ -89,3 +89,29 @@ export const deleteScholarship = catchAsyncError(async (req: Request, res: Respo
   await scrape.deleteScholarship(req.params.id);
   res.status(constant.msgCode.successCode).json({ success: true, message: 'Scholarship deleted' });
 });
+
+const cleaningStatusHandler =
+  (
+    fn: (id: string, status: scrape.EditableCleaningStatus) => Promise<unknown>,
+    label: string,
+  ) =>
+  catchAsyncError(async (req: Request, res: Response) => {
+    const data = await fn(req.params.id, req.body.cleaningStatus as scrape.EditableCleaningStatus);
+    res
+      .status(constant.msgCode.successCode)
+      .json({ success: true, message: `${label} cleaning status updated`, data });
+  });
+
+export const updateCourseCleaningStatus = cleaningStatusHandler(
+  scrape.updateCourseCleaningStatus,
+  'Course',
+);
+export const updateUniversityCleaningStatus = cleaningStatusHandler(
+  scrape.updateUniversityCleaningStatus,
+  'University',
+);
+export const updateFeeCleaningStatus = cleaningStatusHandler(scrape.updateFeeCleaningStatus, 'Fee');
+export const updateScholarshipCleaningStatus = cleaningStatusHandler(
+  scrape.updateScholarshipCleaningStatus,
+  'Scholarship',
+);

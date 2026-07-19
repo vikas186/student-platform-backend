@@ -74,6 +74,13 @@ export const entityIdJoiSchema = {
 
 export const courseIdJoiSchema = entityIdJoiSchema;
 
+export const updateCleaningStatusJoiSchema = {
+  params: { id: Joi.string().uuid().required() },
+  body: {
+    cleaningStatus: Joi.string().valid('high_quality', 'needs_review', 'rejected').required(),
+  },
+};
+
 export const deleteCoursesBulkJoiSchema = {
   body: {
     ids: Joi.array().items(Joi.string().uuid()).min(1).max(500).required(),

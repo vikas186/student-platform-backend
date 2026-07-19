@@ -328,3 +328,43 @@ export const deleteScholarship = async (id: string): Promise<void> => {
   if (!row) throw new AppError('Scholarship not found', 404);
   await row.destroy();
 };
+
+const EDITABLE_CLEANING_STATUSES = ['high_quality', 'needs_review', 'rejected'] as const;
+export type EditableCleaningStatus = (typeof EDITABLE_CLEANING_STATUSES)[number];
+
+type CleanableModel = {
+  findByPk: (id: string) => Promise<{ update: (values: { cleaningStatus: string }) => Promise<unknown> } | null>;
+};
+
+const updateEntityCleaningStatus = async (
+  model: CleanableModel,
+  id: string,
+  cleaningStatus: EditableCleaningStatus,
+  notFoundMessage: string,
+) => {
+  if (!EDITABLE_CLEANING_STATUSES.includes(cleaningStatus)) {
+    throw new AppError('Invalid cleaning status', 400);
+  }
+  const row = await model.findByPk(id);
+  if (!row) throw new AppError(notFoundMessage, 404);
+  await row.update({ cleaningStatus });
+  return row;
+};
+
+export const updateCourseCleaningStatus = (id: string, cleaningStatus: EditableCleaningStatus) =>
+  updateEntityCleaningStatus(db.ScrapedCourse as CleanableModel, id, cleaningStatus, 'Course not found');
+
+export const updateUniversityCleaningStatus = (id: string, cleaningStatus: EditableCleaningStatus) =>
+  updateEntityCleaningStatus(db.ScrapeUniversity as CleanableModel, id, cleaningStatus, 'University not found');
+
+export const updateFeeCleaningStatus = (id: string, cleaningStatus: EditableCleaningStatus) =>
+  updateEntityCleaningStatus(db.ScrapeFee as CleanableModel, id, cleaningStatus, 'Fee record not found');
+
+export const updateScholarshipCleaningStatus = (id: string, cleaningStatus: EditableCleaningStatus) =>
+  updateEntityCleaningStatus(
+    db.ScrapeScholarship as CleanableModel,
+    id,
+    cleaningStatus,
+    'Scholarship not found',
+  );
+
