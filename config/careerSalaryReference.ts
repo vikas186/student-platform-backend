@@ -78,6 +78,34 @@ export const CAREER_SALARY_REFERENCE: CareerReferenceRow[] = [
     ],
   },
   {
+    fieldKey: 'business',
+    level: 'any',
+    countryPattern: 'united states',
+    careers: [
+      { role: 'Business Analyst', salaryRange: 'USD 55,000–85,000' },
+      { role: 'Marketing Associate', salaryRange: 'USD 50,000–75,000' },
+      { role: 'Financial Analyst', salaryRange: 'USD 60,000–95,000' },
+    ],
+  },
+  {
+    fieldKey: 'stem',
+    level: 'any',
+    countryPattern: 'united states',
+    careers: [
+      { role: 'Engineer', salaryRange: 'USD 70,000–110,000' },
+      { role: 'Research Associate', salaryRange: 'USD 55,000–85,000' },
+    ],
+  },
+  {
+    fieldKey: 'any',
+    level: 'any',
+    countryPattern: 'united states',
+    careers: [
+      { role: 'Graduate Professional', salaryRange: 'USD 45,000–75,000' },
+      { role: 'Industry Specialist', salaryRange: 'USD 55,000–95,000' },
+    ],
+  },
+  {
     fieldKey: 'any',
     level: 'any',
     countryPattern: '',
@@ -92,7 +120,7 @@ const normalizeFieldKey = (field: string): string => {
   const f = field.toLowerCase();
   if (/business|commerce|mba|management|finance/i.test(f)) return 'business';
   if (/computer|software|cs|it|tech|data/i.test(f)) return 'computer';
-  if (/stem|engineering|science|math/i.test(f)) return 'stem';
+  if (/stem|engineering|science|math|aviation|aerospace/i.test(f)) return 'stem';
   return 'any';
 };
 
@@ -100,6 +128,19 @@ const normalizeLevel = (level: string): 'undergraduate' | 'postgraduate' | 'any'
   if (/undergrad|bachelor|ug/i.test(level)) return 'undergraduate';
   if (/postgrad|master|pg|graduate|mba/i.test(level)) return 'postgraduate';
   return 'any';
+};
+
+const normalizeCountryForLookup = (country: string): string => {
+  const c = country.toLowerCase().trim();
+  if (/^(us|usa|u\.s\.?a?\.?|united states|america)\b/.test(c) || c.includes('united states')) {
+    return 'united states';
+  }
+  if (/^(uk|u\.k\.|united kingdom|britain|england|scotland|wales)\b/.test(c) || c.includes('united kingdom')) {
+    return 'united kingdom';
+  }
+  if (/australia|\bau\b/.test(c)) return 'australia';
+  if (/canada|\bca\b/.test(c)) return 'canada';
+  return c;
 };
 
 export const lookupCareers = (
@@ -110,16 +151,31 @@ export const lookupCareers = (
 ): CareerEntry[] => {
   const fieldKey = normalizeFieldKey(field);
   const lvl = normalizeLevel(level);
-  const countryLower = country.toLowerCase().trim();
+  const countryLower = normalizeCountryForLookup(country);
 
   const matches = CAREER_SALARY_REFERENCE.filter(row => {
     const fieldOk = row.fieldKey === fieldKey || row.fieldKey === 'any';
     const levelOk = row.level === lvl || row.level === 'any';
+    if (!row.countryPattern) {
+      return fieldOk && levelOk;
+    }
+    const pattern = row.countryPattern.toLowerCase();
+    // Avoid short-code substring traps (e.g. "us" inside "australia").
     const countryOk =
-      !row.countryPattern ||
-      countryLower.includes(row.countryPattern.toLowerCase()) ||
-      row.countryPattern.toLowerCase().includes(countryLower);
+      countryLower === pattern ||
+      (pattern.length >= 4 && countryLower.includes(pattern)) ||
+      (countryLower.length >= 4 && pattern.includes(countryLower));
     return fieldOk && levelOk && countryOk;
+  });
+
+  // Prefer country-specific rows over the global fallback (empty countryPattern).
+  matches.sort((a, b) => {
+    const aSpecific = a.countryPattern ? 1 : 0;
+    const bSpecific = b.countryPattern ? 1 : 0;
+    if (bSpecific !== aSpecific) return bSpecific - aSpecific;
+    const aField = a.fieldKey === fieldKey ? 1 : 0;
+    const bField = b.fieldKey === fieldKey ? 1 : 0;
+    return bField - aField;
   });
 
   const fromRef = matches.length > 0 ? matches[0].careers : CAREER_SALARY_REFERENCE.at(-1)!.careers;

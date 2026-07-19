@@ -8,7 +8,7 @@ import {
 import { fetchLatestCommissionByUniversity } from '../../../utils/commissionLookup.util';
 import type { AcademicBand, NormalizedMatchInput, RecommendationCandidate } from './recommendation.types';
 import { candidateRefKey, parseCandidateRefKey } from './recommendation.types';
-import { fieldMatchesText, levelMatchesProgram } from './input-normalizer.service';
+import { fieldMatchesText, levelMatchesProgram, countryBelongsToTarget } from './input-normalizer.service';
 import { enrichCandidatesWithScrapeContext, loadScrapeContext } from './scrape-context.service';
 
 const PUBLIC_POOL_LIMIT = 80;
@@ -294,6 +294,7 @@ export const buildCandidatePool = async (input: NormalizedMatchInput): Promise<R
     };
 
     if (!passesLevel(plain.courseName, plain.studyLevel, input.wantedBand)) continue;
+    if (!countryBelongsToTarget(plain.country || '', input.country)) continue;
     if (input.audience !== 'agent' && !fieldMatchesText(plain.courseName, plain.subjectTags ?? [], input.fieldKeywords)) {
       continue;
     }

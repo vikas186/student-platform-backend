@@ -13,20 +13,20 @@ const parseBudget = (value?: number | string): number | null => {
   return Number.isFinite(n) ? n : null;
 };
 
-/** Map short / alternate country names to DB country ILIKE patterns. */
+/** Map short / alternate country names to DB country match tokens. */
 const COUNTRY_ALIAS_PATTERNS: Record<string, string[]> = {
-  uk: ['United Kingdom', 'UK', 'England', 'Scotland', 'Wales', 'Britain'],
-  'u.k.': ['United Kingdom', 'UK', 'England', 'Scotland', 'Wales', 'Britain'],
-  'united kingdom': ['United Kingdom', 'UK', 'England', 'Scotland', 'Wales', 'Britain'],
+  uk: ['United Kingdom', 'UK', 'U.K.', 'England', 'Scotland', 'Wales', 'Britain'],
+  'u.k.': ['United Kingdom', 'UK', 'U.K.', 'England', 'Scotland', 'Wales', 'Britain'],
+  'united kingdom': ['United Kingdom', 'UK', 'U.K.', 'England', 'Scotland', 'Wales', 'Britain'],
   britain: ['United Kingdom', 'Britain', 'England'],
   england: ['United Kingdom', 'England'],
   scotland: ['United Kingdom', 'Scotland'],
   wales: ['United Kingdom', 'Wales'],
-  usa: ['United States', 'USA', 'US', 'America'],
-  us: ['United States', 'USA', 'US'],
-  'u.s.': ['United States', 'USA', 'US'],
-  'u.s.a.': ['United States', 'USA', 'US'],
-  'united states': ['United States', 'USA', 'US'],
+  usa: ['United States', 'USA', 'U.S.', 'U.S.A.', 'America'],
+  us: ['United States', 'USA', 'U.S.', 'U.S.A.'],
+  'u.s.': ['United States', 'USA', 'U.S.', 'U.S.A.'],
+  'u.s.a.': ['United States', 'USA', 'U.S.', 'U.S.A.'],
+  'united states': ['United States', 'USA', 'U.S.', 'U.S.A.', 'America'],
   america: ['United States', 'USA', 'America'],
   uae: ['United Arab Emirates', 'UAE', 'Dubai'],
   'united arab emirates': ['United Arab Emirates', 'UAE', 'Dubai'],
@@ -35,9 +35,9 @@ const COUNTRY_ALIAS_PATTERNS: Record<string, string[]> = {
   'new zealand': ['New Zealand', 'NewZealand', 'NZ'],
   newzealand: ['New Zealand', 'NewZealand', 'NZ'],
   australia: ['Australia'],
-  au: ['Australia'],
+  au: ['Australia', 'AU', 'AUS'],
   canada: ['Canada'],
-  ca: ['Canada'],
+  ca: ['Canada', 'CA'],
   ireland: ['Ireland'],
   germany: ['Germany'],
   france: ['France'],
@@ -48,6 +48,16 @@ const COUNTRY_ALIAS_PATTERNS: Record<string, string[]> = {
   holland: ['Netherlands', 'Holland'],
 };
 
+/**
+ * Short codes like "US" / "UK" must NOT become ILIKE '%US%' — that matches
+ * Australia, Austria, Mauritius, Ukraine, etc.
+ */
+const toCountryIlikePattern = (token: string): string => {
+  const compact = token.replace(/[^a-zA-Z]/g, '');
+  if (compact.length <= 3) return token; // exact (case-insensitive) match only
+  return `%${token}%`;
+};
+
 /** Build ILIKE patterns so "UK" matches "United Kingdom", "USA" matches "United States", etc. */
 export const countrySearchPatterns = (raw: string): string[] => {
   const trimmed = raw.trim();
@@ -55,15 +65,31 @@ export const countrySearchPatterns = (raw: string): string[] => {
   const key = trimmed.toLowerCase();
   const aliases = COUNTRY_ALIAS_PATTERNS[key];
   if (aliases?.length) {
-    return [...new Set(aliases.map(a => `%${a}%`))];
+    return [...new Set(aliases.map(toCountryIlikePattern))];
   }
   const collapsed = key.replace(/[^a-z]/g, '');
   for (const [alias, vals] of Object.entries(COUNTRY_ALIAS_PATTERNS)) {
     if (alias.replace(/[^a-z]/g, '') === collapsed) {
-      return [...new Set(vals.map(a => `%${a}%`))];
+      return [...new Set(vals.map(toCountryIlikePattern))];
     }
   }
-  return [`%${trimmed}%`];
+  return [toCountryIlikePattern(trimmed)];
+};
+
+/** True when a stored country belongs to the user's target country selection. */
+export const countryBelongsToTarget = (storedCountry: string | null | undefined, targetRaw: string): boolean => {
+  const stored = (storedCountry || '').trim();
+  if (!stored) return false;
+  const patterns = countrySearchPatterns(targetRaw);
+  if (!patterns.length) return false;
+  const hay = stored.toLowerCase();
+  return patterns.some(p => {
+    if (p.startsWith('%') && p.endsWith('%')) {
+      const needle = p.slice(1, -1).toLowerCase();
+      return hay.includes(needle);
+    }
+    return hay === p.toLowerCase();
+  });
 };
 
 /** Map UI / API level string to a strict academic band. */
