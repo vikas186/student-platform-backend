@@ -22,7 +22,7 @@ export const cleanCourseData = (raw: RawCourseRow): CleanedCourse => {
     courseName: normalizeText(raw.courseName) || raw.courseName?.trim() || '',
     country: normalizeCountry(raw.country || '') || raw.country?.trim() || undefined,
     city: normalizeText(raw.city) || raw.city?.trim() || undefined,
-    studyLevel: normalizeDegreeLevel(raw.studyLevel || '') || raw.studyLevel?.trim() || undefined,
+    studyLevel: normalizeDegreeLevel(raw.studyLevel || '', raw.courseName) || raw.studyLevel?.trim() || undefined,
     duration: normalizeText(raw.duration) || raw.duration?.trim() || undefined,
     tuitionFee: normalizeText(raw.tuitionFee) || raw.tuitionFee?.trim() || undefined,
     intake: normalizeText(raw.intake) || raw.intake?.trim() || undefined,

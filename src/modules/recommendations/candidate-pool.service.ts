@@ -7,9 +7,9 @@ import {
   parseFeeNumber,
 } from '../../../utils/catalogProgram.util';
 import { fetchLatestCommissionByUniversity } from '../../../utils/commissionLookup.util';
-import type { NormalizedMatchInput, RecommendationCandidate } from './recommendation.types';
+import type { AcademicBand, NormalizedMatchInput, RecommendationCandidate } from './recommendation.types';
 import { candidateRefKey, parseCandidateRefKey } from './recommendation.types';
-import { fieldMatchesText, levelMatchesDegree } from './input-normalizer.service';
+import { fieldMatchesText, levelMatchesProgram } from './input-normalizer.service';
 import { enrichCandidatesWithScrapeContext, loadScrapeContext } from './scrape-context.service';
 
 const PUBLIC_POOL_LIMIT = 80;
@@ -17,16 +17,111 @@ const AGENT_POOL_LIMIT = 120;
 const CATALOG_DEFAULT_QUALITY = 90;
 const FEE_RANGE_DEFAULT_QUALITY = 85;
 
+const undergradNameInclude = [
+  { courseName: { [Op.iLike]: '%bachelor%' } },
+  { courseName: { [Op.iLike]: '%undergraduate%' } },
+  { courseName: { [Op.iLike]: '%b.sc%' } },
+  { courseName: { [Op.iLike]: '%bsc%' } },
+  { courseName: { [Op.iLike]: '%b.eng%' } },
+  { courseName: { [Op.iLike]: '%beng%' } },
+  { studyLevel: { [Op.iLike]: '%bachelor%' } },
+  { studyLevel: { [Op.iLike]: '%undergrad%' } },
+];
+
+const postgradNameInclude = [
+  { courseName: { [Op.iLike]: '%master%' } },
+  { courseName: { [Op.iLike]: '%postgrad%' } },
+  { courseName: { [Op.iLike]: '%mba%' } },
+  { courseName: { [Op.iLike]: '%m.sc%' } },
+  { courseName: { [Op.iLike]: '%msc%' } },
+  { courseName: { [Op.iLike]: '%m.eng%' } },
+  { courseName: { [Op.iLike]: '%meng%' } },
+  { studyLevel: { [Op.iLike]: '%master%' } },
+  { studyLevel: { [Op.iLike]: '%postgrad%' } },
+];
+
+const undergradNameExclude = {
+  [Op.and]: [
+    { courseName: { [Op.notILike]: '%master%' } },
+    { courseName: { [Op.notILike]: '%mba%' } },
+    { courseName: { [Op.notILike]: '%m.sc%' } },
+    { courseName: { [Op.notILike]: '%msc %' } },
+    { courseName: { [Op.notILike]: '%postgrad%' } },
+    { courseName: { [Op.notILike]: '%m.eng%' } },
+    { courseName: { [Op.notILike]: '%meng%' } },
+    { courseName: { [Op.notILike]: '%phd%' } },
+  ],
+};
+
+const postgradNameExclude = {
+  [Op.and]: [
+    { courseName: { [Op.notILike]: '%bachelor%' } },
+    { courseName: { [Op.notILike]: '%undergraduate%' } },
+    { courseName: { [Op.notILike]: '%b.sc%' } },
+    { courseName: { [Op.notILike]: '% bsc%' } },
+    { courseName: { [Op.notILike]: '%b.eng%' } },
+    { courseName: { [Op.notILike]: '%beng%' } },
+  ],
+};
+
 const buildLevelWhere = (input: NormalizedMatchInput): Record<string, unknown> | undefined => {
-  if (!input.levelKeywords.length) return undefined;
-  const orClauses = input.levelKeywords.map(k => ({ degree: { [Op.iLike]: `%${k}%` } }));
-  return { [Op.or]: orClauses };
+  const band = input.wantedBand;
+  if (!band || band === 'any') return undefined;
+  if (band === 'undergrad') {
+    return {
+      [Op.or]: [{ degree: { [Op.iLike]: '%undergrad%' } }, { degree: { [Op.iLike]: '%bachelor%' } }],
+    };
+  }
+  if (band === 'postgrad') {
+    return {
+      [Op.or]: [
+        { degree: { [Op.iLike]: '%postgrad%' } },
+        { degree: { [Op.iLike]: '%master%' } },
+        { degree: { [Op.iLike]: '%mba%' } },
+        { degree: { [Op.iLike]: '%msc%' } },
+      ],
+    };
+  }
+  if (band === 'doctoral') {
+    return { [Op.or]: [{ degree: { [Op.iLike]: '%phd%' } }, { degree: { [Op.iLike]: '%doctor%' } }] };
+  }
+  if (band === 'diploma') {
+    return {
+      [Op.or]: [
+        { degree: { [Op.iLike]: '%diploma%' } },
+        { degree: { [Op.iLike]: '%certificate%' } },
+        { degree: { [Op.iLike]: '%foundation%' } },
+      ],
+    };
+  }
+  return undefined;
 };
 
 const buildScrapeLevelWhere = (input: NormalizedMatchInput): Record<string, unknown> | undefined => {
-  if (!input.levelKeywords.length) return undefined;
-  const orClauses = input.levelKeywords.map(k => ({ studyLevel: { [Op.iLike]: `%${k}%` } }));
-  return { [Op.or]: orClauses };
+  const band = input.wantedBand;
+  if (!band || band === 'any') return undefined;
+  if (band === 'undergrad') {
+    return { [Op.and]: [{ [Op.or]: undergradNameInclude }, undergradNameExclude] };
+  }
+  if (band === 'postgrad') {
+    return { [Op.and]: [{ [Op.or]: postgradNameInclude }, postgradNameExclude] };
+  }
+  if (band === 'doctoral') {
+    return {
+      [Op.or]: [{ courseName: { [Op.iLike]: '%phd%' } }, { studyLevel: { [Op.iLike]: '%phd%' } }],
+    };
+  }
+  if (band === 'diploma') {
+    return {
+      [Op.or]: [
+        { courseName: { [Op.iLike]: '%diploma%' } },
+        { courseName: { [Op.iLike]: '%certificate%' } },
+        { courseName: { [Op.iLike]: '%foundation%' } },
+        { studyLevel: { [Op.iLike]: '%diploma%' } },
+      ],
+    };
+  }
+  return undefined;
 };
 
 const buildFieldWhere = (
@@ -43,6 +138,12 @@ const buildScrapeFieldWhere = (input: NormalizedMatchInput): Record<string, unkn
   const orClauses = input.fieldKeywords.map(k => ({ courseName: { [Op.iLike]: `%${k}%` } }));
   return { [Op.or]: orClauses };
 };
+
+const passesLevel = (
+  courseName: string,
+  degree: string | null | undefined,
+  wanted: AcademicBand,
+): boolean => levelMatchesProgram(courseName, degree, wanted);
 
 export const buildCandidatePool = async (input: NormalizedMatchInput): Promise<RecommendationCandidate[]> => {
   const poolLimit = input.audience === 'agent' ? AGENT_POOL_LIMIT : PUBLIC_POOL_LIMIT;
@@ -139,7 +240,7 @@ export const buildCandidatePool = async (input: NormalizedMatchInput): Promise<R
       university?: { id: number; name: string; country: string };
     };
     if (!plain.university) continue;
-    if (!levelMatchesDegree(plain.degree, input.levelKeywords)) continue;
+    if (!passesLevel(plain.courseName, plain.degree, input.wantedBand)) continue;
 
     const comm = commissionMap.get(plain.university.id);
     candidates.push({
@@ -181,7 +282,7 @@ export const buildCandidatePool = async (input: NormalizedMatchInput): Promise<R
       careerTags: string[];
     };
 
-    if (plain.studyLevel && !levelMatchesDegree(plain.studyLevel, input.levelKeywords)) continue;
+    if (!passesLevel(plain.courseName, plain.studyLevel, input.wantedBand)) continue;
     if (input.audience !== 'agent' && !fieldMatchesText(plain.courseName, plain.subjectTags ?? [], input.fieldKeywords)) {
       continue;
     }
@@ -221,7 +322,7 @@ export const buildCandidatePool = async (input: NormalizedMatchInput): Promise<R
       const meta = FEE_RANGE_PROGRAMS[key];
       const val = ranges[key];
       if (!meta || val == null || String(val).trim() === '') continue;
-      if (!levelMatchesDegree(meta.degree, input.levelKeywords)) continue;
+      if (!passesLevel(meta.courseName, meta.degree, input.wantedBand)) continue;
 
       const comm = commissionMap.get(uni.id);
       candidates.push({

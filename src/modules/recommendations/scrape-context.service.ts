@@ -2,7 +2,7 @@ import { Op } from 'sequelize';
 import { db } from '../../../config/database';
 import { namesMatch, parseFeeNumber } from '../../../utils/catalogProgram.util';
 import type { NormalizedMatchInput, RecommendationCandidate } from './recommendation.types';
-import { levelMatchesDegree } from './input-normalizer.service';
+import { inferAcademicBand } from './input-normalizer.service';
 
 const SCRAPE_CLEANED = {
   recordStatus: 'cleaned',
@@ -109,7 +109,13 @@ export const loadScrapeContext = async (input: NormalizedMatchInput): Promise<Sc
 };
 
 const findFeeForCandidate = (c: RecommendationCandidate, fees: ScrapeFeePlain[]): ScrapeFeePlain | null => {
-  const levelMatched = fees.filter(f => !f.studyLevel || levelMatchesDegree(f.studyLevel, [c.degree.toLowerCase()]));
+  const courseBand = inferAcademicBand(c.courseName, c.degree);
+  const levelMatched = fees.filter(f => {
+    if (!f.studyLevel) return true;
+    const feeBand = inferAcademicBand(f.studyLevel);
+    if (courseBand === 'unknown' || feeBand === 'unknown') return true;
+    return feeBand === courseBand || (courseBand === 'postgrad' && feeBand === 'doctoral');
+  });
   const pool = levelMatched.length ? levelMatched : fees;
   return pool[0] ?? null;
 };
@@ -280,7 +286,14 @@ export const boostCandidatesFromContextHits = async (
     const sim = simBySourceId.get(plain.id) ?? 0;
     for (const c of candidates) {
       if (plain.country && c.country && countryLooseMatch(c.country, plain.country)) {
-        const levelOk = !plain.studyLevel || levelMatchesDegree(plain.studyLevel, [c.degree.toLowerCase()]);
+        const courseBand = inferAcademicBand(c.courseName, c.degree);
+        const feeBand = plain.studyLevel ? inferAcademicBand(plain.studyLevel) : 'unknown';
+        const levelOk =
+          !plain.studyLevel ||
+          feeBand === 'unknown' ||
+          courseBand === 'unknown' ||
+          feeBand === courseBand ||
+          (courseBand === 'postgrad' && feeBand === 'doctoral');
         if (levelOk) bump(c.refId, sim * 0.75);
       }
     }

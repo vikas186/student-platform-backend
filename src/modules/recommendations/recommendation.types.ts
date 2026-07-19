@@ -25,6 +25,9 @@ export type RecommendationCandidate = {
 
 export type MatchAudience = 'public' | 'agent';
 
+/** Academic level band used for strict UG/PG filtering */
+export type AcademicBand = 'undergrad' | 'postgrad' | 'doctoral' | 'diploma' | 'unknown' | 'any';
+
 export type NormalizedMatchInput = {
   audience: MatchAudience;
   level: string;
@@ -35,6 +38,8 @@ export type NormalizedMatchInput = {
   intake: string | null;
   fieldKeywords: string[];
   levelKeywords: string[];
+  /** Strict academic band for UG/PG filtering (never drop for public matches) */
+  wantedBand: AcademicBand;
   /** Lowercase words from program focus / field (length >= 2) for soft text scoring */
   programFocusWords: string[];
   querySummary: string;

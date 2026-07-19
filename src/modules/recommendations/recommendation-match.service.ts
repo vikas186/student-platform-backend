@@ -1,7 +1,7 @@
 import { embedText } from '../chat/embedding.service';
 import { assertKnowledgeBaseReady, searchRecommendationKnowledge } from '../chat/knowledge-base.service';
 import { buildCandidatePool } from './candidate-pool.service';
-import { normalizeAgentInput, normalizePublicInput } from './input-normalizer.service';
+import { levelMatchesProgram, normalizeAgentInput, normalizePublicInput } from './input-normalizer.service';
 import { pickCandidatesWithLlm } from './recommendation-llm.service';
 import { buildAgentPathways, buildPublicSuggestions, wrapAgentResponse, wrapMatchResponse } from './recommendation-response.service';
 import { intersectWithVectorHits, rerankCandidates } from './recommendation-rerank.service';
@@ -26,17 +26,23 @@ const loadPoolWithRelaxation = async (input: NormalizedMatchInput): Promise<Reco
   let pool = await buildCandidatePool(input);
   if (pool.length) return pool;
 
-  // Retry without field SQL/text filters — country + level still apply.
+  // Retry without field filters — keep academic level strict (never drop UG/PG band).
   if (input.fieldKeywords.length) {
-    pool = await buildCandidatePool({ ...input, fieldKeywords: [], programFocusWords: input.programFocusWords });
-    if (pool.length) return pool;
-  }
-
-  // Last resort: country-only pool (ignore level keywords).
-  if (input.levelKeywords.length) {
-    pool = await buildCandidatePool({ ...input, fieldKeywords: [], levelKeywords: [] });
+    pool = await buildCandidatePool({
+      ...input,
+      fieldKeywords: [],
+      programFocusWords: input.programFocusWords,
+    });
   }
   return pool;
+};
+
+const enforceLevel = (
+  candidates: RecommendationCandidate[],
+  input: NormalizedMatchInput,
+): RecommendationCandidate[] => {
+  if (!input.wantedBand || input.wantedBand === 'any') return candidates;
+  return candidates.filter(c => levelMatchesProgram(c.courseName, c.degree, input.wantedBand));
 };
 
 const safeEmbed = async (text: string): Promise<number[] | null> => {
@@ -63,10 +69,10 @@ export const matchPublicRecommendations = async (body: PublicMatchBody) => {
   }
 
   const refSimilarity = await boostCandidatesFromContextHits(pool, hits, buildRefSimilarityMap(hits));
-  let merged = intersectWithVectorHits(pool, refSimilarity, 'public');
-  if (!merged.length) merged = pool;
+  let merged = enforceLevel(intersectWithVectorHits(pool, refSimilarity, 'public'), input);
+  if (!merged.length) merged = enforceLevel(pool, input);
 
-  const reranked = rerankCandidates(merged, input, 'public', 8);
+  const reranked = enforceLevel(rerankCandidates(merged, input, 'public', 8), input);
   const ranked = reranked.length ? reranked : merged;
   const pickCount = Math.min(4, Math.max(1, ranked.length >= 3 ? 4 : ranked.length));
   let picks: Awaited<ReturnType<typeof pickCandidatesWithLlm>> = [];
@@ -76,6 +82,14 @@ export const matchPublicRecommendations = async (body: PublicMatchBody) => {
     picks = ranked.slice(0, pickCount).map(c => ({
       refId: c.refId,
       matchReasons: [`Matches your ${c.degree} level preference`, `Available in ${c.country}`],
+    }));
+  }
+  const validIds = new Set(ranked.map(c => c.refId));
+  picks = picks.filter(p => validIds.has(p.refId));
+  if (!picks.length && ranked.length) {
+    picks = ranked.slice(0, pickCount).map(c => ({
+      refId: c.refId,
+      matchReasons: [`Matches your ${input.level} level preference`, `Available in ${c.country}`],
     }));
   }
   const suggestions = buildPublicSuggestions(picks, ranked, input);
@@ -100,15 +114,26 @@ export const matchAgentRecommendations = async (body: AgentMatchBody) => {
   }
 
   const refSimilarity = await boostCandidatesFromContextHits(pool, hits, buildRefSimilarityMap(hits));
-  let merged = intersectWithVectorHits(pool, refSimilarity, 'agent');
-  if (!merged.length) merged = pool;
+  let merged = enforceLevel(intersectWithVectorHits(pool, refSimilarity, 'agent'), input);
+  if (!merged.length) merged = enforceLevel(pool, input);
 
-  const reranked = rerankCandidates(merged, input, 'agent', 12);
+  const reranked = enforceLevel(rerankCandidates(merged, input, 'agent', 12), input);
   const ranked = reranked.length ? reranked : merged;
   let picks: Awaited<ReturnType<typeof pickCandidatesWithLlm>> = [];
   try {
     picks = await pickCandidatesWithLlm(ranked, limit, input.querySummary, 'agent');
   } catch {
+    picks = ranked.slice(0, limit).map(c => ({
+      refId: c.refId,
+      matchReasons: [
+        `Program aligns with agent search focus`,
+        c.universityName ? `At ${c.universityName} in ${c.country}` : `Available in ${c.country}`,
+      ],
+    }));
+  }
+  const validIds = new Set(ranked.map(c => c.refId));
+  picks = picks.filter(p => validIds.has(p.refId));
+  if (!picks.length && ranked.length) {
     picks = ranked.slice(0, limit).map(c => ({
       refId: c.refId,
       matchReasons: [

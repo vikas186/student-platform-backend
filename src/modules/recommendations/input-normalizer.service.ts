@@ -1,4 +1,10 @@
-import type { AgentMatchBody, NormalizedMatchInput, PublicMatchBody, RecommendationCandidate } from './recommendation.types';
+import type {
+  AcademicBand,
+  AgentMatchBody,
+  NormalizedMatchInput,
+  PublicMatchBody,
+  RecommendationCandidate,
+} from './recommendation.types';
 
 const parseBudget = (value?: number | string): number | null => {
   if (value == null || value === '') return null;
@@ -7,18 +13,103 @@ const parseBudget = (value?: number | string): number | null => {
   return Number.isFinite(n) ? n : null;
 };
 
-const levelKeywords = (level: string): string[] => {
+/** Map UI / API level string to a strict academic band. */
+export const wantedBandFromLevel = (level: string): AcademicBand => {
   const l = level.toLowerCase().trim();
-  if (/high[_\s-]?school|secondary|foundation|pathway/i.test(l)) {
-    return ['diploma', 'certificate', 'foundation', 'pathway', 'associate', 'undergraduate', 'bachelor'];
+  if (/high[_\s-]?school|secondary|foundation|pathway|diploma|certificate/i.test(l)) return 'diploma';
+  if (/undergrad|bachelor|^ug$/i.test(l)) return 'undergrad';
+  if (/postgrad|master|^pg$|mba|msc|meng/i.test(l)) return 'postgrad';
+  if (/phd|doctor/i.test(l)) return 'doctoral';
+  // Avoid bare "graduate" alone matching undergraduate — treat as postgrad only with post/master cues
+  if (/\bgraduate\b/i.test(l) && !/undergrad/i.test(l)) return 'postgrad';
+  return 'any';
+};
+
+/** Keywords used only for soft SQL prefiltering — not for final includes() matching. */
+const levelKeywords = (level: string): string[] => {
+  const band = wantedBandFromLevel(level);
+  if (band === 'diploma') return ['diploma', 'certificate', 'foundation', 'pathway', 'associate'];
+  if (band === 'undergrad') return ['undergraduate', 'bachelor', 'bachelors'];
+  if (band === 'postgrad') return ['postgraduate', 'master', 'masters', 'mba', 'msc'];
+  if (band === 'doctoral') return ['phd', 'doctorate', 'doctoral'];
+  return [];
+};
+
+/**
+ * Infer academic band from course title + study level.
+ * Course title wins when study_level is wrong (e.g. Masters stored as "Bachelors").
+ */
+export const inferAcademicBand = (...parts: Array<string | null | undefined>): AcademicBand => {
+  const t = parts.filter(Boolean).join(' ').toLowerCase().replace(/\s+/g, ' ').trim();
+  if (!t) return 'unknown';
+
+  if (/\b(ph\.?\s?d|dphil|doctorate|doctoral)\b/.test(t)) return 'doctoral';
+
+  // Postgrad title cues first — catches Masters mislabeled as Bachelor in study_level
+  if (
+    /\bmaster of\b/.test(t) ||
+    /\bmasters?\b/.test(t) ||
+    /\bm\.?\s?sc\b/.test(t) ||
+    /\bm\.?\s?eng\b/.test(t) ||
+    /\bmeng\b/.test(t) ||
+    /\bmba\b/.test(t) ||
+    /\bmphil\b/.test(t) ||
+    /\bmacs\b/.test(t) ||
+    /\bpost-?\s*grad/.test(t) ||
+    /\bpostgraduate\b/.test(t) ||
+    /\bgraduate (certificate|diploma|program|programme)\b/.test(t) ||
+    /\bpg(dip|cert|de)\b/.test(t)
+  ) {
+    return 'postgrad';
   }
-  if (/undergrad|bachelor|ug|bsc|ba\b|beng/i.test(l)) {
-    return ['undergraduate', 'bachelor', 'bachelors', 'ug', 'bsc', 'ba', 'beng'];
+
+  if (
+    /\bbachelor of\b/.test(t) ||
+    /\bbachelors?\b/.test(t) ||
+    /\bb\.?\s?sc\b/.test(t) ||
+    /\bb\.?\s?eng\b/.test(t) ||
+    /\bbeng\b/.test(t) ||
+    /\bbba\b/.test(t) ||
+    /\bundergraduate\b/.test(t) ||
+    /\bundergrad\b/.test(t)
+  ) {
+    return 'undergrad';
   }
-  if (/postgrad|master|pg|graduate|mba|msc|meng/i.test(l)) {
-    return ['postgraduate', 'master', 'masters', 'graduate', 'mba', 'msc', 'meng', 'pg'];
-  }
-  return [l];
+
+  if (/\b(diploma|certificate|foundation|associate|pathway|hnd|hnc)\b/.test(t)) return 'diploma';
+
+  return 'unknown';
+};
+
+/** Strict level check using course name + degree/studyLevel (title preferred). */
+export const levelMatchesProgram = (
+  courseName: string,
+  degreeOrStudyLevel: string | null | undefined,
+  wanted: AcademicBand,
+): boolean => {
+  if (!wanted || wanted === 'any') return true;
+  const band = inferAcademicBand(courseName, degreeOrStudyLevel);
+  if (band === 'unknown') return false;
+  if (wanted === 'undergrad') return band === 'undergrad';
+  if (wanted === 'postgrad') return band === 'postgrad' || band === 'doctoral';
+  if (wanted === 'doctoral') return band === 'doctoral';
+  if (wanted === 'diploma') return band === 'diploma';
+  return false;
+};
+
+/** @deprecated Use levelMatchesProgram — kept for fee-context soft checks. */
+export const levelMatchesDegree = (degree: string, levelKeywordsList: string[]): boolean => {
+  if (!levelKeywordsList.length) return true;
+  const wanted = levelKeywordsList.some(k => /master|postgrad|mba|msc|phd|graduate/i.test(k))
+    ? levelKeywordsList.some(k => /undergrad|bachelor/i.test(k))
+      ? 'any'
+      : 'postgrad'
+    : levelKeywordsList.some(k => /undergrad|bachelor/i.test(k))
+      ? 'undergrad'
+      : levelKeywordsList.some(k => /diploma|certificate|foundation/i.test(k))
+        ? 'diploma'
+        : 'any';
+  return levelMatchesProgram('', degree, wanted as AcademicBand);
 };
 
 const fieldKeywords = (field: string): string[] => {
@@ -33,7 +124,6 @@ const fieldKeywords = (field: string): string[] => {
   }
   if (/\bstem\b|engineering|math/i.test(f)) extras.push('stem', 'engineering', 'mathematics');
   if (/engineer/i.test(f)) extras.push('engineering', 'engineer');
-  // Avoid bare "science" — it matches almost every BSc and empties CS-specific pools after a quality-ranked limit.
   const filteredWords = words.filter(w => w !== 'science' || /computer|data|political|social/.test(f));
   return [...new Set([...filteredWords, ...extras])];
 };
@@ -53,6 +143,7 @@ export const normalizePublicInput = (body: PublicMatchBody): NormalizedMatchInpu
   const country = body.country.trim();
   const lk = levelKeywords(level);
   const fk = fieldKeywords(field);
+  const wantedBand = wantedBandFromLevel(level);
   const budget = parseBudget(body.budget);
   const score = body.score != null && Number.isFinite(body.score) ? body.score : null;
 
@@ -66,8 +157,9 @@ export const normalizePublicInput = (body: PublicMatchBody): NormalizedMatchInpu
     intake: body.intake?.trim() || null,
     fieldKeywords: fk,
     levelKeywords: lk,
+    wantedBand,
     programFocusWords: programFocusWords(field),
-    querySummary: `Level: ${level}. Field: ${field}. Country: ${country}.${budget ? ` Budget up to USD ${budget}.` : ''}${body.intake ? ` Intake: ${body.intake}.` : ''}${score != null ? ` Academic score: ${score}.` : ''}`,
+    querySummary: `Level: ${level} (${wantedBand}). Field: ${field}. Country: ${country}.${budget ? ` Budget up to USD ${budget}.` : ''}${body.intake ? ` Intake: ${body.intake}.` : ''}${score != null ? ` Academic score: ${score}.` : ''} Only suggest programs at the ${wantedBand} academic level.`,
   };
 };
 
@@ -75,19 +167,22 @@ export const normalizeAgentInput = (body: AgentMatchBody): NormalizedMatchInput 
   const country = body.country.trim();
   const field = body.programFocus.trim();
   const words = programFocusWords(field);
+  // Infer band from free-text focus when agent mentions MBA / masters / bachelor etc.
+  const wantedBand = wantedBandFromLevel(field);
 
   return {
     audience: 'agent',
-    level: 'any',
+    level: wantedBand === 'any' ? 'any' : wantedBand,
     field,
     country,
     score: null,
     budget: null,
     intake: null,
     fieldKeywords: fieldKeywords(field),
-    levelKeywords: [],
+    levelKeywords: wantedBand === 'any' ? [] : levelKeywords(wantedBand),
+    wantedBand,
     programFocusWords: words,
-    querySummary: `Find partner university programs in ${country} matching: "${field}". Include admin catalog courses, fee ranges, and high-quality scraped programs. Prioritize semantic fit to the program focus.`,
+    querySummary: `Find partner university programs in ${country} matching: "${field}".${wantedBand !== 'any' ? ` Prefer ${wantedBand} level programs.` : ''} Include admin catalog courses, fee ranges, and high-quality scraped programs. Prioritize semantic fit to the program focus.`,
   };
 };
 
@@ -108,12 +203,6 @@ export const scoreProgramFocus = (c: RecommendationCandidate, input: NormalizedM
   }
   if (hits === 0) return 0.12;
   return Math.min(1, 0.35 + hits / words.length);
-};
-
-export const levelMatchesDegree = (degree: string, levelKeywordsList: string[]): boolean => {
-  if (!levelKeywordsList.length) return true;
-  const d = degree.toLowerCase();
-  return levelKeywordsList.some(k => d.includes(k));
 };
 
 export const fieldMatchesText = (text: string, tags: string[], fieldKeywordsList: string[]): boolean => {

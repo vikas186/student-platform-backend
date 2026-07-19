@@ -37,13 +37,20 @@ export const normalizeCountry = (value: string): string | null => {
   return map[key] || s;
 };
 
-export const normalizeDegreeLevel = (value: string): string | null => {
+export const normalizeDegreeLevel = (value: string, courseName?: string): string | null => {
+  const fromTitle = courseName ? normalizeText(courseName) : null;
+  const hay = [fromTitle, normalizeText(value)].filter(Boolean).join(' ');
+  if (!hay) return null;
+  // Title cues first — fixes Masters mislabeled as Bachelor in source data
+  if (/\b(phd|doctorate|doctoral)\b/i.test(hay)) return 'PhD';
+  if (/\b(master of|masters?\b|m\.?\s?sc\b|m\.?\s?eng\b|mba\b|mphil\b|postgraduate|post-?\s*grad)\b/i.test(hay)) {
+    return 'Master';
+  }
+  if (/\b(bachelor of|bachelors?\b|b\.?\s?sc\b|b\.?\s?eng\b|undergraduate|ug)\b/i.test(hay)) {
+    return 'Bachelor';
+  }
+  if (/\b(diploma|associate|certificate|foundation)\b/i.test(hay)) return 'Diploma';
   const s = normalizeText(value);
-  if (!s) return null;
-  if (/\b(phd|doctorate|doctoral)\b/i.test(s)) return 'PhD';
-  if (/\b(master|m\.?\s?sc|mba|postgraduate)\b/i.test(s)) return 'Master';
-  if (/\b(bachelor|b\.?\s?sc|undergraduate|ug)\b/i.test(s)) return 'Bachelor';
-  if (/\b(diploma|associate|certificate)\b/i.test(s)) return 'Diploma';
   return s;
 };
 
