@@ -422,6 +422,26 @@ export const createAgentApplication = async (
 
     await assertStudentInAgentScope(agentProfileId, studentProfileId, transaction);
 
+    const agentProfile = await db.AgentProfile.findByPk(agentProfileId, { transaction });
+    if (!agentProfile) {
+      throw new AppError('Agent profile not found', 404);
+    }
+    const { ensureAgentMembershipId } = await import('../utils/ensureAgentMembershipId');
+    await ensureAgentMembershipId(agentProfile);
+
+    const baseMeta =
+      body.metadata && typeof body.metadata === 'object' && !Array.isArray(body.metadata)
+        ? { ...body.metadata }
+        : {};
+    const metadata = {
+      ...baseMeta,
+      agencyLabel:
+        typeof baseMeta.agencyLabel === 'string' && baseMeta.agencyLabel.trim()
+          ? baseMeta.agencyLabel
+          : agentProfile.agencyName,
+      agentMembershipId: agentProfile.membershipId,
+    };
+
     const application = await db.Application.create(
       {
         studentId: studentProfileId,
@@ -433,7 +453,7 @@ export const createAgentApplication = async (
         country: body.country?.trim() || null,
         commissionAmount: body.commissionAmount ?? null,
         commissionSlab: body.commissionSlab?.trim() || null,
-        metadata: body.metadata ?? null,
+        metadata,
         status: 'draft',
       },
       { transaction },
@@ -645,13 +665,15 @@ export const createAgentDocument = async (
     '../src/modules/digilocker/digilocker.config'
   );
   const normalizedType = normalizeDocumentType(rawType);
+  const manualAllowed = Boolean(appRow.manualUploadAllowed);
   if (
+    !manualAllowed &&
     isDigilockerConfigured() &&
     isDigilockerDocumentsImportEnabled() &&
     isDigilockerImportableType(normalizedType)
   ) {
     throw new AppError(
-      `${DOCUMENT_TYPE_LABELS[normalizedType] || normalizedType} must be verified by the student via DigiLocker after they log in. Academic certificates cannot be uploaded manually.`,
+      `${DOCUMENT_TYPE_LABELS[normalizedType] || normalizedType} must be verified by the student via DigiLocker after they log in. Academic certificates cannot be uploaded manually unless an admin enables manual upload for this application.`,
       400,
     );
   }
@@ -1366,6 +1388,8 @@ export const getAgentPortalProfile = async (userId: string) => {
     throw new AppError('User not found', 404);
   }
   const profile = await requireAgentProfile(userId);
+  const { ensureAgentMembershipId } = await import('../utils/ensureAgentMembershipId');
+  await ensureAgentMembershipId(profile);
   return {
     user: {
       id: user.id,
@@ -1379,6 +1403,7 @@ export const getAgentPortalProfile = async (userId: string) => {
       agencyName: profile.agencyName,
       primaryMarket: profile.primaryMarket,
       logoUrl: profile.logoUrl,
+      membershipId: profile.membershipId,
     },
   };
 };

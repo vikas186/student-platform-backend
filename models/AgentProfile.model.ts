@@ -11,6 +11,8 @@ export default (sequelize: Sequelize) => {
     declare primaryMarket: string | null;
     declare logoUrl: string | null;
     declare subscriptionPlanId: number | null;
+    /** Stable partner code shown in the portal and stamped on applications (e.g. AGT-00042). */
+    declare membershipId: string | null;
     /** Onboarding partnership agreement workflow (mirrors `University.countersignedContractUrl`). */
     declare agreementStatus: AgentAgreementStatus;
     declare signedAgreementUrl: string | null;
@@ -55,6 +57,12 @@ export default (sequelize: Sequelize) => {
       agencyName: { type: DataTypes.STRING, allowNull: false },
       primaryMarket: { type: DataTypes.STRING, allowNull: true },
       logoUrl: { type: DataTypes.STRING, allowNull: true },
+      membershipId: {
+        type: DataTypes.STRING(32),
+        allowNull: true,
+        unique: true,
+        field: 'membership_id',
+      },
       subscriptionPlanId: {
         type: DataTypes.INTEGER,
         allowNull: true,

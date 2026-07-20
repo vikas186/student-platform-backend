@@ -73,6 +73,7 @@ export const getApplicationForAdmin = async (idOrRef: string) => {
         model: db.AgentProfile,
         as: 'agentProfile',
         required: false,
+        attributes: ['id', 'agencyName', 'membershipId', 'primaryMarket'],
         include: [{ model: db.User, as: 'user', attributes: ['id', 'name', 'email'] }],
       },
       {
@@ -81,12 +82,36 @@ export const getApplicationForAdmin = async (idOrRef: string) => {
         required: false,
         include: [{ model: db.University, as: 'university', required: false }],
       },
+      {
+        model: db.Document,
+        as: 'documents',
+        required: false,
+        separate: true,
+        order: [['createdAt', 'DESC']],
+      },
     ],
   });
   if (!app) {
     throw new AppError('Application not found', 404);
   }
-  return app;
+  const plain = app.get ? app.get({ plain: true }) : app;
+  return {
+    ...plain,
+    statusLabel: backendApplicationStatusToUi(plain.status),
+  };
+};
+
+export const setApplicationManualUploadForAdmin = async (
+  idOrRef: string,
+  allowed: boolean,
+) => {
+  const app = await db.Application.findOne({ where: applicationWhereByIdOrRef(idOrRef) });
+  if (!app) {
+    throw new AppError('Application not found', 404);
+  }
+  app.manualUploadAllowed = Boolean(allowed);
+  await app.save();
+  return getApplicationForAdmin(app.id);
 };
 
 export const listApplicationsForAdmin = async (query: {
@@ -1616,11 +1641,13 @@ export const createUserForAdmin = async (body: CreateAdminUserBody) => {
     });
   } else if (role === 'agent') {
     const agency = body.agencyName?.trim() || 'Agency';
-    await db.AgentProfile.create({
+    const profile = await db.AgentProfile.create({
       userId: user.id,
       agencyName: agency,
       primaryMarket: null,
     });
+    const { ensureAgentMembershipId } = await import('../utils/ensureAgentMembershipId');
+    await ensureAgentMembershipId(profile);
   } else if (role === 'university') {
     const uid = body.universityId;
     if (!uid || !Number.isFinite(uid) || uid < 1) {
@@ -1677,11 +1704,13 @@ export const updateUserRoleForAdmin = async (
     });
   }
   if (newRole === 'agent' && !(await db.AgentProfile.findOne({ where: { userId } }))) {
-    await db.AgentProfile.create({
+    const profile = await db.AgentProfile.create({
       userId,
       agencyName: 'Agency',
       primaryMarket: null,
     });
+    const { ensureAgentMembershipId } = await import('../utils/ensureAgentMembershipId');
+    await ensureAgentMembershipId(profile);
   }
   if (newRole === 'university' && !(await db.UniversityProfile.findOne({ where: { userId } }))) {
     throw new AppError(

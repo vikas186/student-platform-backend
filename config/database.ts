@@ -216,6 +216,13 @@ if (shouldSyncDb) {
       await sequelize.sync({ alter: true });
       await ensureApplicationNumberSequence();
       await ensureOfferLetterReferenceSequence();
+      try {
+        const { backfillAgentMembershipIds } = await import('../utils/ensureAgentMembershipId');
+        const n = await backfillAgentMembershipIds();
+        if (n > 0) console.log(`Backfilled agent membership IDs for ${n} agent(s).`);
+      } catch (e: any) {
+        console.warn('Agent membership ID backfill skipped:', e?.message || e);
+      }
       const { ensureAdminHasAllCatalogPermissions, ensureUniversityPortalPermissions, ensureStudentAndAgentDefaultPermissions } = await import(
         '../services/rolePermissions.service'
       );

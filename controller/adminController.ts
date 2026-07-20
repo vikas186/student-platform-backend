@@ -102,6 +102,20 @@ export const patchApplicationStatusUi = catchAsyncError(async (req: Request, res
   });
 });
 
+export const patchApplicationManualUpload = catchAsyncError(async (req: Request, res: Response) => {
+  const app = await adminPortal.setApplicationManualUploadForAdmin(
+    req.params.applicationId,
+    Boolean(req.body.allowed),
+  );
+  res.status(constant.msgCode.successCode).json({
+    success: true,
+    message: req.body.allowed
+      ? 'Manual document upload enabled for this application'
+      : 'Manual document upload disabled — DigiLocker required for academic certificates',
+    data: { application: app },
+  });
+});
+
 export const listUniversitiesAdmin = catchAsyncError(async (req: Request, res: Response) => {
   const result = await adminPortal.listUniversitiesForAdmin(req.query as Record<string, unknown>);
   res.status(constant.msgCode.successCode).json({

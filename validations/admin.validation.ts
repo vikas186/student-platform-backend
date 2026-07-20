@@ -64,6 +64,12 @@ const patchApplicationStatusJoiSchema = {
   }),
 };
 
+const patchApplicationManualUploadJoiSchema = {
+  body: Joi.object({
+    allowed: Joi.boolean().required(),
+  }),
+};
+
 /** Deadlines list is sliced in memory after loading up to 2000 rows — allow larger page sizes than default admin pagination. */
 const listDeadlinesQueryJoiSchema = {
   query: Joi.object({
@@ -313,6 +319,7 @@ export {
   patchUserRoleJoiSchema,
   listApplicationsQueryJoiSchema,
   patchApplicationStatusJoiSchema,
+  patchApplicationManualUploadJoiSchema,
   listDeadlinesQueryJoiSchema,
   createDeadlineJoiSchema,
   patchDeadlineJoiSchema,

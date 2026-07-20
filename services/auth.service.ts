@@ -94,6 +94,9 @@ const signupAgent = async (body: SignupAgentBody) => {
      * only after the agent uploads the signed copy and admin approves it. */
     agreementStatus: 'pending',
     agreementSentAt: new Date(),
+  }).then(async (profile) => {
+    const { ensureAgentMembershipId } = await import('../utils/ensureAgentMembershipId');
+    await ensureAgentMembershipId(profile);
   });
 
   await sendSignupVerificationEmail(user);

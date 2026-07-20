@@ -30,6 +30,11 @@ export default (sequelize: Sequelize) => {
     declare commissionSlab: string | null;
     /** Multi-step wizard / UI-only payload (steps 1–4, draft fields) */
     declare metadata: Record<string, unknown> | null;
+    /**
+     * When true, student/agent may manually upload DigiLocker-class academic certificates
+     * (admin-granted waiver). Default DigiLocker-only when DigiLocker import is enabled.
+     */
+    declare manualUploadAllowed: boolean;
     declare status: (typeof APPLICATION_STATUSES)[number];
     declare readonly createdAt: Date;
     declare readonly updatedAt: Date;
@@ -90,6 +95,12 @@ export default (sequelize: Sequelize) => {
         allowNull: true,
       },
       metadata: { type: DataTypes.JSONB, allowNull: true },
+      manualUploadAllowed: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+        field: 'manual_upload_allowed',
+      },
       status: {
         type: DataTypes.ENUM(...APPLICATION_STATUSES),
         allowNull: false,
