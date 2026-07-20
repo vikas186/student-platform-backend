@@ -327,18 +327,19 @@ export function normalizeDegreeLabel(raw: string): string {
 /** ISO-ish currency code for catalog fee display by destination country. */
 export function currencyCodeForCountry(country: string | null | undefined): string {
   const c = (country || '').trim().toLowerCase();
-  if (!c || c === 'general') return 'USD';
-  if (/new\s*zealand|\bnz\b/.test(c)) return 'NZD';
-  if (/united\s*kingdom|\buk\b|england|scotland|wales|britain/.test(c)) return 'GBP';
-  if (/australia|\bau\b/.test(c)) return 'AUD';
-  if (/canada|\bca\b/.test(c)) return 'CAD';
-  if (/united\s*states|\busa\b|\bus\b/.test(c)) return 'USD';
-  if (/ireland/.test(c)) return 'EUR';
-  if (/germany|france|italy|spain|netherlands|europe|euro/.test(c)) return 'EUR';
-  if (/switzerland/.test(c)) return 'CHF';
-  if (/singapore/.test(c)) return 'SGD';
-  if (/india/.test(c)) return 'INR';
-  if (/uae|dubai|emirates/.test(c)) return 'AED';
+  if (!c || c === 'general' || c === 'international' || c.startsWith('mixed')) return 'USD';
+  if (/new\s*zealand|\bnz\b|\bnzl\b/.test(c)) return 'NZD';
+  if (/united\s*kingdom|\buk\b|\bgbr\b|england|scotland|wales|britain/.test(c)) return 'GBP';
+  // Match Australia / AU / AUS before any loose "us" patterns.
+  if (/australia|\bau\b|\baus\b/.test(c)) return 'AUD';
+  if (/canada|\bca\b|\bcan\b/.test(c)) return 'CAD';
+  if (/united\s*states|\busa\b|\bus\b|\bamerica\b/.test(c)) return 'USD';
+  if (/ireland|\bie\b|\birl\b/.test(c)) return 'EUR';
+  if (/germany|france|italy|spain|netherlands|europe|euro|berlin|munich/.test(c)) return 'EUR';
+  if (/switzerland|\bch\b|\bche\b/.test(c)) return 'CHF';
+  if (/singapore|\bsg\b|\bsgp\b/.test(c)) return 'SGD';
+  if (/india|\bin\b|\bind\b/.test(c)) return 'INR';
+  if (/uae|dubai|emirates|\bae\b/.test(c)) return 'AED';
   return 'USD';
 }
 
@@ -408,7 +409,7 @@ export function alignFeeRangeCurrency(
     return text;
   }
   const wanted = currencyCodeForCountry(country);
-  const replaced = text.replace(/\b(NZD|AUD|USD|GBP|CAD|EUR|CHF|SGD|INR|AED|HKD|JPY)\b/i, wanted);
+  const replaced = text.replace(/\b(NZD|AUD|USD|GBP|CAD|EUR|CHF|SGD|INR|AED|HKD|JPY)\b/gi, wanted);
   if (replaced !== text) return replaced;
   // Bare "$15,200/year" → "EUR 15,200/year" when destination is not USD.
   if (wanted !== 'USD' && /^\$\s*\d/.test(text)) {

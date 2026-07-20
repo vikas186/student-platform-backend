@@ -20,8 +20,12 @@ const resolveFeeCountry = (
   const i = (inputCountry || '').trim();
   const isPlaceholder = (v: string) =>
     !v || /^(general|international|mixed)(\b|\/)/i.test(v) || looksLikeProgramCountry(v);
-  if (c && !isPlaceholder(c)) return c;
+
+  // User's Course Mapping / apply destination wins — catalog rows are often mislabeled
+  // (e.g. Australian unis stored as General/USA), which forced USD fees.
   if (i && !isPlaceholder(i)) return i;
+
+  if (c && !isPlaceholder(c)) return c;
   const fromName = inferCountryFromUniversityName(universityName);
   if (fromName) return fromName;
   return c || i || null;
@@ -39,7 +43,7 @@ const inferCountryFromUniversityName = (name: string | null | undefined): string
   if (/united kingdom|\buk\b|london|manchester|edinburgh|scotland|england/.test(n)) {
     return 'United Kingdom';
   }
-  if (/australia|sydney|melbourne|brisbane/.test(n)) return 'Australia';
+  if (/australia|sydney|melbourne|brisbane|perth|adelaide|canberra/.test(n)) return 'Australia';
   if (/canada|toronto|vancouver|montreal/.test(n)) return 'Canada';
   if (/new zealand|auckland|wellington/.test(n)) return 'New Zealand';
   if (/united states|\busa\b|new york|boston|california/.test(n)) return 'USA';
