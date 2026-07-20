@@ -1192,13 +1192,13 @@ export const patchCourseForAdmin = async (
     c.courseName = String(body.courseName).trim();
   }
   if (body.degree !== undefined) {
-    c.degree = String(body.degree).trim();
+    c.degree = body.degree == null ? '' : String(body.degree).trim();
   }
   if (body.fee !== undefined) {
-    c.fee = Number(body.fee);
+    c.fee = body.fee == null || Number.isNaN(Number(body.fee)) ? 0 : Number(body.fee);
   }
   if (body.duration !== undefined) {
-    c.duration = String(body.duration).trim();
+    c.duration = body.duration == null ? '' : String(body.duration).trim();
   }
   await c.save();
   return c.reload({
@@ -2479,6 +2479,44 @@ export const createUniversityForAdmin = async (body: { name: string; country: st
   });
 };
 
+const FEE_RANGE_KEYS = [
+  'ugBusinessUsdYear',
+  'ugStemUsdYear',
+  'ugComputerScienceUsdYear',
+  'pgBusinessUsdYear',
+  'pgStemUsdYear',
+  'pgComputerScienceUsdYear',
+] as const;
+
+const normalizeProgramFeeRanges = (
+  incoming: Record<string, unknown> | null | undefined,
+  existing: Record<string, unknown> | null | undefined,
+): Record<string, string | null> | null => {
+  if (incoming === null) return null;
+  if (incoming === undefined) {
+    return existing && typeof existing === 'object' ? (existing as Record<string, string | null>) : null;
+  }
+  const base: Record<string, string | null> = {};
+  if (existing && typeof existing === 'object') {
+    for (const [k, v] of Object.entries(existing)) {
+      base[k] = v == null || String(v).trim() === '' ? null : String(v).trim().slice(0, 120);
+    }
+  }
+  for (const [k, v] of Object.entries(incoming)) {
+    if (v === null || v === undefined || String(v).trim() === '') {
+      base[k] = null;
+    } else {
+      base[k] = String(v).trim().slice(0, 120);
+    }
+  }
+  // Keep known keys even when cleared so the admin UI can round-trip empty bands.
+  for (const key of FEE_RANGE_KEYS) {
+    if (!(key in base)) base[key] = null;
+  }
+  const hasAny = Object.values(base).some(v => v != null && String(v).trim() !== '');
+  return hasAny ? base : null;
+};
+
 export const updateUniversityForAdmin = async (
   id: number,
   body: Partial<{
@@ -2488,6 +2526,8 @@ export const updateUniversityForAdmin = async (
     agreementPackageReference: string | null;
     agreementDispatchedAt: string | Date | null;
     countersignedVerifiedAt: string | Date | null;
+    flywirePaymentDestination: string | null;
+    programFeeRanges: Record<string, unknown> | null;
   }>,
 ) => {
   const row = await db.University.findByPk(id);
@@ -2517,6 +2557,17 @@ export const updateUniversityForAdmin = async (
     const v = body.countersignedVerifiedAt;
     (row as any).countersignedVerifiedAt =
       v === null || v === '' ? null : v instanceof Date ? v : new Date(String(v));
+  }
+  if (body.flywirePaymentDestination !== undefined) {
+    const v = body.flywirePaymentDestination;
+    (row as any).flywirePaymentDestination =
+      v === null || v === '' ? null : String(v).trim().slice(0, 120);
+  }
+  if (body.programFeeRanges !== undefined) {
+    (row as any).programFeeRanges = normalizeProgramFeeRanges(
+      body.programFeeRanges,
+      (row as any).programFeeRanges as Record<string, unknown> | null,
+    );
   }
   await row.save();
   return row;

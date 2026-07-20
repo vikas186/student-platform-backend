@@ -69,10 +69,12 @@ export const buildPublicSuggestions = (
         matchReasons.push(`Scholarship: ${c.scholarshipHint}`);
       }
       const feeCountry = resolveFeeCountry(c.country, input.country, c.universityName);
+      const careerLevel =
+        input.level && input.level !== 'any' ? input.level : c.degree || c.courseName;
       return {
         title: c.courseName,
         feeBand: formatFeeBand(c.fee, c.feeRange, feeCountry),
-        careers: lookupCareers(input.field, input.level, input.country, c.careerTags, c.courseName),
+        careers: lookupCareers(input.field, careerLevel, input.country, c.careerTags, c.courseName),
         matchReasons,
         matchScore: c.rerankScore,
         university: null as null,
@@ -97,13 +99,15 @@ export const buildAgentPathways = (
         matchReasons.push(`Scholarship: ${c.scholarshipHint}`);
       }
       const feeCountry = resolveFeeCountry(c.country, input.country, c.universityName);
+      const careerLevel =
+        input.level && input.level !== 'any' ? input.level : c.degree || c.courseName;
       return {
         title: c.courseName,
         universityName: c.universityName,
         universityId: c.universityId,
         courseId: c.courseId,
         feeBand: formatFeeBand(c.fee, c.feeRange, feeCountry),
-        careers: lookupCareers(input.field, input.level, input.country, c.careerTags, c.courseName),
+        careers: lookupCareers(input.field, careerLevel, input.country, c.careerTags, c.courseName),
         commissionPercent: c.commissionPercent,
         matchReasons,
         matchScore: c.rerankScore,

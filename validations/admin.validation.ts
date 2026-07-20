@@ -172,6 +172,8 @@ const createUniversityJoiSchema = {
   }),
 };
 
+const programFeeRangeValue = Joi.string().trim().max(120).allow(null, '');
+
 const patchUniversityJoiSchema = {
   body: Joi.object({
     name: Joi.string().trim().min(1).max(300).optional(),
@@ -180,6 +182,18 @@ const patchUniversityJoiSchema = {
     agreementPackageReference: Joi.string().trim().max(120).optional().allow(null, ''),
     agreementDispatchedAt: Joi.alternatives().try(Joi.date(), Joi.string().isoDate()).optional().allow(null),
     countersignedVerifiedAt: Joi.alternatives().try(Joi.date(), Joi.string().isoDate()).optional().allow(null),
+    flywirePaymentDestination: Joi.string().trim().max(120).optional().allow(null, ''),
+    programFeeRanges: Joi.object({
+      ugBusinessUsdYear: programFeeRangeValue.optional(),
+      ugStemUsdYear: programFeeRangeValue.optional(),
+      ugComputerScienceUsdYear: programFeeRangeValue.optional(),
+      pgBusinessUsdYear: programFeeRangeValue.optional(),
+      pgStemUsdYear: programFeeRangeValue.optional(),
+      pgComputerScienceUsdYear: programFeeRangeValue.optional(),
+    })
+      .unknown(true)
+      .optional()
+      .allow(null),
   }).min(1),
 };
 
@@ -240,9 +254,9 @@ const createAdminCourseJoiSchema = {
 const patchAdminCourseJoiSchema = {
   body: Joi.object({
     courseName: Joi.string().trim().min(1).max(500).optional(),
-    degree: Joi.string().trim().min(1).max(200).optional(),
-    fee: Joi.number().min(0).optional(),
-    duration: Joi.string().trim().min(1).max(120).optional(),
+    degree: Joi.string().trim().max(200).optional().allow('', null),
+    fee: Joi.number().min(0).optional().allow(null),
+    duration: Joi.string().trim().max(120).optional().allow('', null),
   }).or('courseName', 'degree', 'fee', 'duration'),
 };
 

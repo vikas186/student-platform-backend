@@ -31,17 +31,33 @@ const band = (country: string, lo: string, hi: string): string => {
   return `${code} ${lo}–${hi}`;
 };
 
-/** Curated career + salary bands (no DB table). Country pattern is matched with ILIKE contains. */
+/**
+ * Curated career + salary bands.
+ * Prefer level-specific rows (undergraduate vs postgraduate) — do not reuse the same
+ * senior titles for both UG and PG.
+ */
 export const CAREER_SALARY_REFERENCE: CareerReferenceRow[] = [
   // —— Business ——
   {
     fieldKey: 'business',
-    level: 'postgraduate',
-    countryPattern: 'canada',
+    level: 'undergraduate',
+    countryPattern: '',
     careers: [
-      { role: 'Financial Analyst', salaryRange: 'CAD 55,000–75,000' },
-      { role: 'Marketing Manager', salaryRange: 'CAD 60,000–85,000' },
-      { role: 'Management Consultant', salaryRange: 'CAD 70,000–100,000' },
+      { role: 'Business Analyst (graduate)', salaryRange: 'Varies by market' },
+      { role: 'Sales / Account Coordinator', salaryRange: 'Varies by market' },
+      { role: 'Junior Financial Analyst', salaryRange: 'Varies by market' },
+      { role: 'Marketing Assistant', salaryRange: 'Varies by market' },
+    ],
+  },
+  {
+    fieldKey: 'business',
+    level: 'postgraduate',
+    countryPattern: '',
+    careers: [
+      { role: 'Management Consultant', salaryRange: 'Varies by market' },
+      { role: 'Product / Strategy Manager', salaryRange: 'Varies by market' },
+      { role: 'Senior Financial Analyst', salaryRange: 'Varies by market' },
+      { role: 'Operations Manager', salaryRange: 'Varies by market' },
     ],
   },
   {
@@ -49,60 +65,101 @@ export const CAREER_SALARY_REFERENCE: CareerReferenceRow[] = [
     level: 'undergraduate',
     countryPattern: 'canada',
     careers: [
-      { role: 'Business Analyst', salaryRange: 'CAD 45,000–60,000' },
+      { role: 'Business Analyst (graduate)', salaryRange: 'CAD 45,000–60,000' },
       { role: 'Account Coordinator', salaryRange: 'CAD 40,000–55,000' },
+      { role: 'Junior Financial Analyst', salaryRange: 'CAD 48,000–62,000' },
     ],
   },
   {
     fieldKey: 'business',
-    level: 'any',
+    level: 'postgraduate',
+    countryPattern: 'canada',
+    careers: [
+      { role: 'Management Consultant', salaryRange: 'CAD 70,000–100,000' },
+      { role: 'Marketing Manager', salaryRange: 'CAD 60,000–85,000' },
+      { role: 'Senior Financial Analyst', salaryRange: 'CAD 65,000–90,000' },
+    ],
+  },
+  {
+    fieldKey: 'business',
+    level: 'undergraduate',
     countryPattern: 'united kingdom',
     careers: [
-      { role: 'Graduate Analyst', salaryRange: '£28,000–38,000' },
-      { role: 'Operations Associate', salaryRange: '£26,000–35,000' },
-      { role: 'Management Trainee', salaryRange: '£27,000–36,000' },
+      { role: 'Graduate Analyst', salaryRange: '£26,000–34,000' },
+      { role: 'Operations Associate', salaryRange: '£24,000–32,000' },
+      { role: 'Management Trainee', salaryRange: '£25,000–33,000' },
     ],
   },
   {
     fieldKey: 'business',
-    level: 'any',
+    level: 'postgraduate',
+    countryPattern: 'united kingdom',
+    careers: [
+      { role: 'Management Consultant', salaryRange: '£40,000–65,000' },
+      { role: 'Strategy / Product Analyst', salaryRange: '£38,000–58,000' },
+      { role: 'Finance Manager (entry)', salaryRange: '£42,000–60,000' },
+    ],
+  },
+  {
+    fieldKey: 'business',
+    level: 'undergraduate',
     countryPattern: 'australia',
     careers: [
-      { role: 'Business Analyst', salaryRange: 'AUD 65,000–90,000' },
-      { role: 'Marketing Coordinator', salaryRange: 'AUD 55,000–75,000' },
-      { role: 'Financial Analyst', salaryRange: 'AUD 70,000–95,000' },
+      { role: 'Graduate Business Analyst', salaryRange: 'AUD 55,000–72,000' },
+      { role: 'Marketing Coordinator', salaryRange: 'AUD 50,000–68,000' },
+      { role: 'Junior Financial Analyst', salaryRange: 'AUD 58,000–75,000' },
     ],
   },
   {
     fieldKey: 'business',
-    level: 'any',
+    level: 'postgraduate',
+    countryPattern: 'australia',
+    careers: [
+      { role: 'Management Consultant', salaryRange: 'AUD 85,000–120,000' },
+      { role: 'Marketing Manager', salaryRange: 'AUD 80,000–110,000' },
+      { role: 'Senior Financial Analyst', salaryRange: 'AUD 90,000–125,000' },
+    ],
+  },
+  {
+    fieldKey: 'business',
+    level: 'undergraduate',
     countryPattern: 'united states',
     careers: [
-      { role: 'Business Analyst', salaryRange: 'USD 55,000–85,000' },
-      { role: 'Marketing Associate', salaryRange: 'USD 50,000–75,000' },
-      { role: 'Financial Analyst', salaryRange: 'USD 60,000–95,000' },
+      { role: 'Business Analyst (associate)', salaryRange: 'USD 50,000–70,000' },
+      { role: 'Marketing Associate', salaryRange: 'USD 45,000–65,000' },
+      { role: 'Junior Financial Analyst', salaryRange: 'USD 55,000–75,000' },
     ],
   },
   {
     fieldKey: 'business',
-    level: 'any',
-    countryPattern: '',
+    level: 'postgraduate',
+    countryPattern: 'united states',
     careers: [
-      { role: 'Business Analyst', salaryRange: 'Varies by market' },
-      { role: 'Financial Analyst', salaryRange: 'Varies by market' },
-      { role: 'Marketing Associate', salaryRange: 'Varies by market' },
+      { role: 'Management Consultant', salaryRange: 'USD 85,000–140,000' },
+      { role: 'Product Manager', salaryRange: 'USD 90,000–145,000' },
+      { role: 'Senior Financial Analyst', salaryRange: 'USD 80,000–120,000' },
     ],
   },
 
   // —— Computer / tech ——
   {
     fieldKey: 'computer',
-    level: 'postgraduate',
-    countryPattern: 'canada',
+    level: 'undergraduate',
+    countryPattern: '',
     careers: [
-      { role: 'Software Engineer', salaryRange: 'CAD 75,000–110,000' },
-      { role: 'Data Scientist', salaryRange: 'CAD 80,000–120,000' },
-      { role: 'Product Manager', salaryRange: 'CAD 85,000–130,000' },
+      { role: 'Junior Software Developer', salaryRange: 'Varies by market' },
+      { role: 'IT Support / Systems Associate', salaryRange: 'Varies by market' },
+      { role: 'QA / Test Analyst', salaryRange: 'Varies by market' },
+    ],
+  },
+  {
+    fieldKey: 'computer',
+    level: 'postgraduate',
+    countryPattern: '',
+    careers: [
+      { role: 'Software Engineer', salaryRange: 'Varies by market' },
+      { role: 'Data Scientist / ML Engineer', salaryRange: 'Varies by market' },
+      { role: 'Solutions / Cloud Architect (associate)', salaryRange: 'Varies by market' },
     ],
   },
   {
@@ -112,196 +169,351 @@ export const CAREER_SALARY_REFERENCE: CareerReferenceRow[] = [
     careers: [
       { role: 'Junior Developer', salaryRange: 'CAD 55,000–75,000' },
       { role: 'IT Support Specialist', salaryRange: 'CAD 45,000–60,000' },
+      { role: 'QA Analyst', salaryRange: 'CAD 50,000–68,000' },
     ],
   },
   {
     fieldKey: 'computer',
-    level: 'any',
+    level: 'postgraduate',
+    countryPattern: 'canada',
+    careers: [
+      { role: 'Software Engineer', salaryRange: 'CAD 75,000–110,000' },
+      { role: 'Data Scientist', salaryRange: 'CAD 80,000–120,000' },
+      { role: 'Product Manager (tech)', salaryRange: 'CAD 85,000–130,000' },
+    ],
+  },
+  {
+    fieldKey: 'computer',
+    level: 'undergraduate',
     countryPattern: 'united kingdom',
     careers: [
-      { role: 'Software Developer', salaryRange: '£35,000–55,000' },
-      { role: 'Data Analyst', salaryRange: '£32,000–48,000' },
-      { role: 'IT Consultant', salaryRange: '£38,000–60,000' },
+      { role: 'Graduate Software Developer', salaryRange: '£28,000–40,000' },
+      { role: 'Junior Data Analyst', salaryRange: '£26,000–36,000' },
+      { role: 'IT Support Analyst', salaryRange: '£24,000–34,000' },
     ],
   },
   {
     fieldKey: 'computer',
-    level: 'any',
+    level: 'postgraduate',
+    countryPattern: 'united kingdom',
+    careers: [
+      { role: 'Software Engineer', salaryRange: '£42,000–65,000' },
+      { role: 'Data Scientist', salaryRange: '£45,000–70,000' },
+      { role: 'Cloud / DevOps Engineer', salaryRange: '£48,000–75,000' },
+    ],
+  },
+  {
+    fieldKey: 'computer',
+    level: 'undergraduate',
     countryPattern: 'australia',
     careers: [
-      { role: 'Software Engineer', salaryRange: 'AUD 85,000–120,000' },
-      { role: 'Data Analyst', salaryRange: 'AUD 75,000–100,000' },
-      { role: 'Cloud Engineer', salaryRange: 'AUD 90,000–130,000' },
+      { role: 'Graduate Software Developer', salaryRange: 'AUD 65,000–85,000' },
+      { role: 'Junior Data Analyst', salaryRange: 'AUD 60,000–78,000' },
+      { role: 'IT Support Analyst', salaryRange: 'AUD 55,000–72,000' },
     ],
   },
   {
     fieldKey: 'computer',
-    level: 'any',
+    level: 'postgraduate',
+    countryPattern: 'australia',
+    careers: [
+      { role: 'Software Engineer', salaryRange: 'AUD 95,000–135,000' },
+      { role: 'Data Scientist', salaryRange: 'AUD 100,000–140,000' },
+      { role: 'Cloud Engineer', salaryRange: 'AUD 105,000–145,000' },
+    ],
+  },
+  {
+    fieldKey: 'computer',
+    level: 'undergraduate',
     countryPattern: 'united states',
     careers: [
-      { role: 'Software Developer', salaryRange: 'USD 70,000–120,000' },
-      { role: 'Systems Analyst', salaryRange: 'USD 65,000–95,000' },
-      { role: 'Data Engineer', salaryRange: 'USD 85,000–130,000' },
+      { role: 'Junior Software Developer', salaryRange: 'USD 60,000–85,000' },
+      { role: 'Systems Analyst (associate)', salaryRange: 'USD 55,000–75,000' },
+      { role: 'QA Engineer', salaryRange: 'USD 55,000–80,000' },
     ],
   },
   {
     fieldKey: 'computer',
-    level: 'any',
-    countryPattern: '',
+    level: 'postgraduate',
+    countryPattern: 'united states',
     careers: [
-      { role: 'Software Developer', salaryRange: 'Varies by market' },
-      { role: 'Data Analyst', salaryRange: 'Varies by market' },
-      { role: 'IT Consultant', salaryRange: 'Varies by market' },
+      { role: 'Software Engineer', salaryRange: 'USD 95,000–150,000' },
+      { role: 'Data / ML Engineer', salaryRange: 'USD 100,000–160,000' },
+      { role: 'Solutions Architect (associate)', salaryRange: 'USD 110,000–165,000' },
     ],
   },
 
   // —— STEM / engineering ——
   {
     fieldKey: 'stem',
-    level: 'postgraduate',
-    countryPattern: 'australia',
-    careers: [
-      { role: 'Engineer', salaryRange: 'AUD 80,000–120,000' },
-      { role: 'Research Scientist', salaryRange: 'AUD 75,000–105,000' },
-    ],
-  },
-  {
-    fieldKey: 'stem',
-    level: 'any',
-    countryPattern: 'united kingdom',
-    careers: [
-      { role: 'Graduate Engineer', salaryRange: '£30,000–42,000' },
-      { role: 'Research Associate', salaryRange: '£32,000–45,000' },
-      { role: 'Project Engineer', salaryRange: '£35,000–50,000' },
-    ],
-  },
-  {
-    fieldKey: 'stem',
-    level: 'any',
-    countryPattern: 'united states',
-    careers: [
-      { role: 'Engineer', salaryRange: 'USD 70,000–110,000' },
-      { role: 'Research Associate', salaryRange: 'USD 55,000–85,000' },
-    ],
-  },
-  {
-    fieldKey: 'stem',
-    level: 'any',
+    level: 'undergraduate',
     countryPattern: '',
     careers: [
       { role: 'Graduate Engineer', salaryRange: 'Varies by market' },
-      { role: 'Research Associate', salaryRange: 'Varies by market' },
-      { role: 'Technical Analyst', salaryRange: 'Varies by market' },
+      { role: 'Engineering Technician / Associate', salaryRange: 'Varies by market' },
+      { role: 'Project Coordinator (engineering)', salaryRange: 'Varies by market' },
+    ],
+  },
+  {
+    fieldKey: 'stem',
+    level: 'postgraduate',
+    countryPattern: '',
+    careers: [
+      { role: 'Design / Project Engineer', salaryRange: 'Varies by market' },
+      { role: 'Research Scientist', salaryRange: 'Varies by market' },
+      { role: 'Engineering Manager (entry)', salaryRange: 'Varies by market' },
+    ],
+  },
+  {
+    fieldKey: 'stem',
+    level: 'undergraduate',
+    countryPattern: 'united kingdom',
+    careers: [
+      { role: 'Graduate Engineer', salaryRange: '£28,000–38,000' },
+      { role: 'Engineering Technician', salaryRange: '£26,000–35,000' },
+      { role: 'Junior Project Engineer', salaryRange: '£30,000–40,000' },
+    ],
+  },
+  {
+    fieldKey: 'stem',
+    level: 'postgraduate',
+    countryPattern: 'united kingdom',
+    careers: [
+      { role: 'Project Engineer', salaryRange: '£40,000–58,000' },
+      { role: 'Research Scientist', salaryRange: '£38,000–55,000' },
+      { role: 'Lead Design Engineer (associate)', salaryRange: '£45,000–65,000' },
+    ],
+  },
+  {
+    fieldKey: 'stem',
+    level: 'undergraduate',
+    countryPattern: 'australia',
+    careers: [
+      { role: 'Graduate Engineer', salaryRange: 'AUD 65,000–85,000' },
+      { role: 'Engineering Associate', salaryRange: 'AUD 60,000–78,000' },
+    ],
+  },
+  {
+    fieldKey: 'stem',
+    level: 'postgraduate',
+    countryPattern: 'australia',
+    careers: [
+      { role: 'Project Engineer', salaryRange: 'AUD 90,000–125,000' },
+      { role: 'Research Scientist', salaryRange: 'AUD 85,000–120,000' },
+    ],
+  },
+  {
+    fieldKey: 'stem',
+    level: 'undergraduate',
+    countryPattern: 'united states',
+    careers: [
+      { role: 'Graduate Engineer', salaryRange: 'USD 60,000–85,000' },
+      { role: 'Engineering Associate', salaryRange: 'USD 55,000–75,000' },
+    ],
+  },
+  {
+    fieldKey: 'stem',
+    level: 'postgraduate',
+    countryPattern: 'united states',
+    careers: [
+      { role: 'Project / Design Engineer', salaryRange: 'USD 85,000–125,000' },
+      { role: 'Research Scientist', salaryRange: 'USD 80,000–120,000' },
     ],
   },
 
   // —— Law ——
   {
     fieldKey: 'law',
-    level: 'any',
+    level: 'undergraduate',
+    countryPattern: '',
+    careers: [
+      { role: 'Paralegal / Legal Assistant', salaryRange: 'Varies by market' },
+      { role: 'Compliance Assistant', salaryRange: 'Varies by market' },
+      { role: 'Contracts Coordinator', salaryRange: 'Varies by market' },
+    ],
+  },
+  {
+    fieldKey: 'law',
+    level: 'postgraduate',
+    countryPattern: '',
+    careers: [
+      { role: 'Associate Lawyer / Counsel', salaryRange: 'Varies by market' },
+      { role: 'Compliance Manager', salaryRange: 'Varies by market' },
+      { role: 'Legal Advisor (in-house)', salaryRange: 'Varies by market' },
+    ],
+  },
+  {
+    fieldKey: 'law',
+    level: 'undergraduate',
     countryPattern: 'united kingdom',
     careers: [
-      { role: 'Solicitor (trainee / NQ)', salaryRange: '£32,000–55,000' },
-      { role: 'Corporate Paralegal', salaryRange: '£28,000–40,000' },
-      { role: 'Compliance Analyst', salaryRange: '£30,000–48,000' },
-      { role: 'Legal Advisor', salaryRange: '£35,000–55,000' },
+      { role: 'Paralegal', salaryRange: '£24,000–32,000' },
+      { role: 'Compliance Assistant', salaryRange: '£25,000–34,000' },
+      { role: 'Legal Administrator', salaryRange: '£23,000–30,000' },
     ],
   },
   {
     fieldKey: 'law',
-    level: 'any',
+    level: 'postgraduate',
+    countryPattern: 'united kingdom',
+    careers: [
+      { role: 'Solicitor (trainee / NQ)', salaryRange: '£38,000–65,000' },
+      { role: 'Compliance Analyst', salaryRange: '£35,000–55,000' },
+      { role: 'Legal Advisor', salaryRange: '£40,000–60,000' },
+    ],
+  },
+  {
+    fieldKey: 'law',
+    level: 'undergraduate',
     countryPattern: 'australia',
     careers: [
-      { role: 'Graduate Lawyer', salaryRange: 'AUD 70,000–95,000' },
-      { role: 'Paralegal', salaryRange: 'AUD 55,000–75,000' },
-      { role: 'Compliance Officer', salaryRange: 'AUD 75,000–100,000' },
+      { role: 'Paralegal', salaryRange: 'AUD 55,000–72,000' },
+      { role: 'Legal Assistant', salaryRange: 'AUD 50,000–68,000' },
     ],
   },
   {
     fieldKey: 'law',
-    level: 'any',
+    level: 'postgraduate',
+    countryPattern: 'australia',
+    careers: [
+      { role: 'Graduate Lawyer / Associate', salaryRange: 'AUD 80,000–110,000' },
+      { role: 'Compliance Officer', salaryRange: 'AUD 85,000–115,000' },
+    ],
+  },
+  {
+    fieldKey: 'law',
+    level: 'undergraduate',
     countryPattern: 'canada',
     careers: [
-      { role: 'Articling Student / Associate', salaryRange: 'CAD 55,000–85,000' },
-      { role: 'Legal Assistant', salaryRange: 'CAD 45,000–65,000' },
-      { role: 'Compliance Analyst', salaryRange: 'CAD 55,000–80,000' },
+      { role: 'Legal Assistant', salaryRange: 'CAD 42,000–58,000' },
+      { role: 'Paralegal (junior)', salaryRange: 'CAD 45,000–60,000' },
     ],
   },
   {
     fieldKey: 'law',
-    level: 'any',
+    level: 'postgraduate',
+    countryPattern: 'canada',
+    careers: [
+      { role: 'Articling Student / Associate', salaryRange: 'CAD 65,000–95,000' },
+      { role: 'Compliance Analyst', salaryRange: 'CAD 60,000–85,000' },
+    ],
+  },
+  {
+    fieldKey: 'law',
+    level: 'undergraduate',
     countryPattern: 'united states',
     careers: [
-      { role: 'Associate Attorney', salaryRange: 'USD 70,000–130,000' },
-      { role: 'Paralegal', salaryRange: 'USD 45,000–70,000' },
-      { role: 'Compliance Specialist', salaryRange: 'USD 60,000–95,000' },
+      { role: 'Paralegal', salaryRange: 'USD 42,000–62,000' },
+      { role: 'Legal Assistant', salaryRange: 'USD 40,000–58,000' },
     ],
   },
   {
     fieldKey: 'law',
-    level: 'any',
-    countryPattern: '',
+    level: 'postgraduate',
+    countryPattern: 'united states',
     careers: [
-      { role: 'Corporate Lawyer / Associate', salaryRange: 'Varies by market' },
-      { role: 'Compliance Analyst', salaryRange: 'Varies by market' },
-      { role: 'Legal Counsel (in-house)', salaryRange: 'Varies by market' },
-      { role: 'Paralegal', salaryRange: 'Varies by market' },
+      { role: 'Associate Attorney', salaryRange: 'USD 80,000–140,000' },
+      { role: 'Compliance Specialist', salaryRange: 'USD 70,000–105,000' },
     ],
   },
 
-  // —— Health / nursing ——
+  // —— Health ——
   {
     fieldKey: 'health',
-    level: 'any',
+    level: 'undergraduate',
+    countryPattern: '',
+    careers: [
+      { role: 'Registered Nurse (graduate)', salaryRange: 'Varies by market' },
+      { role: 'Healthcare Assistant / Coordinator', salaryRange: 'Varies by market' },
+      { role: 'Clinical Support Officer', salaryRange: 'Varies by market' },
+    ],
+  },
+  {
+    fieldKey: 'health',
+    level: 'postgraduate',
+    countryPattern: '',
+    careers: [
+      { role: 'Clinical Nurse Specialist', salaryRange: 'Varies by market' },
+      { role: 'Public Health Specialist', salaryRange: 'Varies by market' },
+      { role: 'Healthcare Manager', salaryRange: 'Varies by market' },
+    ],
+  },
+  {
+    fieldKey: 'health',
+    level: 'undergraduate',
     countryPattern: 'united kingdom',
     careers: [
-      { role: 'Registered Nurse', salaryRange: '£28,000–40,000' },
-      { role: 'Clinical Nurse Specialist', salaryRange: '£35,000–48,000' },
-      { role: 'Healthcare Coordinator', salaryRange: '£26,000–36,000' },
+      { role: 'Registered Nurse (Band 5)', salaryRange: '£28,000–36,000' },
+      { role: 'Healthcare Coordinator', salaryRange: '£24,000–32,000' },
     ],
   },
   {
     fieldKey: 'health',
-    level: 'any',
+    level: 'postgraduate',
+    countryPattern: 'united kingdom',
+    careers: [
+      { role: 'Clinical Nurse Specialist', salaryRange: '£38,000–52,000' },
+      { role: 'Public Health Analyst', salaryRange: '£35,000–48,000' },
+      { role: 'Healthcare Manager', salaryRange: '£40,000–55,000' },
+    ],
+  },
+  {
+    fieldKey: 'health',
+    level: 'undergraduate',
     countryPattern: 'australia',
     careers: [
-      { role: 'Registered Nurse', salaryRange: 'AUD 70,000–95,000' },
-      { role: 'Clinical Specialist', salaryRange: 'AUD 80,000–110,000' },
-      { role: 'Allied Health Professional', salaryRange: 'AUD 65,000–90,000' },
+      { role: 'Registered Nurse', salaryRange: 'AUD 65,000–85,000' },
+      { role: 'Allied Health Graduate', salaryRange: 'AUD 60,000–80,000' },
     ],
   },
   {
     fieldKey: 'health',
-    level: 'any',
-    countryPattern: '',
+    level: 'postgraduate',
+    countryPattern: 'australia',
     careers: [
-      { role: 'Registered Nurse', salaryRange: 'Varies by market' },
-      { role: 'Clinical Specialist', salaryRange: 'Varies by market' },
-      { role: 'Healthcare Administrator', salaryRange: 'Varies by market' },
+      { role: 'Clinical Specialist', salaryRange: 'AUD 90,000–120,000' },
+      { role: 'Public Health Specialist', salaryRange: 'AUD 85,000–115,000' },
     ],
   },
 
-  // —— Arts / media / design ——
+  // —— Arts / education ——
   {
     fieldKey: 'arts',
-    level: 'any',
+    level: 'undergraduate',
     countryPattern: '',
     careers: [
-      { role: 'Content Designer', salaryRange: 'Varies by market' },
-      { role: 'Communications Officer', salaryRange: 'Varies by market' },
-      { role: 'Creative Producer', salaryRange: 'Varies by market' },
+      { role: 'Content / Communications Assistant', salaryRange: 'Varies by market' },
+      { role: 'Junior Designer', salaryRange: 'Varies by market' },
+      { role: 'Social Media Coordinator', salaryRange: 'Varies by market' },
     ],
   },
-
-  // —— Education ——
+  {
+    fieldKey: 'arts',
+    level: 'postgraduate',
+    countryPattern: '',
+    careers: [
+      { role: 'Creative Producer', salaryRange: 'Varies by market' },
+      { role: 'Communications Manager', salaryRange: 'Varies by market' },
+      { role: 'Design Lead (associate)', salaryRange: 'Varies by market' },
+    ],
+  },
   {
     fieldKey: 'education',
-    level: 'any',
+    level: 'undergraduate',
+    countryPattern: '',
+    careers: [
+      { role: 'Teaching Assistant / Graduate Teacher', salaryRange: 'Varies by market' },
+      { role: 'Education Support Officer', salaryRange: 'Varies by market' },
+    ],
+  },
+  {
+    fieldKey: 'education',
+    level: 'postgraduate',
     countryPattern: '',
     careers: [
       { role: 'Teacher / Lecturer', salaryRange: 'Varies by market' },
       { role: 'Curriculum Specialist', salaryRange: 'Varies by market' },
-      { role: 'Education Coordinator', salaryRange: 'Varies by market' },
+      { role: 'Education Program Manager', salaryRange: 'Varies by market' },
     ],
   },
 ];
@@ -326,63 +538,125 @@ const normalizeFieldKey = (field: string): string => {
   return 'any';
 };
 
-/** Field-specific roles when the curated table has no hit — never use vague placeholders. */
-const defaultCareersForField = (fieldKey: string, country: string): CareerEntry[] => {
+const defaultCareersForField = (
+  fieldKey: string,
+  country: string,
+  level: 'undergraduate' | 'postgraduate' | 'any',
+): CareerEntry[] => {
   const c = country || 'target country';
+  const ug = level !== 'postgraduate';
   switch (fieldKey) {
     case 'law':
-      return [
-        { role: 'Corporate / Commercial Lawyer', salaryRange: band(c, '32,000', '60,000') },
-        { role: 'Compliance Analyst', salaryRange: band(c, '30,000', '50,000') },
-        { role: 'Legal Advisor (in-house)', salaryRange: band(c, '35,000', '65,000') },
-      ];
+      return ug
+        ? [
+            { role: 'Paralegal / Legal Assistant', salaryRange: band(c, '24,000', '38,000') },
+            { role: 'Compliance Assistant', salaryRange: band(c, '25,000', '40,000') },
+            { role: 'Contracts Coordinator', salaryRange: band(c, '26,000', '42,000') },
+          ]
+        : [
+            { role: 'Associate Lawyer / Counsel', salaryRange: band(c, '40,000', '75,000') },
+            { role: 'Compliance Manager', salaryRange: band(c, '38,000', '65,000') },
+            { role: 'Legal Advisor (in-house)', salaryRange: band(c, '42,000', '80,000') },
+          ];
     case 'health':
-      return [
-        { role: 'Registered Nurse', salaryRange: band(c, '28,000', '45,000') },
-        { role: 'Clinical Specialist', salaryRange: band(c, '32,000', '50,000') },
-        { role: 'Healthcare Coordinator', salaryRange: band(c, '26,000', '40,000') },
-      ];
+      return ug
+        ? [
+            { role: 'Registered Nurse (graduate)', salaryRange: band(c, '28,000', '42,000') },
+            { role: 'Healthcare Coordinator', salaryRange: band(c, '24,000', '36,000') },
+            { role: 'Clinical Support Officer', salaryRange: band(c, '25,000', '38,000') },
+          ]
+        : [
+            { role: 'Clinical Nurse Specialist', salaryRange: band(c, '38,000', '55,000') },
+            { role: 'Public Health Specialist', salaryRange: band(c, '36,000', '52,000') },
+            { role: 'Healthcare Manager', salaryRange: band(c, '40,000', '60,000') },
+          ];
     case 'computer':
-      return [
-        { role: 'Software Developer', salaryRange: band(c, '35,000', '70,000') },
-        { role: 'Data Analyst', salaryRange: band(c, '32,000', '60,000') },
-        { role: 'IT Consultant', salaryRange: band(c, '38,000', '75,000') },
-      ];
+      return ug
+        ? [
+            { role: 'Junior Software Developer', salaryRange: band(c, '28,000', '48,000') },
+            { role: 'IT Support / Systems Associate', salaryRange: band(c, '24,000', '40,000') },
+            { role: 'QA / Test Analyst', salaryRange: band(c, '26,000', '44,000') },
+          ]
+        : [
+            { role: 'Software Engineer', salaryRange: band(c, '45,000', '85,000') },
+            { role: 'Data Scientist / ML Engineer', salaryRange: band(c, '48,000', '90,000') },
+            { role: 'Cloud / Solutions Engineer', salaryRange: band(c, '50,000', '95,000') },
+          ];
     case 'business':
-      return [
-        { role: 'Business Analyst', salaryRange: band(c, '28,000', '55,000') },
-        { role: 'Financial Analyst', salaryRange: band(c, '30,000', '60,000') },
-        { role: 'Marketing Associate', salaryRange: band(c, '26,000', '48,000') },
-      ];
+      return ug
+        ? [
+            { role: 'Business Analyst (graduate)', salaryRange: band(c, '26,000', '42,000') },
+            { role: 'Junior Financial Analyst', salaryRange: band(c, '28,000', '45,000') },
+            { role: 'Marketing Assistant', salaryRange: band(c, '24,000', '38,000') },
+          ]
+        : [
+            { role: 'Management Consultant', salaryRange: band(c, '42,000', '75,000') },
+            { role: 'Product / Strategy Manager', salaryRange: band(c, '45,000', '80,000') },
+            { role: 'Senior Financial Analyst', salaryRange: band(c, '40,000', '70,000') },
+          ];
     case 'stem':
-      return [
-        { role: 'Graduate Engineer', salaryRange: band(c, '30,000', '55,000') },
-        { role: 'Research Associate', salaryRange: band(c, '28,000', '50,000') },
-        { role: 'Technical Project Coordinator', salaryRange: band(c, '32,000', '58,000') },
-      ];
+      return ug
+        ? [
+            { role: 'Graduate Engineer', salaryRange: band(c, '28,000', '45,000') },
+            { role: 'Engineering Associate', salaryRange: band(c, '26,000', '42,000') },
+            { role: 'Project Coordinator (engineering)', salaryRange: band(c, '28,000', '44,000') },
+          ]
+        : [
+            { role: 'Project / Design Engineer', salaryRange: band(c, '42,000', '70,000') },
+            { role: 'Research Scientist', salaryRange: band(c, '40,000', '65,000') },
+            { role: 'Engineering Lead (associate)', salaryRange: band(c, '48,000', '80,000') },
+          ];
     case 'education':
-      return [
-        { role: 'Teacher / Lecturer', salaryRange: band(c, '28,000', '48,000') },
-        { role: 'Education Coordinator', salaryRange: band(c, '26,000', '42,000') },
-      ];
+      return ug
+        ? [
+            { role: 'Teaching Assistant / Graduate Teacher', salaryRange: band(c, '24,000', '38,000') },
+            { role: 'Education Support Officer', salaryRange: band(c, '22,000', '35,000') },
+          ]
+        : [
+            { role: 'Teacher / Lecturer', salaryRange: band(c, '32,000', '55,000') },
+            { role: 'Curriculum Specialist', salaryRange: band(c, '35,000', '58,000') },
+            { role: 'Education Program Manager', salaryRange: band(c, '38,000', '62,000') },
+          ];
     case 'arts':
-      return [
-        { role: 'Content / Communications Specialist', salaryRange: band(c, '25,000', '45,000') },
-        { role: 'Creative Producer', salaryRange: band(c, '28,000', '50,000') },
-      ];
+      return ug
+        ? [
+            { role: 'Content / Communications Assistant', salaryRange: band(c, '22,000', '36,000') },
+            { role: 'Junior Designer', salaryRange: band(c, '24,000', '38,000') },
+          ]
+        : [
+            { role: 'Creative Producer', salaryRange: band(c, '32,000', '55,000') },
+            { role: 'Communications Manager', salaryRange: band(c, '35,000', '58,000') },
+          ];
     default:
-      return [
-        { role: 'Policy / Research Analyst', salaryRange: band(c, '28,000', '50,000') },
-        { role: 'Project Coordinator', salaryRange: band(c, '26,000', '45,000') },
-        { role: 'Client Success Associate', salaryRange: band(c, '25,000', '42,000') },
-      ];
+      return ug
+        ? [
+            { role: 'Research / Policy Assistant', salaryRange: band(c, '24,000', '38,000') },
+            { role: 'Project Coordinator', salaryRange: band(c, '25,000', '40,000') },
+            { role: 'Client Success Associate', salaryRange: band(c, '23,000', '36,000') },
+          ]
+        : [
+            { role: 'Policy / Research Analyst', salaryRange: band(c, '35,000', '58,000') },
+            { role: 'Program Manager', salaryRange: band(c, '38,000', '62,000') },
+            { role: 'Strategy Associate', salaryRange: band(c, '40,000', '65,000') },
+          ];
   }
 };
 
 const normalizeLevel = (level: string): 'undergraduate' | 'postgraduate' | 'any' => {
-  if (/undergrad|bachelor|ug|bsc|ba\b|llb/i.test(level)) return 'undergraduate';
-  if (/postgrad|master|pg|graduate|mba|msc|llm|ma\b/i.test(level)) return 'postgraduate';
+  const l = level.toLowerCase().trim();
+  if (/undergrad|bachelor|^ug$|\bug\b|bsc|\bba\b|llb|b\.?eng|bba/i.test(l)) return 'undergraduate';
+  if (/postgrad|master|^pg$|\bpg\b|mba|msc|llm|\bma\b|phd|doctoral|meng|mph/i.test(l)) {
+    return 'postgraduate';
+  }
+  // Bare "graduate" (not undergraduate) → postgraduate
+  if (/\bgraduate\b/i.test(l) && !/under/i.test(l)) return 'postgraduate';
   return 'any';
+};
+
+/** Infer UG/PG from a program title when the UI level is missing or "any". */
+const levelFromCourseName = (courseName: string | null | undefined): 'undergraduate' | 'postgraduate' | 'any' => {
+  if (!courseName?.trim()) return 'any';
+  return normalizeLevel(courseName);
 };
 
 const normalizeCountryForLookup = (country: string): string => {
@@ -403,9 +677,19 @@ const normalizeCountryForLookup = (country: string): string => {
 const isVaguePlaceholderRole = (role: string): boolean =>
   /graduate professional|industry specialist/i.test(role);
 
+const countryMatches = (countryLower: string, pattern: string): boolean => {
+  if (!pattern) return true;
+  const p = pattern.toLowerCase();
+  return (
+    countryLower === p ||
+    (p.length >= 4 && countryLower.includes(p)) ||
+    (countryLower.length >= 4 && p.includes(countryLower))
+  );
+};
+
 /**
  * Resolve 2–4 concrete career roles for Course Mapping cards.
- * Infers field from the student query and optional course title / scrape tags.
+ * Undergraduate and postgraduate return different seniority / salary bands.
  */
 export const lookupCareers = (
   field: string,
@@ -423,35 +707,49 @@ export const lookupCareers = (
         ? inferredFromCourse
         : 'any';
 
-  const lvl = normalizeLevel(level);
+  let lvl = normalizeLevel(level);
+  if (lvl === 'any') {
+    lvl = levelFromCourseName(courseName);
+  }
   const countryLower = normalizeCountryForLookup(country);
 
-  const matches = CAREER_SALARY_REFERENCE.filter(row => {
-    // When we know the field, only use that field's rows (not a global dump).
-    const fieldOkStrict = fieldKey === 'any' ? row.fieldKey === 'any' : row.fieldKey === fieldKey;
-    const levelOk = row.level === lvl || row.level === 'any';
-    if (!row.countryPattern) {
-      return fieldOkStrict && levelOk;
-    }
-    const pattern = row.countryPattern.toLowerCase();
-    const countryOk =
-      countryLower === pattern ||
-      (pattern.length >= 4 && countryLower.includes(pattern)) ||
-      (countryLower.length >= 4 && pattern.includes(countryLower));
-    return fieldOkStrict && levelOk && countryOk;
-  });
+  const fieldRows = CAREER_SALARY_REFERENCE.filter(row =>
+    fieldKey === 'any' ? row.fieldKey === 'any' || row.fieldKey === 'business' : row.fieldKey === fieldKey,
+  );
+
+  // 1) Exact level + country (or exact level + global)
+  // 2) Never fall back to the opposite level when UG/PG is known
+  const pickRows = (wantLevel: 'undergraduate' | 'postgraduate' | 'any') => {
+    const exactCountry = fieldRows.filter(
+      row => row.level === wantLevel && row.countryPattern && countryMatches(countryLower, row.countryPattern),
+    );
+    if (exactCountry.length) return exactCountry;
+    return fieldRows.filter(row => row.level === wantLevel && !row.countryPattern);
+  };
+
+  let matches: CareerReferenceRow[] = [];
+  if (lvl === 'undergraduate' || lvl === 'postgraduate') {
+    matches = pickRows(lvl);
+  } else {
+    matches = [
+      ...fieldRows.filter(row => row.countryPattern && countryMatches(countryLower, row.countryPattern)),
+      ...fieldRows.filter(row => !row.countryPattern),
+    ];
+  }
 
   matches.sort((a, b) => {
     const aSpecific = a.countryPattern ? 1 : 0;
     const bSpecific = b.countryPattern ? 1 : 0;
     if (bSpecific !== aSpecific) return bSpecific - aSpecific;
-    const aLevel = a.level === lvl ? 1 : 0;
-    const bLevel = b.level === lvl ? 1 : 0;
+    const aLevel = a.level === lvl ? 2 : a.level === 'any' ? 1 : 0;
+    const bLevel = b.level === lvl ? 2 : b.level === 'any' ? 1 : 0;
     return bLevel - aLevel;
   });
 
   const fromRef =
-    matches.length > 0 ? matches[0].careers : defaultCareersForField(fieldKey, country);
+    matches.length > 0
+      ? matches[0].careers
+      : defaultCareersForField(fieldKey, country, lvl === 'any' ? 'undergraduate' : lvl);
 
   const seen = new Set<string>();
   const merged: CareerEntry[] = [];
@@ -465,9 +763,12 @@ export const lookupCareers = (
 
   for (const c of fromRef) push(c);
 
+  // Extra scrape tags only if they don't collide with the wrong seniority for known levels
   for (const tag of extraRoles) {
     const role = tag.trim();
     if (!role || isVaguePlaceholderRole(role)) continue;
+    if (lvl === 'undergraduate' && /\b(director|vp|chief|head of|principal)\b/i.test(role)) continue;
+    if (lvl === 'postgraduate' && /\b(intern|trainee|assistant|junior support)\b/i.test(role)) continue;
     push({
       role,
       salaryRange: fromRef[0]?.salaryRange ?? band(country, '28,000', '55,000'),
@@ -475,7 +776,9 @@ export const lookupCareers = (
   }
 
   if (merged.length < 2) {
-    for (const c of defaultCareersForField(fieldKey, country)) push(c);
+    for (const c of defaultCareersForField(fieldKey, country, lvl === 'any' ? 'undergraduate' : lvl)) {
+      push(c);
+    }
   }
 
   return merged.slice(0, 4);
