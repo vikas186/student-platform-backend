@@ -72,7 +72,7 @@ export const buildPublicSuggestions = (
       return {
         title: c.courseName,
         feeBand: formatFeeBand(c.fee, c.feeRange, feeCountry),
-        careers: lookupCareers(input.field, input.level, input.country, c.careerTags),
+        careers: lookupCareers(input.field, input.level, input.country, c.careerTags, c.courseName),
         matchReasons,
         matchScore: c.rerankScore,
         university: null as null,
@@ -103,7 +103,7 @@ export const buildAgentPathways = (
         universityId: c.universityId,
         courseId: c.courseId,
         feeBand: formatFeeBand(c.fee, c.feeRange, feeCountry),
-        careers: lookupCareers(input.field, input.level, input.country, c.careerTags),
+        careers: lookupCareers(input.field, input.level, input.country, c.careerTags, c.courseName),
         commissionPercent: c.commissionPercent,
         matchReasons,
         matchScore: c.rerankScore,
