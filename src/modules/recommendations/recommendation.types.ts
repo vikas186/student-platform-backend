@@ -59,6 +59,11 @@ export type PublicMatchBody = {
 export type AgentMatchBody = {
   country: string;
   programFocus: string;
+  /** Academic level from Discovery UI (undergrad / postgrad / high_school). */
+  level?: string;
+  score?: number;
+  budget?: number | string;
+  intake?: string;
   limit?: number;
 };
 

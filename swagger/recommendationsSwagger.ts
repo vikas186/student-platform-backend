@@ -49,6 +49,10 @@
  *             properties:
  *               country: { type: string }
  *               programFocus: { type: string }
+ *               level: { type: string, description: Academic level from Discovery (undergrad/postgrad/high_school) }
+ *               score: { type: number }
+ *               budget: { oneOf: [{ type: number }, { type: string }] }
+ *               intake: { type: string }
  *               limit: { type: integer, minimum: 1, maximum: 4, default: 2 }
  *     responses:
  *       200:

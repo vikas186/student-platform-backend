@@ -69,6 +69,13 @@ export const looksLikeProgramAsCountry = (value: string): boolean => {
   return false;
 };
 
+/** Placeholder / junk destination labels that should not appear as country chips. */
+export const isPlaceholderCatalogCountry = (value: string): boolean => {
+  const v = value.trim();
+  if (!v) return true;
+  return /^(general|international|mixed)(\b|\/|$)/i.test(v);
+};
+
 const parseCountriesQuery = (query: PublicUniversitiesQuery): string[] => {
   const fromList = String(query.countries ?? '')
     .split(',')
@@ -94,7 +101,7 @@ export const listPublicCatalogCountries = async () => {
 
   const countries = rows
     .map(r => String((r as { country?: string }).country ?? '').trim())
-    .filter(c => c && !looksLikeProgramAsCountry(c));
+    .filter(c => c && !looksLikeProgramAsCountry(c) && !isPlaceholderCatalogCountry(c));
 
   const seen = new Set<string>();
   const unique: string[] = [];

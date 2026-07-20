@@ -287,18 +287,25 @@ export const normalizeAgentInput = (body: AgentMatchBody): NormalizedMatchInput 
   const country = body.country.trim();
   const field = body.programFocus.trim();
   const words = programFocusWords(field);
-  // Infer band from free-text focus when agent mentions MBA / masters / bachelor etc.
-  const wantedBand = wantedBandFromLevel(field);
+  const levelRaw = body.level?.trim() || '';
+  // Prefer explicit Discovery level chips; fall back to cues in program focus (MBA, BSc, …).
+  const wantedBand =
+    levelRaw && wantedBandFromLevel(levelRaw) !== 'any'
+      ? wantedBandFromLevel(levelRaw)
+      : wantedBandFromLevel(field);
+  const level = levelRaw || (wantedBand === 'any' ? 'any' : wantedBand);
+  const budget = parseBudget(body.budget);
+  const score = body.score != null && Number.isFinite(body.score) ? body.score : null;
   const countryPatterns = countrySearchPatterns(country);
 
   return {
     audience: 'agent',
-    level: wantedBand === 'any' ? 'any' : wantedBand,
+    level,
     field,
     country,
-    score: null,
-    budget: null,
-    intake: null,
+    score,
+    budget,
+    intake: body.intake?.trim() || null,
     fieldKeywords: fieldKeywords(field),
     levelKeywords: wantedBand === 'any' ? [] : levelKeywords(wantedBand),
     wantedBand,
