@@ -396,9 +396,24 @@ export function alignFeeRangeCurrency(
 ): string | null {
   const text = (feeRange || '').trim();
   if (!text) return null;
+  const countryNorm = (country || '').trim().toLowerCase();
+  // Placeholder destinations must not rewrite real currencies (EUR/GBP/etc.) to USD.
+  if (
+    !countryNorm ||
+    countryNorm === 'general' ||
+    countryNorm === 'mixed' ||
+    countryNorm.startsWith('mixed/') ||
+    countryNorm === 'international'
+  ) {
+    return text;
+  }
   const wanted = currencyCodeForCountry(country);
   const replaced = text.replace(/\b(NZD|AUD|USD|GBP|CAD|EUR|CHF|SGD|INR|AED|HKD|JPY)\b/i, wanted);
   if (replaced !== text) return replaced;
+  // Bare "$15,200/year" → "EUR 15,200/year" when destination is not USD.
+  if (wanted !== 'USD' && /^\$\s*\d/.test(text)) {
+    return text.replace(/^\$\s*/, `${wanted} `);
+  }
   if (!CURRENCY_IN_TEXT.test(text) && /\d/.test(text)) {
     return `${wanted} ${text.replace(/\/year$/i, '').trim()}/year`.replace(/\/year\/year$/i, '/year');
   }

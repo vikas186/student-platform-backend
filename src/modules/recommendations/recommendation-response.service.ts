@@ -10,6 +10,45 @@ import type {
 import { RECOMMENDATION_DISCLAIMER } from './recommendation.types';
 import type { LlmPick } from './recommendation-llm.service';
 
+/** Prefer a real destination country over catalog placeholder "General". */
+const resolveFeeCountry = (
+  candidateCountry: string | null | undefined,
+  inputCountry: string | null | undefined,
+  universityName?: string | null,
+): string | null => {
+  const c = (candidateCountry || '').trim();
+  const i = (inputCountry || '').trim();
+  const isPlaceholder = (v: string) =>
+    !v || /^(general|international|mixed)(\b|\/)/i.test(v) || looksLikeProgramCountry(v);
+  if (c && !isPlaceholder(c)) return c;
+  if (i && !isPlaceholder(i)) return i;
+  const fromName = inferCountryFromUniversityName(universityName);
+  if (fromName) return fromName;
+  return c || i || null;
+};
+
+const looksLikeProgramCountry = (v: string): boolean =>
+  /\(Hons\)|Foundation Year|Bachelor of|Master of/i.test(v) || v.length > 64;
+
+const inferCountryFromUniversityName = (name: string | null | undefined): string | null => {
+  const n = (name || '').toLowerCase();
+  if (!n) return null;
+  if (/germany|berlin|munich|hamburg|frankfurt/.test(n)) return 'Germany';
+  if (/france|paris|lyon/.test(n)) return 'France';
+  if (/netherlands|amsterdam|delft/.test(n)) return 'Netherlands';
+  if (/united kingdom|\buk\b|london|manchester|edinburgh|scotland|england/.test(n)) {
+    return 'United Kingdom';
+  }
+  if (/australia|sydney|melbourne|brisbane/.test(n)) return 'Australia';
+  if (/canada|toronto|vancouver|montreal/.test(n)) return 'Canada';
+  if (/new zealand|auckland|wellington/.test(n)) return 'New Zealand';
+  if (/united states|\busa\b|new york|boston|california/.test(n)) return 'USA';
+  if (/ireland|dublin/.test(n)) return 'Ireland';
+  if (/singapore/.test(n)) return 'Singapore';
+  if (/switzerland|zurich|zürich/.test(n)) return 'Switzerland';
+  return null;
+};
+
 export const buildPublicSuggestions = (
   picks: LlmPick[],
   candidates: RecommendationCandidate[],
@@ -25,9 +64,10 @@ export const buildPublicSuggestions = (
       if (c.scholarshipHint && !matchReasons.some(r => /scholarship/i.test(r))) {
         matchReasons.push(`Scholarship: ${c.scholarshipHint}`);
       }
+      const feeCountry = resolveFeeCountry(c.country, input.country, c.universityName);
       return {
         title: c.courseName,
-        feeBand: formatFeeBand(c.fee, c.feeRange),
+        feeBand: formatFeeBand(c.fee, c.feeRange, feeCountry),
         careers: lookupCareers(input.field, input.level, input.country, c.careerTags),
         matchReasons,
         matchScore: c.rerankScore,
@@ -52,12 +92,13 @@ export const buildAgentPathways = (
       if (c.scholarshipHint && !matchReasons.some(r => /scholarship/i.test(r))) {
         matchReasons.push(`Scholarship: ${c.scholarshipHint}`);
       }
+      const feeCountry = resolveFeeCountry(c.country, input.country, c.universityName);
       return {
         title: c.courseName,
         universityName: c.universityName,
         universityId: c.universityId,
         courseId: c.courseId,
-        feeBand: formatFeeBand(c.fee, c.feeRange),
+        feeBand: formatFeeBand(c.fee, c.feeRange, feeCountry),
         careers: lookupCareers(input.field, input.level, input.country, c.careerTags),
         commissionPercent: c.commissionPercent,
         matchReasons,

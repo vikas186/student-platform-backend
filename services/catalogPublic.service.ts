@@ -323,9 +323,7 @@ export const listPublicUniversitiesWithPrograms = async (query: PublicUniversiti
         country: string;
         programFeeRanges: Record<string, unknown> | null;
       };
-      if (looksLikeProgramAsCountry(bestCountry || '') && !looksLikeProgramAsCountry(p.country || '')) {
-        bestCountry = p.country;
-      }
+      bestCountry = pickBetterCountry(bestCountry || '', p.country || '');
       if (!mergedFeeRanges && p.programFeeRanges) mergedFeeRanges = p.programFeeRanges;
     }
 
@@ -342,7 +340,6 @@ export const listPublicUniversitiesWithPrograms = async (query: PublicUniversiti
     );
 
     const withCurrency = programs.map(p => {
-      if (p.source !== 'course') return p;
       const aligned = alignFeeRangeCurrency(p.feeRange, bestCountry);
       if (!aligned || aligned === p.feeRange) return p;
       return {
@@ -397,6 +394,10 @@ const pickBetterCountry = (a: string, b: string): string => {
   const bOk = !looksLikeProgramAsCountry(b || '') && (b || '').trim();
   if (aOk && !bOk) return a;
   if (bOk && !aOk) return b;
+  const aGeneral = /^(general|international|mixed)(\b|\/)/i.test((a || '').trim());
+  const bGeneral = /^(general|international|mixed)(\b|\/)/i.test((b || '').trim());
+  if (aOk && bOk && aGeneral && !bGeneral) return b;
+  if (aOk && bOk && bGeneral && !aGeneral) return a;
   // Prefer a real destination over the catalog-import default "United Kingdom".
   const aDefault = /^united kingdom$/i.test((a || '').trim());
   const bDefault = /^united kingdom$/i.test((b || '').trim());

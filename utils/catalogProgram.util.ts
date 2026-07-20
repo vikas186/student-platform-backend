@@ -134,20 +134,20 @@ export const parseFeeNumber = (value: unknown): number | null => {
   return match ? Number(match[0]) : null;
 };
 
-export const formatFeeBand = (
+export function formatFeeBand(
   fee: number | null,
   feeRange?: string | null,
   country?: string | null,
-): string => {
+): string {
   if (feeRange?.trim()) {
     return alignFeeRangeCurrency(feeRange, country) || feeRange.trim();
   }
-  if (fee != null && Number.isFinite(fee)) {
+  if (fee != null && Number.isFinite(fee) && fee > 0) {
     const code = currencyCodeForCountry(country);
     return `${code} ${Math.round(fee).toLocaleString('en-US')}/year`;
   }
   return 'Contact for fee details';
-};
+}
 
 const asFiniteNumber = (value: unknown): number | null => {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
@@ -242,11 +242,15 @@ export const mapDbCourse = (
 ): PublicProgram => {
   const rawRange = course.admissionRequirements?.feeRange?.trim() || null;
   const feeRange = alignFeeRangeCurrency(rawRange, country) || rawRange;
+  const feeNum =
+    typeof course.fee === 'number' && Number.isFinite(course.fee) && course.fee > 0
+      ? course.fee
+      : null;
   return {
     id: course.id,
     courseName: course.courseName,
     degree: course.degree,
-    fee: course.fee,
+    fee: feeNum,
     feeRange,
     duration: course.duration,
     source: 'course',
@@ -269,19 +273,25 @@ export const mapScrapedCourse = (
     normalizedRequirements?: Record<string, unknown> | null;
   },
   universityAdmissionFallback?: string | null,
+  country?: string | null,
 ): PublicProgram => {
   const normTuition = course.normalizedTuition ?? {};
   const amount = asFiniteNumber(normTuition.amount);
   const minAmount = asFiniteNumber(normTuition.minAmount);
   const maxAmount = asFiniteNumber(normTuition.maxAmount);
-  const currency = typeof normTuition.currency === 'string' ? normTuition.currency : 'USD';
+  const storedCurrency =
+    typeof normTuition.currency === 'string' && normTuition.currency.trim()
+      ? String(normTuition.currency).trim().toUpperCase()
+      : null;
+  const currency = storedCurrency || currencyCodeForCountry(country);
 
   let feeRange = course.tuitionFee || null;
   if (minAmount != null && maxAmount != null) {
     feeRange = `${currency} ${Math.round(minAmount).toLocaleString('en-US')}–${Math.round(maxAmount).toLocaleString('en-US')}/year`;
-  } else if (amount != null) {
+  } else if (amount != null && amount > 0) {
     feeRange = `${currency} ${Math.round(amount).toLocaleString('en-US')}/year`;
   }
+  feeRange = alignFeeRangeCurrency(feeRange, country) || feeRange;
 
   let admissionRequirements = buildAdmissionRequirementsFromScrape(course);
   if (!admissionRequirements && universityAdmissionFallback?.trim()) {
@@ -291,11 +301,19 @@ export const mapScrapedCourse = (
     });
   }
 
+  const fee =
+    amount != null && amount > 0
+      ? amount
+      : (() => {
+          const parsed = parseFeeNumber(course.tuitionFee);
+          return parsed != null && parsed > 0 ? parsed : null;
+        })();
+
   return {
     id: course.id,
     courseName: course.courseName,
     degree: course.studyLevel || 'Program',
-    fee: amount ?? parseFeeNumber(course.tuitionFee),
+    fee,
     feeRange,
     duration: course.duration || '—',
     source: 'scrape',
@@ -446,7 +464,12 @@ export const dedupePrograms = (programs: PublicProgram[]): PublicProgram[] => {
 
     byKey.set(key, {
       ...winner,
-      fee: winner.fee ?? loser.fee,
+      fee:
+        winner.fee != null && Number.isFinite(winner.fee) && winner.fee > 0
+          ? winner.fee
+          : loser.fee != null && Number.isFinite(loser.fee) && loser.fee > 0
+            ? loser.fee
+            : winner.fee ?? loser.fee ?? null,
       feeRange: winner.feeRange?.trim() ? winner.feeRange : loser.feeRange ?? null,
       duration:
         winner.duration && winner.duration !== '—' ? winner.duration : loser.duration || winner.duration,
@@ -506,7 +529,7 @@ export const buildProgramsForUniversity = (
   // (catalog `course` source wins; admission/fee gaps may be filled from scrape).
   const fromScrape = scrapedCourses
     .filter(row => namesMatch(catalogName, row.universityName))
-    .map(row => mapScrapedCourse(row, uniAdmissionFor(row.universityName)));
+    .map(row => mapScrapedCourse(row, uniAdmissionFor(row.universityName), country));
 
   const namedPrograms = dedupePrograms([...fromDb, ...fromScrape]);
   if (namedPrograms.length > 0) return namedPrograms;

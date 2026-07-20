@@ -268,12 +268,16 @@ export const buildCandidatePool = async (input: NormalizedMatchInput): Promise<R
       degree: string;
       fee: number;
       duration: string;
+      admissionRequirements?: { feeRange?: string | null } | null;
       university?: { id: number; name: string; country: string };
     };
     if (!plain.university) continue;
     if (!passesLevel(plain.courseName, plain.degree, input.wantedBand)) continue;
 
     const comm = commissionMap.get(plain.university.id);
+    const feeNum =
+      typeof plain.fee === 'number' && Number.isFinite(plain.fee) && plain.fee > 0 ? plain.fee : null;
+    const feeRange = plain.admissionRequirements?.feeRange?.trim() || null;
     candidates.push({
       refId: candidateRefKey('catalog', plain.id),
       source: 'catalog',
@@ -283,8 +287,8 @@ export const buildCandidatePool = async (input: NormalizedMatchInput): Promise<R
       country: plain.university.country,
       universityId: plain.university.id,
       universityName: plain.university.name,
-      fee: plain.fee,
-      feeRange: null,
+      fee: feeNum,
+      feeRange,
       duration: plain.duration,
       intake: null,
       qualityScore: CATALOG_DEFAULT_QUALITY,
