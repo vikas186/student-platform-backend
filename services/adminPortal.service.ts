@@ -1614,6 +1614,8 @@ type CreateAdminUserBody = {
   agencyName?: string | null;
   targetCountries?: string[];
   universityId?: number;
+  /** When role=agent, attach as staff under this owner agency profile id. */
+  parentAgentProfileId?: number | null;
 };
 
 export const createUserForAdmin = async (body: CreateAdminUserBody) => {
@@ -1625,6 +1627,27 @@ export const createUserForAdmin = async (body: CreateAdminUserBody) => {
   const role = body.role;
   if (!(USER_ROLES as readonly string[]).includes(role)) {
     throw new AppError('Invalid role', 400);
+  }
+
+  const parentId =
+    body.parentAgentProfileId != null && Number.isFinite(Number(body.parentAgentProfileId))
+      ? Number(body.parentAgentProfileId)
+      : null;
+
+  if (parentId != null && role !== 'agent') {
+    throw new AppError('parentAgentProfileId is only valid for agent staff', 400);
+  }
+
+  if (role === 'agent' && parentId != null) {
+    const { createStaffUnderOwnerProfile } = await import('./agentPortal.service');
+    const staff = await createStaffUnderOwnerProfile(parentId, {
+      fullName: String(body.fullName).trim(),
+      email,
+      password: body.password,
+      phone: body.phone?.trim() || null,
+    });
+    const user = await db.User.findByPk(staff.userId);
+    return user!.toSafeObject();
   }
 
   const user = await db.User.create({
@@ -1649,6 +1672,9 @@ export const createUserForAdmin = async (body: CreateAdminUserBody) => {
       userId: user.id,
       agencyName: agency,
       primaryMarket: null,
+      parentAgentProfileId: null,
+      canViewCommission: true,
+      canViewDeposits: true,
     });
     const { ensureAgentMembershipId } = await import('../utils/ensureAgentMembershipId');
     await ensureAgentMembershipId(profile);
@@ -2067,6 +2093,7 @@ export const listAgentsForAdmin = async (query: {
     INNER JOIN users u ON u.id = ap.user_id AND u.role = 'agent'
     LEFT JOIN agent_rankings ar ON ar.agent_id = ap.id
     LEFT JOIN subscription_plans spl ON spl.id = ap.subscription_plan_id
+    WHERE ap.parent_agent_profile_id IS NULL
     ORDER BY ap.agency_name ASC
     `,
     { type: QueryTypes.SELECT },

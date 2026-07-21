@@ -34,6 +34,9 @@ import {
   uploadAgreement,
   downloadAgreementTemplate,
   requireAgreementApproved,
+  listStaff,
+  createStaff,
+  deleteStaff,
 } from '../controller/agentController';
 import { jwtAuthMiddleware } from '../middleware/jwtAuth';
 import { requirePermission } from '../middleware/requirePermission';
@@ -55,6 +58,7 @@ import {
   globalSearchQueryJoiSchema,
   agentProfilePatchJoiSchema,
   listStudentsQueryJoiSchema,
+  createAgencyStaffBodyJoiSchema,
 } from '../validations/agent.validation';
 import { postAgentMatch } from '../src/modules/recommendations/recommendations.controller';
 import { agentMatchJoiSchema } from '../src/modules/recommendations/recommendations.validation';
@@ -81,6 +85,14 @@ agentRouter.use(requireAgreementApproved);
 agentRouter
   .get('/profile', getAgentProfile)
   .patch('/profile', validateMiddleware(agentProfilePatchJoiSchema), patchAgentProfile)
+  .get('/staff', requirePermission('applications', 'view'), listStaff)
+  .post(
+    '/staff',
+    requirePermission('applications', 'create'),
+    validateMiddleware(createAgencyStaffBodyJoiSchema),
+    createStaff,
+  )
+  .delete('/staff/:userId', requirePermission('applications', 'edit'), deleteStaff)
   .get('/dashboard', requirePermission('applications', 'view'), getDashboard)
   .get('/search', requirePermission('applications', 'view'), validateMiddleware(globalSearchQueryJoiSchema), globalSearch)
   .post('/students', requirePermission('applications', 'create'), validateMiddleware(createAgentStudentBodyJoiSchema), createStudent)

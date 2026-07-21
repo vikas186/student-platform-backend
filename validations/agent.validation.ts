@@ -160,6 +160,17 @@ const listStudentsQueryJoiSchema = {
   }),
 };
 
+const createAgencyStaffBodyJoiSchema = {
+  body: Joi.object()
+    .keys({
+      fullName: Joi.string().trim().min(1).max(200).required(),
+      email: Joi.string().email().required(),
+      password: Joi.string().min(8).max(128).required(),
+      phone: Joi.string().trim().max(64).optional().allow('', null),
+    })
+    .required(),
+};
+
 export {
   listApplicationsQueryJoiSchema,
   createApplicationBodyJoiSchema,
@@ -176,4 +187,5 @@ export {
   globalSearchQueryJoiSchema,
   agentProfilePatchJoiSchema,
   listStudentsQueryJoiSchema,
+  createAgencyStaffBodyJoiSchema,
 };

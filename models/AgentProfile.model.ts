@@ -26,6 +26,10 @@ export default (sequelize: Sequelize) => {
     declare agreementApprovedAt: Date | null;
     declare agreementApprovedByUserId: string | null;
     declare agreementRejectionReason: string | null;
+    /** Staff accounts point at the owner agency profile; null = agency owner. */
+    declare parentAgentProfileId: number | null;
+    declare canViewCommission: boolean;
+    declare canViewDeposits: boolean;
     declare readonly createdAt: Date;
     declare readonly updatedAt: Date;
 
@@ -37,6 +41,16 @@ export default (sequelize: Sequelize) => {
         onDelete: 'SET NULL',
       });
       AgentProfile.belongsTo(models.SubscriptionPlan, { foreignKey: 'subscriptionPlanId', as: 'subscriptionPlan' });
+      AgentProfile.belongsTo(models.AgentProfile, {
+        foreignKey: 'parentAgentProfileId',
+        as: 'parentAgency',
+        onDelete: 'CASCADE',
+      });
+      AgentProfile.hasMany(models.AgentProfile, {
+        foreignKey: 'parentAgentProfileId',
+        as: 'staffMembers',
+        onDelete: 'CASCADE',
+      });
       AgentProfile.hasMany(models.StudentProfile, { foreignKey: 'agentProfileId', as: 'linkedStudents', onDelete: 'SET NULL' });
       AgentProfile.hasMany(models.Application, { foreignKey: 'agentId', as: 'applications' });
       AgentProfile.hasMany(models.Payment, { foreignKey: 'agentProfileId', as: 'payments', onDelete: 'SET NULL' });
@@ -131,6 +145,25 @@ export default (sequelize: Sequelize) => {
         type: DataTypes.TEXT,
         allowNull: true,
         field: 'agreement_rejection_reason',
+      },
+      parentAgentProfileId: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        field: 'parent_agent_profile_id',
+        references: { model: 'agent_profiles', key: 'id' },
+        onDelete: 'CASCADE',
+      },
+      canViewCommission: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: true,
+        field: 'can_view_commission',
+      },
+      canViewDeposits: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: true,
+        field: 'can_view_deposits',
       },
     },
     {

@@ -389,6 +389,8 @@ export const sendOfferLetter = catchAsyncError(async (req: Request, res: Respons
 });
 
 export const getCommission = catchAsyncError(async (req: Request, res: Response) => {
+  const user: any = req.user;
+  await agentPortal.assertCanViewCommission(user.id);
   const aid = await agentProfileIdFromReq(req);
   const data = await agentPortal.getAgentCommission(aid);
   res.status(constant.msgCode.successCode).json({
@@ -399,12 +401,49 @@ export const getCommission = catchAsyncError(async (req: Request, res: Response)
 });
 
 export const createDepositPayLink = catchAsyncError(async (req: Request, res: Response) => {
+  const user: any = req.user;
+  await agentPortal.assertCanViewDeposits(user.id);
   const aid = await agentProfileIdFromReq(req);
   const data = await agentPortal.createDepositPayLink(aid, req.body);
   res.status(201).json({
     success: true,
     message: 'Deposit pay link created',
     data,
+  });
+});
+
+export const listStaff = catchAsyncError(async (req: Request, res: Response) => {
+  const user: any = req.user;
+  const data = await agentPortal.listAgencyStaff(user.id);
+  res.status(constant.msgCode.successCode).json({
+    success: constant.msgType.successStatus,
+    message: 'Staff list',
+    data,
+  });
+});
+
+export const createStaff = catchAsyncError(async (req: Request, res: Response) => {
+  const user: any = req.user;
+  const data = await agentPortal.createAgencyStaff(user.id, {
+    fullName: String(req.body.fullName ?? ''),
+    email: String(req.body.email ?? ''),
+    password: String(req.body.password ?? ''),
+    phone: req.body.phone ?? null,
+  });
+  res.status(201).json({
+    success: constant.msgType.successStatus,
+    message: 'Staff member created',
+    data,
+  });
+});
+
+export const deleteStaff = catchAsyncError(async (req: Request, res: Response) => {
+  const user: any = req.user;
+  const staffUserId = String(req.params.userId ?? '');
+  await agentPortal.deleteAgencyStaff(user.id, staffUserId);
+  res.status(constant.msgCode.successCode).json({
+    success: constant.msgType.successStatus,
+    message: 'Staff member removed',
   });
 });
 

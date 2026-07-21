@@ -27,6 +27,11 @@ const createAdminUserJoiSchema = {
       then: Joi.string().trim().min(1).max(200).optional(),
       otherwise: Joi.forbidden(),
     }),
+    parentAgentProfileId: Joi.when('role', {
+      is: 'agent',
+      then: Joi.number().integer().positive().optional().allow(null),
+      otherwise: Joi.forbidden(),
+    }),
     targetCountries: Joi.when('role', {
       is: 'student',
       then: Joi.array().items(Joi.string().trim()).optional(),

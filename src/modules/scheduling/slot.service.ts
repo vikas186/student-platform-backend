@@ -14,6 +14,7 @@ import {
   nextCalendarDateInZone,
 } from './timezone.util';
 import {
+  findOverlappingDayOfWeek,
   formatAvailabilityTime,
   isValidAvailabilityWindow,
 } from './availability-time.util';
@@ -169,6 +170,15 @@ export const setAvailabilityForAdmin = async (
         400,
       );
     }
+  }
+
+  const overlappingDay = findOverlappingDayOfWeek(normalizedWindows);
+  if (overlappingDay != null) {
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    throw new AppError(
+      `Overlapping time slots on ${dayNames[overlappingDay] ?? `day ${overlappingDay}`}. Remove or adjust intervals so they do not overlap.`,
+      400,
+    );
   }
 
   for (const d of normalizedDates) {

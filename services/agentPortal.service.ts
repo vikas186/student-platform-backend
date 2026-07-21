@@ -166,12 +166,86 @@ export const createStudentForAgent = async (
   };
 };
 
-export const requireAgentProfile = async (userId: string) => {
+export type AgentContext = {
+  ownProfile: InstanceType<typeof db.AgentProfile>;
+  /** Owner agency used for applications / students / payments scope. */
+  effectiveProfile: InstanceType<typeof db.AgentProfile>;
+  isStaff: boolean;
+  canViewCommission: boolean;
+  canViewDeposits: boolean;
+};
+
+export const resolveAgentContext = async (userId: string): Promise<AgentContext> => {
+  const ownProfile = await db.AgentProfile.findOne({ where: { userId } });
+  if (!ownProfile) {
+    throw new AppError('Agent profile not found', 404);
+  }
+
+  const parentId = ownProfile.parentAgentProfileId;
+  if (parentId != null) {
+    const parent = await db.AgentProfile.findByPk(parentId);
+    if (!parent) {
+      throw new AppError('Parent agency not found for this staff account', 404);
+    }
+    if (parent.parentAgentProfileId != null) {
+      throw new AppError('Invalid staff hierarchy', 500);
+    }
+    return {
+      ownProfile,
+      effectiveProfile: parent,
+      isStaff: true,
+      canViewCommission: Boolean(ownProfile.canViewCommission),
+      canViewDeposits: Boolean(ownProfile.canViewDeposits),
+    };
+  }
+
+  return {
+    ownProfile,
+    effectiveProfile: ownProfile,
+    isStaff: false,
+    canViewCommission: ownProfile.canViewCommission !== false,
+    canViewDeposits: ownProfile.canViewDeposits !== false,
+  };
+};
+
+/** Own row for this user (staff or owner). Prefer resolveAgentContext for portal logic. */
+export const requireOwnAgentProfile = async (userId: string) => {
   const profile = await db.AgentProfile.findOne({ where: { userId } });
   if (!profile) {
     throw new AppError('Agent profile not found', 404);
   }
   return profile;
+};
+
+/**
+ * Effective agency profile for data scoping (owner when caller is staff).
+ * Prefer resolveAgentContext when you also need permission flags.
+ */
+export const requireAgentProfile = async (userId: string) => {
+  const ctx = await resolveAgentContext(userId);
+  return ctx.effectiveProfile;
+};
+
+export const assertCanViewCommission = async (userId: string) => {
+  const ctx = await resolveAgentContext(userId);
+  if (!ctx.canViewCommission) {
+    throw new AppError('You do not have access to commission.', 403);
+  }
+};
+
+export const assertCanViewDeposits = async (userId: string) => {
+  const ctx = await resolveAgentContext(userId);
+  if (!ctx.canViewDeposits) {
+    throw new AppError('You do not have access to deposit payments.', 403);
+  }
+};
+
+export const assertIsAgencyOwner = async (userId: string) => {
+  const ctx = await resolveAgentContext(userId);
+  if (ctx.isStaff) {
+    throw new AppError('Only the main agent can manage staff.', 403);
+  }
+  return ctx;
 };
 
 const AGREEMENT_PENDING_MESSAGE =
@@ -210,8 +284,19 @@ const buildAgreementSummary = (profile: InstanceType<typeof db.AgentProfile>) =>
 
 /** Public-to-agent: returns the current agreement workflow state for the gating UI. */
 export const getAgentAgreementStatus = async (userId: string) => {
-  const profile = await requireAgentProfile(userId);
-  return buildAgreementSummary(profile);
+  const ctx = await resolveAgentContext(userId);
+  const summary = buildAgreementSummary(ctx.effectiveProfile);
+  if (ctx.isStaff) {
+    return {
+      ...summary,
+      canUpload: false,
+      isStaff: true,
+      message: summary.portalUnlocked
+        ? 'Your agency partnership agreement is approved. You have access to the portal.'
+        : 'Portal access depends on your agency owner completing the partnership agreement.',
+    };
+  }
+  return { ...summary, isStaff: false };
 };
 
 /** Download the unsigned B2B partnership agreement template (pending agents). */
@@ -230,7 +315,11 @@ export const uploadAgentSignedAgreement = async (userId: string, file: Express.M
   if (!file) {
     throw new AppError('File is required (field name: file)', 400);
   }
-  const profile = await requireAgentProfile(userId);
+  const ctx = await resolveAgentContext(userId);
+  if (ctx.isStaff) {
+    throw new AppError('Only the main agent can upload the partnership agreement.', 403);
+  }
+  const profile = ctx.ownProfile;
   if (profile.agreementStatus === 'submitted') {
     throw new AppError('Your signed agreement is already under review.', 400);
   }
@@ -252,8 +341,8 @@ export const uploadAgentSignedAgreement = async (userId: string, file: Express.M
  * Apply on the agent router AFTER the agreement endpoints so those remain reachable.
  */
 export const assertAgentAgreementApproved = async (userId: string): Promise<void> => {
-  const profile = await requireAgentProfile(userId);
-  if (profile.agreementStatus !== 'approved') {
+  const ctx = await resolveAgentContext(userId);
+  if (ctx.effectiveProfile.agreementStatus !== 'approved') {
     throw new AppError(
       'Portal locked until your partnership agreement is approved.',
       403,
@@ -1389,9 +1478,11 @@ export const getAgentPortalProfile = async (userId: string) => {
   if (!user) {
     throw new AppError('User not found', 404);
   }
-  const profile = await requireAgentProfile(userId);
+  const ctx = await resolveAgentContext(userId);
   const { ensureAgentMembershipId } = await import('../utils/ensureAgentMembershipId');
-  await ensureAgentMembershipId(profile);
+  if (!ctx.isStaff) {
+    await ensureAgentMembershipId(ctx.effectiveProfile);
+  }
   return {
     user: {
       id: user.id,
@@ -1401,18 +1492,22 @@ export const getAgentPortalProfile = async (userId: string) => {
       role: user.role,
     },
     agency: {
-      id: profile.id,
-      agencyName: profile.agencyName,
-      primaryMarket: profile.primaryMarket,
-      logoUrl: profile.logoUrl,
-      membershipId: profile.membershipId,
+      id: ctx.effectiveProfile.id,
+      agencyName: ctx.effectiveProfile.agencyName,
+      primaryMarket: ctx.effectiveProfile.primaryMarket,
+      logoUrl: ctx.effectiveProfile.logoUrl,
+      membershipId: ctx.effectiveProfile.membershipId,
     },
+    isStaff: ctx.isStaff,
+    canViewCommission: ctx.canViewCommission,
+    canViewDeposits: ctx.canViewDeposits,
+    canManageStaff: !ctx.isStaff,
   };
 };
 
 export const patchAgentPortalProfile = async (userId: string, body: Record<string, unknown>) => {
   const user = await db.User.findByPk(userId);
-  const profile = await requireAgentProfile(userId);
+  const ctx = await resolveAgentContext(userId);
   if (!user) {
     throw new AppError('User not found', 404);
   }
@@ -1421,6 +1516,13 @@ export const patchAgentPortalProfile = async (userId: string, body: Record<strin
   if (fullName !== undefined && fullName !== null && String(fullName).trim() !== '') {
     user.name = String(fullName).trim();
   }
+
+  if (ctx.isStaff) {
+    await user.save();
+    return getAgentPortalProfile(userId);
+  }
+
+  const profile = ctx.ownProfile;
   if (typeof body.agencyName === 'string' && body.agencyName.trim()) {
     profile.agencyName = body.agencyName.trim();
   }
@@ -1438,6 +1540,120 @@ export const patchAgentPortalProfile = async (userId: string, body: Record<strin
   await user.save();
   await profile.save();
   return getAgentPortalProfile(userId);
+};
+
+export const listAgencyStaff = async (ownerUserId: string) => {
+  const ctx = await assertIsAgencyOwner(ownerUserId);
+  const rows = await db.AgentProfile.findAll({
+    where: { parentAgentProfileId: ctx.effectiveProfile.id },
+    include: [{ model: db.User, as: 'user', attributes: ['id', 'name', 'email', 'phone', 'status'] }],
+    order: [['createdAt', 'DESC']],
+  });
+  return rows.map(r => {
+    const u = (r as any).user;
+    return {
+      userId: r.userId,
+      name: u?.name ?? '',
+      email: u?.email ?? '',
+      phone: u?.phone ?? null,
+      status: u?.status ?? true,
+      canViewCommission: Boolean(r.canViewCommission),
+      canViewDeposits: Boolean(r.canViewDeposits),
+      createdAt: r.createdAt,
+    };
+  });
+};
+
+export const createAgencyStaff = async (
+  ownerUserId: string,
+  body: { fullName: string; email: string; password: string; phone?: string | null },
+) => {
+  const ctx = await assertIsAgencyOwner(ownerUserId);
+  const email = String(body.email).trim().toLowerCase();
+  if (await db.User.findOne({ where: { email } })) {
+    throw new AppError('Email already taken', 400);
+  }
+  const password = String(body.password);
+  if (password.length < 8) {
+    throw new AppError('Password must be at least 8 characters', 400);
+  }
+
+  const user = await db.User.create({
+    name: String(body.fullName).trim(),
+    email,
+    password,
+    role: 'agent',
+    phone: body.phone?.trim() || null,
+    status: true,
+    emailVerified: true,
+  });
+
+  await db.AgentProfile.create({
+    userId: user.id,
+    agencyName: ctx.effectiveProfile.agencyName,
+    primaryMarket: ctx.effectiveProfile.primaryMarket,
+    parentAgentProfileId: ctx.effectiveProfile.id,
+    membershipId: null,
+    canViewCommission: false,
+    canViewDeposits: false,
+    agreementStatus: 'approved',
+    subscriptionPlanId: ctx.effectiveProfile.subscriptionPlanId,
+  });
+
+  return {
+    userId: user.id,
+    name: user.name,
+    email: user.email,
+    phone: user.phone,
+    canViewCommission: false,
+    canViewDeposits: false,
+  };
+};
+
+export const deleteAgencyStaff = async (ownerUserId: string, staffUserId: string) => {
+  const ctx = await assertIsAgencyOwner(ownerUserId);
+  const staffProfile = await db.AgentProfile.findOne({
+    where: { userId: staffUserId, parentAgentProfileId: ctx.effectiveProfile.id },
+  });
+  if (!staffProfile) {
+    throw new AppError('Staff member not found', 404);
+  }
+  await db.User.destroy({ where: { id: staffUserId } });
+};
+
+/** Admin helper: create staff under an owner agency profile id. */
+export const createStaffUnderOwnerProfile = async (
+  ownerAgentProfileId: number,
+  body: { fullName: string; email: string; password: string; phone?: string | null },
+) => {
+  const owner = await db.AgentProfile.findByPk(ownerAgentProfileId);
+  if (!owner) {
+    throw new AppError('Parent agency not found', 404);
+  }
+  if (owner.parentAgentProfileId != null) {
+    throw new AppError('Cannot attach staff to another staff account — pick the main agent.', 400);
+  }
+  return createAgencyStaff(owner.userId, body);
+};
+
+export const listOwnerAgenciesForAdmin = async () => {
+  const rows = await db.AgentProfile.findAll({
+    where: { parentAgentProfileId: null },
+    include: [{ model: db.User, as: 'user', attributes: ['id', 'name', 'email'] }],
+    order: [['agencyName', 'ASC']],
+    limit: 500,
+  });
+  return rows.map(r => {
+    const u = (r as any).user;
+    return {
+      id: r.id,
+      agencyName: r.agencyName,
+      membershipId: r.membershipId,
+      userId: r.userId,
+      ownerName: u?.name ?? '',
+      ownerEmail: u?.email ?? '',
+    };
+  });
 };
 
 export const listAgentStudents = async (agentProfileId: number, query: { search?: string }) => {

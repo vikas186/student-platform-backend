@@ -31,3 +31,38 @@ export const timeToMinutes = (time: string): number => {
 
 export const isValidAvailabilityWindow = (startTime: string, endTime: string): boolean =>
   timeToMinutes(endTime) > timeToMinutes(startTime);
+
+export const intervalsOverlap = (
+  aStart: string,
+  aEnd: string,
+  bStart: string,
+  bEnd: string,
+): boolean =>
+  timeToMinutes(aStart) < timeToMinutes(bEnd) && timeToMinutes(bStart) < timeToMinutes(aEnd);
+
+/** Returns dayOfWeek if any same-day windows overlap; otherwise null. */
+export const findOverlappingDayOfWeek = (
+  windows: { dayOfWeek: number; startTime: string; endTime: string }[],
+): number | null => {
+  const byDay = new Map<number, typeof windows>();
+  for (const w of windows) {
+    const list = byDay.get(w.dayOfWeek) ?? [];
+    list.push(w);
+    byDay.set(w.dayOfWeek, list);
+  }
+  for (const [day, list] of byDay) {
+    const sorted = [...list].sort(
+      (a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime),
+    );
+    for (let i = 0; i < sorted.length; i++) {
+      for (let j = i + 1; j < sorted.length; j++) {
+        const a = sorted[i]!;
+        const b = sorted[j]!;
+        if (intervalsOverlap(a.startTime, a.endTime, b.startTime, b.endTime)) {
+          return day;
+        }
+      }
+    }
+  }
+  return null;
+};
