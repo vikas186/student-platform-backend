@@ -36,6 +36,7 @@ import ScrapeAiMetaModel from './ScrapeAiMeta.model';
 import GoogleCalendarConnectionModel from './GoogleCalendarConnection.model';
 import CounsellorAvailabilityModel from './CounsellorAvailability.model';
 import CounsellorAvailabilityDateModel from './CounsellorAvailabilityDate.model';
+import CounsellorUnavailabilityModel from './CounsellorUnavailability.model';
 import AppointmentModel from './Appointment.model';
 import VerificationSessionModel from './VerificationSession.model';
 import PassportVerificationModel from './PassportVerification.model';
@@ -83,6 +84,7 @@ interface Db {
   GoogleCalendarConnection: ReturnType<typeof GoogleCalendarConnectionModel>;
   CounsellorAvailability: ReturnType<typeof CounsellorAvailabilityModel>;
   CounsellorAvailabilityDate: ReturnType<typeof CounsellorAvailabilityDateModel>;
+  CounsellorUnavailability: ReturnType<typeof CounsellorUnavailabilityModel>;
   Appointment: ReturnType<typeof AppointmentModel>;
   VerificationSession: ReturnType<typeof VerificationSessionModel>;
   PassportVerification: ReturnType<typeof PassportVerificationModel>;
@@ -134,6 +136,7 @@ const db: Db = {
   GoogleCalendarConnection: GoogleCalendarConnectionModel(sequelize),
   CounsellorAvailability: CounsellorAvailabilityModel(sequelize),
   CounsellorAvailabilityDate: CounsellorAvailabilityDateModel(sequelize),
+  CounsellorUnavailability: CounsellorUnavailabilityModel(sequelize),
   Appointment: AppointmentModel(sequelize),
   VerificationSession: VerificationSessionModel(sequelize),
   PassportVerification: PassportVerificationModel(sequelize),

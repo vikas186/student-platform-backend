@@ -19,7 +19,7 @@ import {
   getGoogleAuthUrl,
   handleGoogleOAuthCallback,
 } from './google-oauth.service';
-import { getAvailabilityBundleForAdmin, setAvailabilityForAdmin } from './slot.service';
+import { getAvailabilityBundleForAdmin, setAvailabilityForAdmin, listUnavailabilityForAdmin, createUnavailabilityForAdmin, deleteUnavailabilityForAdmin, listCounsellorCalendars } from './slot.service';
 import { schedulingConfig } from './scheduling.config';
 import type { AppointmentStatus, AppointmentType } from '../../../models/Appointment.model';
 
@@ -27,6 +27,13 @@ const adminUser = (req: Request) => {
   const u = req.user as { id?: string; role?: UserRole } | undefined;
   if (!u?.id || u.role !== 'admin') throw new AppError('Unauthorized', 401);
   return u.id;
+};
+
+const resolveTargetCounsellorId = (req: Request, selfId: string): string => {
+  const q = req.query as { counsellorId?: string };
+  const body = req.body as { counsellorId?: string };
+  const raw = (q.counsellorId || body.counsellorId || '').trim();
+  return raw || selfId;
 };
 
 const studentUser = (req: Request) => {
@@ -83,13 +90,14 @@ export const deleteGoogleConnectionHandler = catchAsyncError(async (req: Request
 
 export const putAvailabilityHandler = catchAsyncError(async (req: Request, res: Response) => {
   const userId = adminUser(req);
+  const targetId = resolveTargetCounsellorId(req, userId);
   const body = req.body as {
     timezone?: string;
     windows?: { dayOfWeek: number; startTime: string; endTime: string }[];
     dates?: { date: string; startTime: string; endTime: string }[];
   };
   const data = await setAvailabilityForAdmin(
-    userId,
+    targetId,
     body.windows ?? [],
     body.timezone,
     body.dates ?? [],
@@ -103,11 +111,64 @@ export const putAvailabilityHandler = catchAsyncError(async (req: Request, res: 
 
 export const getAvailabilityHandler = catchAsyncError(async (req: Request, res: Response) => {
   const userId = adminUser(req);
-  const data = await getAvailabilityBundleForAdmin(userId);
+  const targetId = resolveTargetCounsellorId(req, userId);
+  const data = await getAvailabilityBundleForAdmin(targetId);
   res.status(constant.msgCode.successCode).json({
     success: true,
     message: 'Availability',
     data,
+  });
+});
+
+export const listCounsellorCalendarsHandler = catchAsyncError(async (req: Request, res: Response) => {
+  adminUser(req);
+  const data = await listCounsellorCalendars();
+  res.status(constant.msgCode.successCode).json({
+    success: true,
+    message: 'Counsellor calendars',
+    data: { counsellors: data },
+  });
+});
+
+export const listUnavailabilityHandler = catchAsyncError(async (req: Request, res: Response) => {
+  const userId = adminUser(req);
+  const targetId = resolveTargetCounsellorId(req, userId);
+  const data = await listUnavailabilityForAdmin(targetId);
+  res.status(constant.msgCode.successCode).json({
+    success: true,
+    message: 'Unavailability',
+    data: { blocks: data },
+  });
+});
+
+export const createUnavailabilityHandler = catchAsyncError(async (req: Request, res: Response) => {
+  const userId = adminUser(req);
+  const targetId = resolveTargetCounsellorId(req, userId);
+  const body = req.body as { startsAt?: string; endsAt?: string; reason?: string | null };
+  if (!body.startsAt || !body.endsAt) {
+    throw new AppError('startsAt and endsAt are required', 400);
+  }
+  const data = await createUnavailabilityForAdmin(targetId, {
+    startsAt: body.startsAt,
+    endsAt: body.endsAt,
+    reason: body.reason,
+  });
+  res.status(201).json({
+    success: true,
+    message: 'Unavailability block created',
+    data,
+  });
+});
+
+export const deleteUnavailabilityHandler = catchAsyncError(async (req: Request, res: Response) => {
+  const userId = adminUser(req);
+  const targetId = resolveTargetCounsellorId(req, userId);
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id) || id < 1) throw new AppError('Invalid unavailability id', 400);
+  await deleteUnavailabilityForAdmin(targetId, id);
+  res.status(constant.msgCode.successCode).json({
+    success: true,
+    message: 'Unavailability block deleted',
   });
 });
 

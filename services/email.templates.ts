@@ -47,6 +47,38 @@ export const passwordResetTemplate = (cfg: EmailConfig, name: string, resetUrl: 
   };
 };
 
+export const signedOfferAdminNotifyTemplate = (
+  cfg: EmailConfig,
+  params: {
+    studentName: string;
+    studentEmail: string;
+    applicationNumber: string;
+    universityName: string;
+    programName: string;
+    uploadedBy: string;
+    adminOfferLettersUrl: string;
+  },
+) => {
+  const body = `
+    <p style="margin:0 0 12px;font-size:15px;line-height:1.6;color:#3d4f72;">
+      A signed offer letter copy was uploaded and is ready for review.
+    </p>
+    <table style="margin:16px 0;width:100%;border-collapse:collapse;font-size:14px;background:#f8f6f1;border-radius:12px;">
+      <tr><td style="padding:10px 14px;color:#6b7a9a;">Student</td><td style="padding:10px 14px;font-weight:600;">${params.studentName} (${params.studentEmail})</td></tr>
+      <tr><td style="padding:10px 14px;color:#6b7a9a;">Reference</td><td style="padding:10px 14px;font-weight:600;">${params.applicationNumber}</td></tr>
+      <tr><td style="padding:10px 14px;color:#6b7a9a;">University</td><td style="padding:10px 14px;font-weight:600;">${params.universityName}</td></tr>
+      <tr><td style="padding:10px 14px;color:#6b7a9a;">Program</td><td style="padding:10px 14px;font-weight:600;">${params.programName}</td></tr>
+      <tr><td style="padding:10px 14px;color:#6b7a9a;">Uploaded by</td><td style="padding:10px 14px;font-weight:600;">${params.uploadedBy}</td></tr>
+    </table>
+    ${button(params.adminOfferLettersUrl, 'Open offer letters')}
+  `;
+  return {
+    subject: `[Signed offer] ${params.applicationNumber} — ${params.studentName}`,
+    html: layout(cfg, 'Signed offer letter received', body),
+    text: `Signed offer uploaded for ${params.applicationNumber} (${params.studentName}). Review: ${params.adminOfferLettersUrl}`,
+  };
+};
+
 export const studentEmailVerificationLinkTemplate = (
   cfg: EmailConfig,
   name: string,
@@ -327,6 +359,26 @@ const STATUS_COPY: Record<string, { headline: string; detail: string }> = {
   visa_approved: {
     headline: 'Visa approved',
     detail: 'Your visa status has been marked as approved. Congratulations on this milestone.',
+  },
+  visa_applied: {
+    headline: 'Visa application submitted',
+    detail: 'Your visa application has been marked as applied. We will update you when a decision is recorded.',
+  },
+  visa_rejected: {
+    headline: 'Visa decision update',
+    detail: 'Your visa status has been marked as rejected. Sign in to your portal for next steps or alternative pathways.',
+  },
+  withdrawn: {
+    headline: 'Application withdrawn',
+    detail: 'This application has been withdrawn. Contact your counsellor if you need help starting a new pathway.',
+  },
+  agent_invoice_received: {
+    headline: 'Agent invoice received',
+    detail: 'An agent invoice has been recorded for this application.',
+  },
+  commission_paid: {
+    headline: 'Commission paid',
+    detail: 'Commission for this application has been marked as paid.',
   },
   enrolled: {
     headline: 'You are enrolled',

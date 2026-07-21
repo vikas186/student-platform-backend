@@ -9,8 +9,13 @@ export const APPLICATION_STATUSES = [
   'rejected',
   'offer_generated',
   'deposit_paid',
+  'visa_applied',
   'visa_approved',
+  'visa_rejected',
+  'withdrawn',
   'enrolled',
+  'agent_invoice_received',
+  'commission_paid',
 ] as const;
 
 export default (sequelize: Sequelize) => {

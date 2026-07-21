@@ -655,6 +655,8 @@ export const uploadStudentSignedOfferLetterByIdOrRef = async (
     signedFileUrl: url,
     status: 'signed',
   });
+  const { notifyAdminSignedOfferUploaded } = await import('./offer-letter-notify.service');
+  notifyAdminSignedOfferUploaded(letter, 'student');
   return letter;
 };
 
@@ -673,6 +675,8 @@ export const uploadStudentSignedOfferLetterForApplication = async (
     signedFileUrl: url,
     status: 'signed',
   });
+  const { notifyAdminSignedOfferUploaded } = await import('./offer-letter-notify.service');
+  notifyAdminSignedOfferUploaded(letter, 'student');
   return letter;
 };
 

@@ -358,6 +358,28 @@ export const listAgentAgreements = catchAsyncError(async (req: Request, res: Res
   });
 });
 
+export const getAgentAgreementTemplate = catchAsyncError(async (_req: Request, res: Response) => {
+  const { getAgentAgreementTemplateMeta } = await import('../services/agent-agreement.service');
+  const data = getAgentAgreementTemplateMeta();
+  res.status(constant.msgCode.successCode).json({
+    success: true,
+    message: 'Agreement template',
+    data,
+  });
+});
+
+export const uploadAgentAgreementTemplate = catchAsyncError(async (req: Request, res: Response) => {
+  const file = req.file;
+  if (!file) throw new AppError('PDF file is required', 400);
+  const { saveAgentAgreementTemplatePdf } = await import('../services/agent-agreement.service');
+  const data = await saveAgentAgreementTemplatePdf(file);
+  res.status(constant.msgCode.successCode).json({
+    success: true,
+    message: 'Agreement template updated',
+    data,
+  });
+});
+
 export const approveAgentAgreement = catchAsyncError(async (req: Request, res: Response) => {
   const actor = req.user as { id?: string };
   const id = Number(req.params.agentProfileId);

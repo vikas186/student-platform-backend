@@ -938,6 +938,8 @@ export const uploadSignedOfferFile = async (
     signedFileUrl: url,
     status: 'signed',
   });
+  const { notifyAdminSignedOfferUploaded } = await import('./offer-letter-notify.service');
+  notifyAdminSignedOfferUploaded(letter, 'agent');
   return letter;
 };
 
@@ -1171,7 +1173,7 @@ export const getAgentCommission = async (agentProfileId: number) => {
 
   let earned = 0;
   let projected = 0;
-  const earnedStatuses = ['enrolled', 'deposit_paid', 'visa_approved'];
+  const earnedStatuses = ['enrolled', 'deposit_paid', 'visa_approved', 'agent_invoice_received', 'commission_paid'];
 
   for (const a of apps) {
     const amt = parseFloat(String((a as any).commissionAmount ?? 0));

@@ -532,9 +532,10 @@ export const buildProgramsForUniversity = (
     .map(row => mapScrapedCourse(row, uniAdmissionFor(row.universityName), country));
 
   const namedPrograms = dedupePrograms([...fromDb, ...fromScrape]);
-  if (namedPrograms.length > 0) return namedPrograms;
-
-  return programsFromFeeRanges(programFeeRanges);
+  const feePrograms = programsFromFeeRanges(programFeeRanges);
+  // Always merge fee-matrix bands so AU/NZ fee-only imports still expose selectable programmes
+  // even when a sparse scrape match would otherwise hide them.
+  return dedupePrograms([...namedPrograms, ...feePrograms]);
 };
 
 /** Map user field input to program_fee_ranges JSON keys */

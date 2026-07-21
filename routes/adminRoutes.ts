@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { loginAdminUser } from '../controller/authController';
 import { jwtAuthMiddleware } from '../middleware/jwtAuth';
 import { requirePermission } from '../middleware/requirePermission';
-import { adminUniversityCatalogUpload, adminUniversityCsvUpload, agentDocumentUpload } from '../middleware/multer';
+import { adminUniversityCatalogUpload, adminUniversityCsvUpload, agentAgreementUpload, agentDocumentUpload } from '../middleware/multer';
 import validateMiddleware from '../middleware/validate';
 import {
   getAdminUserDocumentStatusHandler,
@@ -56,6 +56,8 @@ import {
   deleteOfferLetter,
   listAgents,
   listAgentAgreements,
+  getAgentAgreementTemplate,
+  uploadAgentAgreementTemplate,
   approveAgentAgreement,
   rejectAgentAgreement,
   deleteAgentAgreement,
@@ -91,6 +93,10 @@ import {
   getGoogleConnectionHandler,
   googleOAuthCallbackHandler,
   listAdminAppointmentsHandler,
+  listCounsellorCalendarsHandler,
+  listUnavailabilityHandler,
+  createUnavailabilityHandler,
+  deleteUnavailabilityHandler,
   patchAdminAppointmentStatusHandler,
   putAvailabilityHandler,
 } from '../src/modules/scheduling/scheduling.controller';
@@ -255,6 +261,17 @@ adminRouter
     validateMiddleware(listAgentAgreementsQueryJoiSchema),
     listAgentAgreements,
   )
+  .get(
+    '/agents/agreement-template',
+    requirePermission('agent_ranking', 'view'),
+    getAgentAgreementTemplate,
+  )
+  .post(
+    '/agents/agreement-template',
+    requirePermission('agent_ranking', 'approve'),
+    agentAgreementUpload.single('file'),
+    uploadAgentAgreementTemplate,
+  )
   .post(
     '/agents/:agentProfileId/agreement/approve',
     requirePermission('agent_ranking', 'approve'),
@@ -333,6 +350,10 @@ adminRouter
     putAvailabilityHandler,
   )
   .get('/scheduling/availability', requirePermission('users', 'view'), getAvailabilityHandler)
+  .get('/scheduling/counsellors', requirePermission('users', 'view'), listCounsellorCalendarsHandler)
+  .get('/scheduling/unavailability', requirePermission('users', 'view'), listUnavailabilityHandler)
+  .post('/scheduling/unavailability', requirePermission('users', 'edit'), createUnavailabilityHandler)
+  .delete('/scheduling/unavailability/:id', requirePermission('users', 'edit'), deleteUnavailabilityHandler)
   .get(
     '/scheduling/appointments',
     requirePermission('users', 'view'),

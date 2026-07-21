@@ -277,7 +277,7 @@ export const listUniversitiesForAdmin = async (query?: {
         [key: string]: unknown;
       };
       const scope = applicationScopeForUniversity(plain.id, plain.name);
-      const [programsCount, applicantsCount, offersCount] = await Promise.all([
+      const [programsCountRaw, applicantsCount, offersCount] = await Promise.all([
         db.Course.count({ where: { universityId: plain.id } }),
         db.Application.count({
           where: { [Op.and]: [scope, { status: { [Op.ne]: 'draft' } }] },
@@ -286,6 +286,10 @@ export const listUniversitiesForAdmin = async (query?: {
           where: { [Op.and]: [scope, { status: 'offer_generated' }] },
         }),
       ]);
+      const feeBandCount = Object.values(
+        (plain.programFeeRanges as Record<string, unknown> | null) || {},
+      ).filter(v => v != null && String(v).trim() !== '').length;
+      const programsCount = Math.max(programsCountRaw, feeBandCount);
       return {
         ...plain,
         programsCount,
@@ -2057,7 +2061,7 @@ export const listAgentsForAdmin = async (query: {
             WHERE sp2.id = a.student_id AND sp2.agent_profile_id = ap.id
           )
         )
-        AND a.status IN ('enrolled', 'visa_approved', 'deposit_paid')
+        AND a.status IN ('enrolled', 'visa_approved', 'deposit_paid', 'agent_invoice_received', 'commission_paid')
       ) AS "wonCount"
     FROM agent_profiles ap
     INNER JOIN users u ON u.id = ap.user_id AND u.role = 'agent'

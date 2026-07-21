@@ -299,9 +299,118 @@ export const generateAvailableSlots = async (
     })),
   ];
 
+  const unavailability = await db.CounsellorUnavailability.findAll({
+    where: {
+      adminUserId,
+      startsAt: { [Op.lt]: rangeEnd },
+      endsAt: { [Op.gt]: rangeStart },
+    },
+    attributes: ['startsAt', 'endsAt'],
+  });
+  for (const u of unavailability) {
+    busyBlocks.push({
+      start: u.startsAt as Date,
+      end: u.endsAt as Date,
+    });
+  }
+
   return uniqueCandidates.filter(slot => {
     const s = new Date(slot.startsAt);
     const e = new Date(slot.endsAt);
     return !busyBlocks.some(b => overlaps(s, e, b.start, b.end));
   });
+};
+
+export const listUnavailabilityForAdmin = async (adminUserId: string) => {
+  const rows = await db.CounsellorUnavailability.findAll({
+    where: { adminUserId },
+    order: [['startsAt', 'ASC']],
+  });
+  return rows.map(r => {
+    const p = r.get({ plain: true }) as {
+      id: number;
+      startsAt: Date;
+      endsAt: Date;
+      reason: string | null;
+    };
+    return {
+      id: p.id,
+      startsAt: new Date(p.startsAt).toISOString(),
+      endsAt: new Date(p.endsAt).toISOString(),
+      reason: p.reason,
+    };
+  });
+};
+
+export const createUnavailabilityForAdmin = async (
+  adminUserId: string,
+  input: { startsAt: string; endsAt: string; reason?: string | null },
+) => {
+  const startsAt = new Date(input.startsAt);
+  const endsAt = new Date(input.endsAt);
+  if (Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime())) {
+    throw new AppError('Invalid unavailability start/end', 400);
+  }
+  if (endsAt <= startsAt) {
+    throw new AppError('Unavailability end must be after start', 400);
+  }
+  const row = await db.CounsellorUnavailability.create({
+    adminUserId,
+    startsAt,
+    endsAt,
+    reason: input.reason?.trim() || null,
+  });
+  const p = row.get({ plain: true }) as {
+    id: number;
+    startsAt: Date;
+    endsAt: Date;
+    reason: string | null;
+  };
+  return {
+    id: p.id,
+    startsAt: new Date(p.startsAt).toISOString(),
+    endsAt: new Date(p.endsAt).toISOString(),
+    reason: p.reason,
+  };
+};
+
+export const deleteUnavailabilityForAdmin = async (adminUserId: string, id: number) => {
+  const n = await db.CounsellorUnavailability.destroy({ where: { id, adminUserId } });
+  if (!n) throw new AppError('Unavailability block not found', 404);
+};
+
+/** Admins who have connected Google Calendar (for multi-counsellor scheduling). */
+export const listCounsellorCalendars = async () => {
+  const connections = await db.GoogleCalendarConnection.findAll({
+    include: [{ model: db.User, as: 'user', attributes: ['id', 'name', 'email', 'role'] }],
+  });
+  const out: Array<{
+    adminUserId: string;
+    name: string;
+    email: string;
+    googleEmail: string | null;
+    hasAvailability: boolean;
+  }> = [];
+  for (const c of connections) {
+    const plain = c.get({ plain: true }) as {
+      userId?: string;
+      googleEmail?: string | null;
+      user?: { id: string; name?: string; email?: string; role?: string };
+    };
+    const adminUserId = plain.userId || plain.user?.id;
+    if (!adminUserId) continue;
+    if (plain.user?.role && plain.user.role !== 'admin') continue;
+    const [weekly, dates] = await Promise.all([
+      db.CounsellorAvailability.count({ where: { adminUserId } }),
+      db.CounsellorAvailabilityDate.count({ where: { adminUserId } }),
+    ]);
+    out.push({
+      adminUserId,
+      name: plain.user?.name?.trim() || 'Counsellor',
+      email: plain.user?.email?.trim() || '',
+      googleEmail: plain.googleEmail?.trim() || null,
+      hasAvailability: weekly + dates > 0,
+    });
+  }
+  return out;
 };

@@ -27,6 +27,49 @@ export const readAgentAgreementPdf = (): Buffer => {
   return fs.readFileSync(filePath);
 };
 
+/** Admin replaces the canonical B2B partnership agreement PDF used for new agent emails / downloads. */
+export const saveAgentAgreementTemplatePdf = async (file: Express.Multer.File): Promise<{
+  fileName: string;
+  path: string;
+}> => {
+  if (!file?.path) {
+    throw new AppError('PDF file is required', 400);
+  }
+  if (!/\.pdf$/i.test(file.originalname || file.path)) {
+    throw new AppError('Only PDF files are allowed for the agreement template', 400);
+  }
+  if (!fs.existsSync(AGREEMENT_DIR)) {
+    fs.mkdirSync(AGREEMENT_DIR, { recursive: true });
+  }
+  const destName = 'b2b-agent-partner-agreement.pdf';
+  const destPath = path.join(AGREEMENT_DIR, destName);
+  fs.copyFileSync(file.path, destPath);
+  try {
+    fs.unlinkSync(file.path);
+  } catch {
+    /* ignore temp cleanup */
+  }
+  return { fileName: destName, path: destPath.replace(/\\/g, '/') };
+};
+
+export const getAgentAgreementTemplateMeta = (): {
+  fileName: string | null;
+  exists: boolean;
+  updatedAt: string | null;
+} => {
+  try {
+    const filePath = resolveAgentAgreementPdfPath();
+    const st = fs.statSync(filePath);
+    return {
+      fileName: path.basename(filePath),
+      exists: true,
+      updatedAt: st.mtime.toISOString(),
+    };
+  } catch {
+    return { fileName: null, exists: false, updatedAt: null };
+  }
+};
+
 /** Send the B2B partnership agreement PDF once after email verification. */
 export const sendPartnershipAgreementIfNeeded = async (userId: string): Promise<void> => {
   const profile = await db.AgentProfile.findOne({ where: { userId } });

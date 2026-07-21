@@ -8,8 +8,13 @@ export const ADMIN_UI_APPLICATION_STATUSES = [
   'Approved',
   'Offer',
   'Deposit',
-  'Visa',
+  'Visa Applied',
+  'Visa Approved',
+  'Visa Rejected',
+  'Withdrawn',
   'Enrolled',
+  'Agent Invoice Received',
+  'Commission Paid',
   'Rejected',
 ] as const;
 
@@ -20,8 +25,15 @@ const UI_TO_BACKEND: Record<string, (typeof APPLICATION_STATUSES)[number]> = {
   Approved: 'approved',
   Offer: 'offer_generated',
   Deposit: 'deposit_paid',
+  'Visa Applied': 'visa_applied',
+  /** Legacy short label used before visa_applied existed */
   Visa: 'visa_approved',
+  'Visa Approved': 'visa_approved',
+  'Visa Rejected': 'visa_rejected',
+  Withdrawn: 'withdrawn',
   Enrolled: 'enrolled',
+  'Agent Invoice Received': 'agent_invoice_received',
+  'Commission Paid': 'commission_paid',
   Rejected: 'rejected',
 };
 
@@ -33,8 +45,13 @@ const BACKEND_TO_UI: Record<string, string> = {
   rejected: 'Rejected',
   offer_generated: 'Offer',
   deposit_paid: 'Deposit',
-  visa_approved: 'Visa',
+  visa_applied: 'Visa Applied',
+  visa_approved: 'Visa Approved',
+  visa_rejected: 'Visa Rejected',
+  withdrawn: 'Withdrawn',
   enrolled: 'Enrolled',
+  agent_invoice_received: 'Agent Invoice Received',
+  commission_paid: 'Commission Paid',
 };
 
 export function backendApplicationStatusToUi(status: string): string {

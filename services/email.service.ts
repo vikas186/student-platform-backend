@@ -14,6 +14,7 @@ import {
   agentPartnershipAgreementTemplate,
   passwordResetTemplate,
   promotionTemplate,
+  signedOfferAdminNotifyTemplate,
   studentEmailVerificationLinkTemplate,
   studentEmailVerificationOtpTemplate,
   welcomeTemplate,
@@ -448,4 +449,30 @@ export const sendPromotionEmail = async (params: {
     html: tpl.html,
     text: tpl.text,
   });
+};
+
+/** Ops inbox for signed offer / agreement alerts (falls back to EMAIL_FROM). */
+export const resolveAdminNotifyEmail = (): string =>
+  process.env.ADMIN_NOTIFY_EMAIL?.trim() ||
+  process.env.OPS_EMAIL?.trim() ||
+  emailConfig().from;
+
+export const sendSignedOfferAdminNotifyEmail = async (params: {
+  studentName: string;
+  studentEmail: string;
+  applicationNumber: string;
+  universityName: string;
+  programName: string;
+  uploadedBy: 'student' | 'agent';
+}): Promise<void> => {
+  const to = resolveAdminNotifyEmail();
+  if (!to) return;
+  const cfg = emailConfig();
+  const adminOfferLettersUrl = `${cfg.frontendUrl}/admin/offer-letters`;
+  const tpl = signedOfferAdminNotifyTemplate(cfg, {
+    ...params,
+    uploadedBy: params.uploadedBy === 'agent' ? 'Agent' : 'Student',
+    adminOfferLettersUrl,
+  });
+  await sendMail({ to, subject: tpl.subject, html: tpl.html, text: tpl.text });
 };
