@@ -1370,17 +1370,32 @@ export const createDepositPayLink = async (
       if (/singapore/.test(n)) return 'Singapore';
       if (/korea|seoul|yonsei|kaist/.test(n)) return 'South Korea';
       if (/luxembourg/.test(n)) return 'Luxembourg';
+      if (/sweden|stockholm/.test(n)) return 'Sweden';
       if (/\busa\b|united states|california|harvard|stanford/.test(n)) return 'USA';
       return '';
     })();
+
+  const resolvedCurrency = (body.currency || '').trim().toUpperCase() || currencyCodeForCountry(destinationCountry);
+  // Do not invent USD — only allow it when the destination is explicitly USA (or client sent USD).
+  const currencyOk =
+    Boolean(resolvedCurrency) &&
+    (resolvedCurrency !== 'USD' ||
+      /united states|\busa\b/i.test(destinationCountry) ||
+      (body.currency || '').trim().toUpperCase() === 'USD');
+
+  if (!currencyOk || !resolvedCurrency) {
+    throw new AppError(
+      'Cannot determine deposit currency for this application. Set a destination country (e.g. New Zealand, United Kingdom, Australia) before generating a pay link.',
+      400,
+    );
+  }
 
   return createFlywirePayLink({
     userId: user.id,
     applicationId: app.id,
     agentProfileId,
     amount,
-    currency:
-      (body.currency || '').trim().toUpperCase() || currencyCodeForCountry(destinationCountry),
+    currency: resolvedCurrency,
     type: 'deposit',
     studentEmail: body.studentEmail?.trim() || user.email || null,
     payerFirstName: nameParts[0] || 'Student',
