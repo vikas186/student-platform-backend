@@ -172,7 +172,7 @@ export const listPublicUniversitiesWithPrograms = async (query: PublicUniversiti
   const offset = (page - 1) * limit;
 
   const where: Record<string, unknown> = { status: true };
-  const andClauses: Record<string, unknown>[] = [];
+  const andClauses: unknown[] = [];
 
   const countries = parseCountriesQuery(query);
   if (countries.length === 1) {
@@ -184,7 +184,7 @@ export const listPublicUniversitiesWithPrograms = async (query: PublicUniversiti
   } else if (countries.length > 1) {
     const restSelected = countries.some(c => isRestOfWorldSelection(c));
     const named = countries.filter(c => !isRestOfWorldSelection(c));
-    const orParts: Record<string, unknown>[] = named.map(c => ({
+    const orParts: unknown[] = named.map(c => ({
       country: { [Op.iLike]: c },
     }));
     if (restSelected) {
