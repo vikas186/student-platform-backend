@@ -328,16 +328,25 @@ export function normalizeDegreeLabel(raw: string): string {
 export function currencyCodeForCountry(country: string | null | undefined): string {
   const c = (country || '').trim().toLowerCase();
   if (!c || c === 'general' || c === 'international' || c.startsWith('mixed')) return 'USD';
-  if (/new\s*zealand|\bnz\b|\bnzl\b/.test(c)) return 'NZD';
+  if (/new\s*zealand|\bnz\b|\bnzl\b|auckland|otago|waikato|massey/.test(c)) return 'NZD';
   if (/united\s*kingdom|\buk\b|\bgbr\b|england|scotland|wales|britain/.test(c)) return 'GBP';
   // Match Australia / AU / AUS before any loose "us" patterns.
-  if (/australia|\bau\b|\baus\b/.test(c)) return 'AUD';
-  if (/canada|\bca\b|\bcan\b/.test(c)) return 'CAD';
+  if (/australia|\bau\b|\baus\b|sydney|melbourne|brisbane/.test(c)) return 'AUD';
+  if (/canada|\bca\b|\bcan\b|toronto|vancouver/.test(c)) return 'CAD';
   if (/united\s*states|\busa\b|\bus\b|\bamerica\b/.test(c)) return 'USD';
-  if (/ireland|\bie\b|\birl\b/.test(c)) return 'EUR';
-  if (/germany|france|italy|spain|netherlands|europe|euro|berlin|munich/.test(c)) return 'EUR';
+  if (/ireland|\bie\b|\birl\b|dublin/.test(c)) return 'EUR';
+  if (
+    /germany|france|italy|spain|netherlands|luxembourg|europe|euro|berlin|munich|milan|madrid/.test(
+      c,
+    )
+  ) {
+    return 'EUR';
+  }
+  if (/south\s*korea|\bkorea\b|seoul/.test(c)) return 'KRW';
   if (/switzerland|\bch\b|\bche\b/.test(c)) return 'CHF';
   if (/singapore|\bsg\b|\bsgp\b/.test(c)) return 'SGD';
+  if (/malaysia/.test(c)) return 'MYR';
+  if (/japan|tokyo/.test(c)) return 'JPY';
   if (/india|\bin\b|\bind\b/.test(c)) return 'INR';
   if (/uae|dubai|emirates|\bae\b/.test(c)) return 'AED';
   return 'USD';
