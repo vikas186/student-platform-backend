@@ -429,10 +429,31 @@ export const createStaff = catchAsyncError(async (req: Request, res: Response) =
     email: String(req.body.email ?? ''),
     password: String(req.body.password ?? ''),
     phone: req.body.phone ?? null,
+    canViewCommission: req.body.canViewCommission === true,
+    canViewDeposits: req.body.canViewDeposits === true,
+    canViewDeadlines: req.body.canViewDeadlines !== false,
   });
   res.status(201).json({
     success: constant.msgType.successStatus,
     message: 'Staff member created',
+    data,
+  });
+});
+
+export const patchStaffAccess = catchAsyncError(async (req: Request, res: Response) => {
+  const user: any = req.user;
+  const staffUserId = String(req.params.userId ?? '');
+  const data = await agentPortal.patchAgencyStaffAccess(user.id, staffUserId, {
+    canViewCommission:
+      typeof req.body.canViewCommission === 'boolean' ? req.body.canViewCommission : undefined,
+    canViewDeposits:
+      typeof req.body.canViewDeposits === 'boolean' ? req.body.canViewDeposits : undefined,
+    canViewDeadlines:
+      typeof req.body.canViewDeadlines === 'boolean' ? req.body.canViewDeadlines : undefined,
+  });
+  res.status(constant.msgCode.successCode).json({
+    success: constant.msgType.successStatus,
+    message: 'Staff access updated',
     data,
   });
 });
@@ -448,6 +469,8 @@ export const deleteStaff = catchAsyncError(async (req: Request, res: Response) =
 });
 
 export const listDeadlines = catchAsyncError(async (req: Request, res: Response) => {
+  const user: any = req.user;
+  await agentPortal.assertCanViewDeadlines(user.id);
   const data = await agentPortal.listDeadlines(req.query as any);
   res.status(constant.msgCode.successCode).json({
     success: constant.msgType.successStatus,

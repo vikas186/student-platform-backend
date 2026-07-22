@@ -59,6 +59,25 @@ export type PublicUniversitiesQuery = {
 const universityNameKey = (name: string): string =>
   name.trim().toLowerCase().replace(/\s+/g, ' ');
 
+/** Sentinel chip for placeholder / uncategorized catalog destinations (was "General"). */
+export const REST_OF_WORLD_COUNTRY = 'Rest of the World';
+
+/** Primary destination chips shown separately on apply forms. */
+const FEATURED_DESTINATION_PATTERNS: RegExp[] = [
+  /united kingdom|\buk\b|britain/i,
+  /united states|\busa\b|\bu\.s\.?\b/i,
+  /canada/i,
+  /australia/i,
+  /new zealand|\bnz\b/i,
+  /ireland/i,
+  /germany/i,
+  /france/i,
+  /netherlands|\bholland\b/i,
+];
+
+const isFeaturedDestinationCountry = (country: string): boolean =>
+  FEATURED_DESTINATION_PATTERNS.some(re => re.test(country.trim()));
+
 /** True when a "country" cell looks like a program title (bad catalog import). */
 export const looksLikeProgramAsCountry = (value: string): boolean => {
   const v = value.trim();
@@ -69,12 +88,32 @@ export const looksLikeProgramAsCountry = (value: string): boolean => {
   return false;
 };
 
-/** Placeholder / junk destination labels that should not appear as country chips. */
+/** Placeholder / junk destination labels that should not appear as named country chips. */
 export const isPlaceholderCatalogCountry = (value: string): boolean => {
   const v = value.trim();
   if (!v) return true;
   return /^(general|international|mixed)(\b|\/|$)/i.test(v);
 };
+
+export const isRestOfWorldSelection = (value: string): boolean => {
+  const v = value.trim();
+  if (!v) return false;
+  return /^rest of the world$/i.test(v) || isPlaceholderCatalogCountry(v);
+};
+
+/** Universities under General / International / mixed, or named destinations outside the featured chip set. */
+export const restOfWorldCountryWhere = () =>
+  db.sequelize.literal(`(
+    "University"."country" ILIKE 'General'
+    OR "University"."country" ILIKE 'International'
+    OR "University"."country" ILIKE 'mixed%'
+    OR "University"."country" ILIKE 'Rest of the World'
+    OR (
+      "University"."country" IS NOT NULL
+      AND TRIM("University"."country") <> ''
+      AND "University"."country" !~* '(united kingdom|\\buk\\b|britain|united states|\\busa\\b|\\bu\\.s\\.?\\b|canada|australia|new zealand|\\bnz\\b|ireland|germany|france|netherlands|holland)'
+    )
+  )`);
 
 const parseCountriesQuery = (query: PublicUniversitiesQuery): string[] => {
   const fromList = String(query.countries ?? '')
@@ -99,9 +138,17 @@ export const listPublicCatalogCountries = async () => {
     raw: true,
   });
 
-  const countries = rows
+  const rawCountries = rows
     .map(r => String((r as { country?: string }).country ?? '').trim())
-    .filter(c => c && !looksLikeProgramAsCountry(c) && !isPlaceholderCatalogCountry(c));
+    .filter(c => c && !looksLikeProgramAsCountry(c));
+
+  const hasRestBucket = rawCountries.some(
+    c => isPlaceholderCatalogCountry(c) || !isFeaturedDestinationCountry(c),
+  );
+
+  const countries = rawCountries.filter(
+    c => !isPlaceholderCatalogCountry(c) && isFeaturedDestinationCountry(c),
+  );
 
   const seen = new Set<string>();
   const unique: string[] = [];
@@ -110,6 +157,10 @@ export const listPublicCatalogCountries = async () => {
     if (seen.has(key)) continue;
     seen.add(key);
     unique.push(c);
+  }
+
+  if (hasRestBucket) {
+    unique.push(REST_OF_WORLD_COUNTRY);
   }
 
   return { countries: unique };
@@ -125,11 +176,25 @@ export const listPublicUniversitiesWithPrograms = async (query: PublicUniversiti
 
   const countries = parseCountriesQuery(query);
   if (countries.length === 1) {
-    andClauses.push({ country: { [Op.iLike]: countries[0] } });
+    if (isRestOfWorldSelection(countries[0]!)) {
+      andClauses.push(restOfWorldCountryWhere());
+    } else {
+      andClauses.push({ country: { [Op.iLike]: countries[0] } });
+    }
   } else if (countries.length > 1) {
-    andClauses.push({
-      [Op.or]: countries.map(c => ({ country: { [Op.iLike]: c } })),
-    });
+    const restSelected = countries.some(c => isRestOfWorldSelection(c));
+    const named = countries.filter(c => !isRestOfWorldSelection(c));
+    const orParts: Record<string, unknown>[] = named.map(c => ({
+      country: { [Op.iLike]: c },
+    }));
+    if (restSelected) {
+      orParts.push(restOfWorldCountryWhere());
+    }
+    if (orParts.length === 1) {
+      andClauses.push(orParts[0]!);
+    } else if (orParts.length > 1) {
+      andClauses.push({ [Op.or]: orParts });
+    }
   }
   if (query.search?.trim()) {
     const term = `%${query.search.trim()}%`;

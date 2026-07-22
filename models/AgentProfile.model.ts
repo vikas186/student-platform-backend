@@ -30,6 +30,7 @@ export default (sequelize: Sequelize) => {
     declare parentAgentProfileId: number | null;
     declare canViewCommission: boolean;
     declare canViewDeposits: boolean;
+    declare canViewDeadlines: boolean;
     declare readonly createdAt: Date;
     declare readonly updatedAt: Date;
 
@@ -164,6 +165,12 @@ export default (sequelize: Sequelize) => {
         allowNull: false,
         defaultValue: true,
         field: 'can_view_deposits',
+      },
+      canViewDeadlines: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: true,
+        field: 'can_view_deadlines',
       },
     },
     {

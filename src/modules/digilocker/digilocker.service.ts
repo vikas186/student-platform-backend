@@ -331,7 +331,7 @@ export const downloadDigilockerFile = async (
       data: err.response?.data ? String(err.response.data) : undefined,
       message: err.message,
     });
-    throw err;
+    throw mapDigilockerApiError(err, 'file download');
   }
 };
 

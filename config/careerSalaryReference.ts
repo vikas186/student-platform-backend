@@ -661,6 +661,9 @@ const levelFromCourseName = (courseName: string | null | undefined): 'undergradu
 
 const normalizeCountryForLookup = (country: string): string => {
   const c = country.toLowerCase().trim();
+  if (/^(rest of the world|general|international|mixed)\b/.test(c)) {
+    return '';
+  }
   if (/^(us|usa|u\.s\.?a?\.?|united states|america)\b/.test(c) || c.includes('united states')) {
     return 'united states';
   }
@@ -671,6 +674,10 @@ const normalizeCountryForLookup = (country: string): string => {
   if (/canada|\bca\b/.test(c)) return 'canada';
   if (/new zealand|\bnz\b/.test(c)) return 'new zealand';
   if (/germany/.test(c)) return 'germany';
+  if (/spain/.test(c)) return 'spain';
+  if (/south korea|\bkorea\b/.test(c)) return 'south korea';
+  if (/malaysia/.test(c)) return 'malaysia';
+  if (/singapore/.test(c)) return 'singapore';
   return c;
 };
 
@@ -679,6 +686,8 @@ const isVaguePlaceholderRole = (role: string): boolean =>
 
 const countryMatches = (countryLower: string, pattern: string): boolean => {
   if (!pattern) return true;
+  // Empty country (Rest of the World / General) matches global career rows only.
+  if (!countryLower) return false;
   const p = pattern.toLowerCase();
   return (
     countryLower === p ||

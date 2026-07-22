@@ -173,6 +173,7 @@ export type AgentContext = {
   isStaff: boolean;
   canViewCommission: boolean;
   canViewDeposits: boolean;
+  canViewDeadlines: boolean;
 };
 
 export const resolveAgentContext = async (userId: string): Promise<AgentContext> => {
@@ -196,6 +197,7 @@ export const resolveAgentContext = async (userId: string): Promise<AgentContext>
       isStaff: true,
       canViewCommission: Boolean(ownProfile.canViewCommission),
       canViewDeposits: Boolean(ownProfile.canViewDeposits),
+      canViewDeadlines: ownProfile.canViewDeadlines !== false,
     };
   }
 
@@ -205,6 +207,7 @@ export const resolveAgentContext = async (userId: string): Promise<AgentContext>
     isStaff: false,
     canViewCommission: ownProfile.canViewCommission !== false,
     canViewDeposits: ownProfile.canViewDeposits !== false,
+    canViewDeadlines: ownProfile.canViewDeadlines !== false,
   };
 };
 
@@ -237,6 +240,13 @@ export const assertCanViewDeposits = async (userId: string) => {
   const ctx = await resolveAgentContext(userId);
   if (!ctx.canViewDeposits) {
     throw new AppError('You do not have access to deposit payments.', 403);
+  }
+};
+
+export const assertCanViewDeadlines = async (userId: string) => {
+  const ctx = await resolveAgentContext(userId);
+  if (!ctx.canViewDeadlines) {
+    throw new AppError('You do not have access to deadlines.', 403);
   }
 };
 
@@ -1501,6 +1511,7 @@ export const getAgentPortalProfile = async (userId: string) => {
     isStaff: ctx.isStaff,
     canViewCommission: ctx.canViewCommission,
     canViewDeposits: ctx.canViewDeposits,
+    canViewDeadlines: ctx.canViewDeadlines,
     canManageStaff: !ctx.isStaff,
   };
 };
@@ -1559,14 +1570,26 @@ export const listAgencyStaff = async (ownerUserId: string) => {
       status: u?.status ?? true,
       canViewCommission: Boolean(r.canViewCommission),
       canViewDeposits: Boolean(r.canViewDeposits),
+      canViewDeadlines: r.canViewDeadlines !== false,
       createdAt: r.createdAt,
     };
   });
 };
 
+type StaffAccessFlags = {
+  canViewCommission?: boolean;
+  canViewDeposits?: boolean;
+  canViewDeadlines?: boolean;
+};
+
 export const createAgencyStaff = async (
   ownerUserId: string,
-  body: { fullName: string; email: string; password: string; phone?: string | null },
+  body: {
+    fullName: string;
+    email: string;
+    password: string;
+    phone?: string | null;
+  } & StaffAccessFlags,
 ) => {
   const ctx = await assertIsAgencyOwner(ownerUserId);
   const email = String(body.email).trim().toLowerCase();
@@ -1577,6 +1600,10 @@ export const createAgencyStaff = async (
   if (password.length < 8) {
     throw new AppError('Password must be at least 8 characters', 400);
   }
+
+  const canViewCommission = body.canViewCommission === true;
+  const canViewDeposits = body.canViewDeposits === true;
+  const canViewDeadlines = body.canViewDeadlines !== false;
 
   const user = await db.User.create({
     name: String(body.fullName).trim(),
@@ -1594,8 +1621,9 @@ export const createAgencyStaff = async (
     primaryMarket: ctx.effectiveProfile.primaryMarket,
     parentAgentProfileId: ctx.effectiveProfile.id,
     membershipId: null,
-    canViewCommission: false,
-    canViewDeposits: false,
+    canViewCommission,
+    canViewDeposits,
+    canViewDeadlines,
     agreementStatus: 'approved',
     subscriptionPlanId: ctx.effectiveProfile.subscriptionPlanId,
   });
@@ -1605,8 +1633,48 @@ export const createAgencyStaff = async (
     name: user.name,
     email: user.email,
     phone: user.phone,
-    canViewCommission: false,
-    canViewDeposits: false,
+    canViewCommission,
+    canViewDeposits,
+    canViewDeadlines,
+  };
+};
+
+export const patchAgencyStaffAccess = async (
+  ownerUserId: string,
+  staffUserId: string,
+  body: StaffAccessFlags,
+) => {
+  const ctx = await assertIsAgencyOwner(ownerUserId);
+  const staffProfile = await db.AgentProfile.findOne({
+    where: { userId: staffUserId, parentAgentProfileId: ctx.effectiveProfile.id },
+    include: [{ model: db.User, as: 'user', attributes: ['id', 'name', 'email', 'phone', 'status'] }],
+  });
+  if (!staffProfile) {
+    throw new AppError('Staff member not found', 404);
+  }
+
+  if (typeof body.canViewCommission === 'boolean') {
+    staffProfile.canViewCommission = body.canViewCommission;
+  }
+  if (typeof body.canViewDeposits === 'boolean') {
+    staffProfile.canViewDeposits = body.canViewDeposits;
+  }
+  if (typeof body.canViewDeadlines === 'boolean') {
+    staffProfile.canViewDeadlines = body.canViewDeadlines;
+  }
+  await staffProfile.save();
+
+  const u = (staffProfile as any).user;
+  return {
+    userId: staffProfile.userId,
+    name: u?.name ?? '',
+    email: u?.email ?? '',
+    phone: u?.phone ?? null,
+    status: u?.status ?? true,
+    canViewCommission: Boolean(staffProfile.canViewCommission),
+    canViewDeposits: Boolean(staffProfile.canViewDeposits),
+    canViewDeadlines: staffProfile.canViewDeadlines !== false,
+    createdAt: staffProfile.createdAt,
   };
 };
 

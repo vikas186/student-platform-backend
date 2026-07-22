@@ -167,7 +167,21 @@ const createAgencyStaffBodyJoiSchema = {
       email: Joi.string().email().required(),
       password: Joi.string().min(8).max(128).required(),
       phone: Joi.string().trim().max(64).optional().allow('', null),
+      canViewCommission: Joi.boolean().optional(),
+      canViewDeposits: Joi.boolean().optional(),
+      canViewDeadlines: Joi.boolean().optional(),
     })
+    .required(),
+};
+
+const patchAgencyStaffAccessBodyJoiSchema = {
+  body: Joi.object()
+    .keys({
+      canViewCommission: Joi.boolean().optional(),
+      canViewDeposits: Joi.boolean().optional(),
+      canViewDeadlines: Joi.boolean().optional(),
+    })
+    .or('canViewCommission', 'canViewDeposits', 'canViewDeadlines')
     .required(),
 };
 
@@ -188,4 +202,5 @@ export {
   agentProfilePatchJoiSchema,
   listStudentsQueryJoiSchema,
   createAgencyStaffBodyJoiSchema,
+  patchAgencyStaffAccessBodyJoiSchema,
 };

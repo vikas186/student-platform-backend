@@ -36,6 +36,7 @@ import {
   requireAgreementApproved,
   listStaff,
   createStaff,
+  patchStaffAccess,
   deleteStaff,
 } from '../controller/agentController';
 import { jwtAuthMiddleware } from '../middleware/jwtAuth';
@@ -59,6 +60,7 @@ import {
   agentProfilePatchJoiSchema,
   listStudentsQueryJoiSchema,
   createAgencyStaffBodyJoiSchema,
+  patchAgencyStaffAccessBodyJoiSchema,
 } from '../validations/agent.validation';
 import { postAgentMatch } from '../src/modules/recommendations/recommendations.controller';
 import { agentMatchJoiSchema } from '../src/modules/recommendations/recommendations.validation';
@@ -91,6 +93,12 @@ agentRouter
     requirePermission('applications', 'create'),
     validateMiddleware(createAgencyStaffBodyJoiSchema),
     createStaff,
+  )
+  .patch(
+    '/staff/:userId',
+    requirePermission('applications', 'edit'),
+    validateMiddleware(patchAgencyStaffAccessBodyJoiSchema),
+    patchStaffAccess,
   )
   .delete('/staff/:userId', requirePermission('applications', 'edit'), deleteStaff)
   .get('/dashboard', requirePermission('applications', 'view'), getDashboard)
