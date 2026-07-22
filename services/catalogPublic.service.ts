@@ -235,14 +235,7 @@ export const listPublicUniversitiesWithPrograms = async (query: PublicUniversiti
   }
 
   // One row per institution name (catalog imports sometimes created one row per program).
-  // Prefer institutions that already have Course rows so NZ polytech shells sort after real unis.
-  const courseCountOrder = db.sequelize.literal(`(
-    SELECT COUNT(*)::int
-    FROM courses c
-    INNER JOIN universities u2 ON u2.id = c.university_id AND u2.status = true
-    WHERE LOWER(TRIM(u2.name)) = LOWER(TRIM(MIN("universities"."name")))
-  )`);
-
+  // Do not ORDER BY a correlated MIN() subquery here — Postgres rejects it and 500s the catalog API.
   const distinctNameRows = (await db.University.findAll({
     attributes: [
       [db.sequelize.fn('MIN', db.sequelize.col('id')), 'id'],
@@ -250,10 +243,7 @@ export const listPublicUniversitiesWithPrograms = async (query: PublicUniversiti
     ],
     where,
     group: [db.sequelize.fn('LOWER', db.sequelize.fn('TRIM', db.sequelize.col('name')))],
-    order: [
-      [courseCountOrder, 'DESC'],
-      [db.sequelize.fn('MIN', db.sequelize.col('name')), 'ASC'],
-    ],
+    order: [[db.sequelize.fn('MIN', db.sequelize.col('name')), 'ASC']],
     limit,
     offset,
     raw: true,
