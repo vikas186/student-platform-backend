@@ -101,6 +101,21 @@ export const isRestOfWorldSelection = (value: string): boolean => {
   return /^rest of the world$/i.test(v) || isPlaceholderCatalogCountry(v);
 };
 
+/** Always offer these leftover destination chips even when the catalog has few/no rows yet. */
+const CURATED_EXTRA_DESTINATIONS = [
+  'Italy',
+  'Spain',
+  'South Korea',
+  'Luxembourg',
+  'Singapore',
+  'Malaysia',
+  'Switzerland',
+  'Japan',
+  'India',
+  'UAE',
+  'Sweden',
+] as const;
+
 /**
  * Rest of the World = placeholder destinations (General / International / mixed)
  * plus any named country that is not a featured chip (Italy, Spain, Singapore, …).
@@ -160,6 +175,16 @@ export const listPublicCatalogCountries = async () => {
     else leftovers.push(c);
   }
 
+  for (const extra of CURATED_EXTRA_DESTINATIONS) {
+    const key = extra.toLowerCase();
+    if (seen.has(key)) continue;
+    if (isFeaturedDestinationCountry(extra)) continue;
+    seen.add(key);
+    leftovers.push(extra);
+  }
+
+  leftovers.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+
   // Featured first, then leftover named destinations (Italy, Spain, …), then Rest of the World.
   const unique = [...featured, ...leftovers];
   if (hasGeneralBucket || leftovers.length > 0) {
@@ -210,6 +235,14 @@ export const listPublicUniversitiesWithPrograms = async (query: PublicUniversiti
   }
 
   // One row per institution name (catalog imports sometimes created one row per program).
+  // Prefer institutions that already have Course rows so NZ polytech shells sort after real unis.
+  const courseCountOrder = db.sequelize.literal(`(
+    SELECT COUNT(*)::int
+    FROM courses c
+    INNER JOIN universities u2 ON u2.id = c.university_id AND u2.status = true
+    WHERE LOWER(TRIM(u2.name)) = LOWER(TRIM(MIN("universities"."name")))
+  )`);
+
   const distinctNameRows = (await db.University.findAll({
     attributes: [
       [db.sequelize.fn('MIN', db.sequelize.col('id')), 'id'],
@@ -217,7 +250,10 @@ export const listPublicUniversitiesWithPrograms = async (query: PublicUniversiti
     ],
     where,
     group: [db.sequelize.fn('LOWER', db.sequelize.fn('TRIM', db.sequelize.col('name')))],
-    order: [[db.sequelize.fn('MIN', db.sequelize.col('name')), 'ASC']],
+    order: [
+      [courseCountOrder, 'DESC'],
+      [db.sequelize.fn('MIN', db.sequelize.col('name')), 'ASC'],
+    ],
     limit,
     offset,
     raw: true,

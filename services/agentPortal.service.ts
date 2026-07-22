@@ -1337,6 +1337,7 @@ export const createDepositPayLink = async (
     '../src/modules/flywire/flywire.service'
   );
   const { flywireConfig } = await import('../src/modules/flywire/flywire.config');
+  const { currencyCodeForCountry } = await import('../utils/universityCatalogImport');
 
   const paymentDestination = await resolveFlywirePaymentDestination(app as any);
   const nameParts = String(user.name || '')
@@ -1344,33 +1345,47 @@ export const createDepositPayLink = async (
     .split(/\s+/)
     .filter(Boolean);
 
-  const currencyFromCountry = (() => {
-    const c = String(app.country || '').toLowerCase();
-    if (/united kingdom|\buk\b|britain/.test(c)) return 'GBP';
-    if (/australia/.test(c)) return 'AUD';
-    if (/canada/.test(c)) return 'CAD';
-    if (/new zealand|\bnz\b/.test(c)) return 'NZD';
-    if (/singapore/.test(c)) return 'SGD';
-    if (/malaysia/.test(c)) return 'MYR';
-    if (/south korea|\bkorea\b/.test(c)) return 'KRW';
-    if (/japan/.test(c)) return 'JPY';
-    if (/india/.test(c)) return 'INR';
-    if (/germany|france|italy|spain|netherlands|ireland|europe|euro/.test(c)) return 'EUR';
-    if (/united states|\busa\b/.test(c)) return 'USD';
-    return 'USD';
-  })();
+  const courseUni = (app as any).course?.university as
+    | { country?: string | null; name?: string | null }
+    | undefined;
+  const uniName = String(app.universityName || courseUni?.name || '').trim();
+  const explicitCountry =
+    String(app.country || '').trim() || String(courseUni?.country || '').trim();
+  const destinationCountry =
+    explicitCountry ||
+    (() => {
+      const n = uniName.toLowerCase();
+      if (/new zealand|auckland|otago|waikato|massey|wellington|canterbury|lincoln university|\baut\b/.test(n)) {
+        return 'New Zealand';
+      }
+      if (/united kingdom|london|manchester|edinburgh|oxford|cambridge/.test(n)) return 'United Kingdom';
+      if (/australia|sydney|melbourne|brisbane|perth|monash|unsw/.test(n)) return 'Australia';
+      if (/canada|toronto|vancouver|montreal|mcgill/.test(n)) return 'Canada';
+      if (/ireland|dublin|cork|galway/.test(n)) return 'Ireland';
+      if (/germany|berlin|munich|hamburg|bremen/.test(n)) return 'Germany';
+      if (/france|paris|lyon/.test(n)) return 'France';
+      if (/italy|milan|rome|florence|bocconi/.test(n)) return 'Italy';
+      if (/spain|madrid|barcelona/.test(n)) return 'Spain';
+      if (/netherlands|amsterdam|holland/.test(n)) return 'Netherlands';
+      if (/singapore/.test(n)) return 'Singapore';
+      if (/korea|seoul|yonsei|kaist/.test(n)) return 'South Korea';
+      if (/luxembourg/.test(n)) return 'Luxembourg';
+      if (/\busa\b|united states|california|harvard|stanford/.test(n)) return 'USA';
+      return '';
+    })();
 
   return createFlywirePayLink({
     userId: user.id,
     applicationId: app.id,
     agentProfileId,
     amount,
-    currency: (body.currency || '').trim().toUpperCase() || currencyFromCountry,
+    currency:
+      (body.currency || '').trim().toUpperCase() || currencyCodeForCountry(destinationCountry),
     type: 'deposit',
     studentEmail: body.studentEmail?.trim() || user.email || null,
     payerFirstName: nameParts[0] || 'Student',
     payerLastName: nameParts.slice(1).join(' ') || nameParts[0] || 'Payer',
-    payerCountry: app.country || null,
+    payerCountry: explicitCountry || destinationCountry || null,
     paymentDestination,
     returnUrl: `${flywireConfig().frontendUrl}/agent/deposit-payments`,
   });
