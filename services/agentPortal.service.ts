@@ -1344,12 +1344,28 @@ export const createDepositPayLink = async (
     .split(/\s+/)
     .filter(Boolean);
 
+  const currencyFromCountry = (() => {
+    const c = String(app.country || '').toLowerCase();
+    if (/united kingdom|\buk\b|britain/.test(c)) return 'GBP';
+    if (/australia/.test(c)) return 'AUD';
+    if (/canada/.test(c)) return 'CAD';
+    if (/new zealand|\bnz\b/.test(c)) return 'NZD';
+    if (/singapore/.test(c)) return 'SGD';
+    if (/malaysia/.test(c)) return 'MYR';
+    if (/south korea|\bkorea\b/.test(c)) return 'KRW';
+    if (/japan/.test(c)) return 'JPY';
+    if (/india/.test(c)) return 'INR';
+    if (/germany|france|italy|spain|netherlands|ireland|europe|euro/.test(c)) return 'EUR';
+    if (/united states|\busa\b/.test(c)) return 'USD';
+    return 'USD';
+  })();
+
   return createFlywirePayLink({
     userId: user.id,
     applicationId: app.id,
     agentProfileId,
     amount,
-    currency: body.currency || 'USD',
+    currency: (body.currency || '').trim().toUpperCase() || currencyFromCountry,
     type: 'deposit',
     studentEmail: body.studentEmail?.trim() || user.email || null,
     payerFirstName: nameParts[0] || 'Student',

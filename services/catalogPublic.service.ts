@@ -101,17 +101,20 @@ export const isRestOfWorldSelection = (value: string): boolean => {
   return /^rest of the world$/i.test(v) || isPlaceholderCatalogCountry(v);
 };
 
-/** Universities under General / International / mixed, or named destinations outside the featured chip set. */
+/**
+ * Rest of the World = placeholder destinations (General / International / mixed)
+ * plus any named country that is not a featured chip (Italy, Spain, Singapore, …).
+ */
 export const restOfWorldCountryWhere = () =>
   db.sequelize.literal(`(
-    "University"."country" ILIKE 'General'
-    OR "University"."country" ILIKE 'International'
-    OR "University"."country" ILIKE 'mixed%'
-    OR "University"."country" ILIKE 'Rest of the World'
+    country ILIKE 'General'
+    OR country ILIKE 'International'
+    OR country ILIKE 'mixed%'
+    OR country ILIKE 'Rest of the World'
     OR (
-      "University"."country" IS NOT NULL
-      AND TRIM("University"."country") <> ''
-      AND "University"."country" !~* '(united kingdom|\\buk\\b|britain|united states|\\busa\\b|\\bu\\.s\\.?\\b|canada|australia|new zealand|\\bnz\\b|ireland|germany|france|netherlands|holland)'
+      country IS NOT NULL
+      AND BTRIM(country) <> ''
+      AND country !~* '(united kingdom|\\muk\\M|britain|united states|\\musa\\M|\\mu\\.?s\\.?\\M|canada|australia|new zealand|\\mnz\\M|ireland|germany|france|netherlands|holland)'
     )
   )`);
 
@@ -142,24 +145,24 @@ export const listPublicCatalogCountries = async () => {
     .map(r => String((r as { country?: string }).country ?? '').trim())
     .filter(c => c && !looksLikeProgramAsCountry(c));
 
-  const hasRestBucket = rawCountries.some(
-    c => isPlaceholderCatalogCountry(c) || !isFeaturedDestinationCountry(c),
-  );
+  const hasGeneralBucket = rawCountries.some(c => isPlaceholderCatalogCountry(c));
 
-  const countries = rawCountries.filter(
-    c => !isPlaceholderCatalogCountry(c) && isFeaturedDestinationCountry(c),
-  );
-
+  const featured: string[] = [];
+  const leftovers: string[] = [];
   const seen = new Set<string>();
-  const unique: string[] = [];
-  for (const c of countries) {
+
+  for (const c of rawCountries) {
+    if (isPlaceholderCatalogCountry(c)) continue;
     const key = c.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
-    unique.push(c);
+    if (isFeaturedDestinationCountry(c)) featured.push(c);
+    else leftovers.push(c);
   }
 
-  if (hasRestBucket) {
+  // Featured first, then leftover named destinations (Italy, Spain, …), then Rest of the World.
+  const unique = [...featured, ...leftovers];
+  if (hasGeneralBucket || leftovers.length > 0) {
     unique.push(REST_OF_WORLD_COUNTRY);
   }
 
@@ -436,7 +439,14 @@ export const listPublicUniversitiesWithPrograms = async (query: PublicUniversiti
     };
   });
 
-  const deduped = dedupeUniversitiesByNameCountry(universities);
+  // Prefer institutions that already have selectable programmes (NZ polytech shells often have none).
+  const deduped = dedupeUniversitiesByNameCountry(universities)
+    .filter(u => (u.programs?.length ?? u.programsCount ?? 0) > 0)
+    .sort((a, b) => {
+      const pc = (b.programsCount ?? 0) - (a.programsCount ?? 0);
+      if (pc !== 0) return pc;
+      return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+    });
 
   return {
     universities: deduped,
