@@ -484,8 +484,8 @@ export const admissionsApplicationPackTemplate = (
   const body = `
     <p style="margin:0 0 12px;font-size:15px;line-height:1.6;color:#3d4f72;">Hello Admissions Team,</p>
     <p style="margin:0 0 12px;font-size:15px;line-height:1.6;color:#3d4f72;">
-      ${cfg.brandName} has reviewed and approved the following student application for
-      <strong>${params.universityName}</strong>. Supporting documents are attached to this email.
+      ${cfg.brandName} has reviewed and approved the following student application.
+      Supporting documents are attached to this email for your review and decision.
     </p>
     <table style="margin:16px 0;width:100%;border-collapse:collapse;font-size:14px;background:#f8f6f1;border-radius:12px;">
       <tr><td style="padding:10px 14px;color:#6b7a9a;">Reference</td><td style="padding:10px 14px;font-weight:600;">${params.applicationNumber}</td></tr>
@@ -493,6 +493,7 @@ export const admissionsApplicationPackTemplate = (
       <tr><td style="padding:10px 14px;color:#6b7a9a;">Email</td><td style="padding:10px 14px;font-weight:600;">${params.studentEmail || '—'}</td></tr>
       <tr><td style="padding:10px 14px;color:#6b7a9a;">Phone</td><td style="padding:10px 14px;font-weight:600;">${params.studentPhone || '—'}</td></tr>
       <tr><td style="padding:10px 14px;color:#6b7a9a;">Program</td><td style="padding:10px 14px;font-weight:600;">${params.programName}</td></tr>
+      <tr><td style="padding:10px 14px;color:#6b7a9a;">University</td><td style="padding:10px 14px;font-weight:600;">${params.universityName}</td></tr>
       <tr><td style="padding:10px 14px;color:#6b7a9a;">Country of study</td><td style="padding:10px 14px;font-weight:600;">${params.country || '—'}</td></tr>
     </table>
     <p style="margin:0;font-size:14px;font-weight:600;color:#1a2b5e;">Attachments</p>
@@ -506,7 +507,7 @@ export const admissionsApplicationPackTemplate = (
   return {
     subject: `Student application ${params.applicationNumber} — ${params.studentName} — ${params.programName}`,
     html: layout(cfg, 'Approved application for admissions review', body),
-    text: `Hello Admissions Team,\n\n${cfg.brandName} has approved application ${params.applicationNumber} for ${params.studentName} (${params.studentEmail}) — ${params.programName} at ${params.universityName}.\n\nDocuments attached: ${params.documentNames.join(', ') || 'none'}\n${params.skippedDocumentNames.length ? `Not attached: ${params.skippedDocumentNames.join('; ')}\n` : ''}${params.notes ? `\nNotes:\n${params.notes}\n` : ''}\nPlease reply with your admissions decision.`,
+    text: `Hello Admissions Team,\n\n${cfg.brandName} has reviewed and approved the following student application. Supporting documents are attached to this email for your review and decision.\n\nReference: ${params.applicationNumber}\nStudent: ${params.studentName}\nEmail: ${params.studentEmail || '—'}\nProgram: ${params.programName}\nUniversity: ${params.universityName}\n\nDocuments attached: ${params.documentNames.join(', ') || 'none'}\n${params.skippedDocumentNames.length ? `Not attached: ${params.skippedDocumentNames.join('; ')}\n` : ''}${params.notes ? `\nNotes:\n${params.notes}\n` : ''}\nPlease reply with your admissions decision.`,
   };
 };
 
