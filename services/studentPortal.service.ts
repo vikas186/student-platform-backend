@@ -294,74 +294,14 @@ export const submitStudentApplication = async (studentProfileId: number, idOrRef
     throw new AppError(
       app.manualUploadAllowed
         ? 'Please upload at least one document before submitting.'
-        : 'Please sign in to DigiLocker and import your academic documents before submitting.',
+        : 'Please import DigiLocker documents or upload at least one file before submitting.',
       400,
     );
   }
 
-  const connection = await db.DigiLockerConnection.findByPk(sp.userId);
-  const hasDigilockerDoc = docs.some(
-    d => d.status === 'verified' && d.fileUrl && d.fileUrl.includes('digilocker'),
-  );
-
-  const { listDigilockerIssuedDocuments, mapDigilockerDocType } = await import(
-    '../src/modules/digilocker/digilocker.service'
-  );
-
-  // DigiLocker checks skipped when admin enabled manual upload for this application.
-  if (!app.manualUploadAllowed) {
-    if (!hasDigilockerDoc) {
-      if (!connection) {
-        throw new AppError('Please connect your DigiLocker account and verify your documents before submitting.', 400);
-      }
-      try {
-        await listDigilockerIssuedDocuments(sp.userId);
-      } catch (err: any) {
-        throw new AppError('Your DigiLocker session has expired or is invalid. Please reconnect your DigiLocker account and verify at least one document.', 400);
-      }
-      throw new AppError('Please verify at least one document with DigiLocker before submitting.', 400);
-    }
-
-    if (connection) {
-      let issuedDocs: any[] = [];
-      let fetchFailed = false;
-      try {
-        issuedDocs = await listDigilockerIssuedDocuments(sp.userId);
-      } catch (err: any) {
-        fetchFailed = true;
-        console.warn(`[DigiLocker Submit Check] Failed to fetch DigiLocker documents for user ${sp.userId}: ${err.message || err}`);
-      }
-
-      if (!fetchFailed) {
-        const verifiableTypesInDigilocker = new Set(
-          issuedDocs.map(d => mapDigilockerDocType(d.doctype, d.description || d.name))
-        );
-
-        const uploadedDocTypes = new Set(docs.map(d => d.type));
-        const unverifiedVerifiableTypes: string[] = [];
-
-        for (const docType of uploadedDocTypes) {
-          if (verifiableTypesInDigilocker.has(docType)) {
-            const isVerified = docs.some(
-              d => d.type === docType && d.status === 'verified' && d.fileUrl && d.fileUrl.includes('digilocker')
-            );
-            if (!isVerified) {
-              unverifiedVerifiableTypes.push(docType);
-            }
-          }
-        }
-
-        if (unverifiedVerifiableTypes.length > 0) {
-          const { DOCUMENT_TYPE_LABELS } = await import('../src/modules/document-verification/document-types');
-          const labels = unverifiedVerifiableTypes.map(t => DOCUMENT_TYPE_LABELS[t] || t);
-          throw new AppError(
-            `The following document(s) are available in your DigiLocker and must be verified: ${labels.join(', ')}. Please remove the manual uploads and import them from DigiLocker.`,
-            400
-          );
-        }
-      }
-    }
-  }
+  // Any document linked to the application is enough to submit. Live DigiLocker
+  // re-checks at submit time were blocking drafts that already had imported or
+  // manually uploaded files (session expiry / DigiLocker API errors).
 
   // Final guard at submit time: pin country to the university's country if the
   // university is in the admin catalog. Stops accidental "Canada"-style defaults
