@@ -149,6 +149,8 @@ export const getUniversityCommission = async (userId: string) => {
     return {
       locked: true as const,
       reason: 'Locked until signed agreement is uploaded.',
+      country: uni.country ?? null,
+      universityName: uni.name ?? null,
       commissions: [],
     };
   }
@@ -158,6 +160,8 @@ export const getUniversityCommission = async (userId: string) => {
   });
   return {
     locked: false as const,
+    country: uni.country ?? null,
+    universityName: uni.name ?? null,
     commissions,
   };
 };

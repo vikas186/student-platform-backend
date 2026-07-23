@@ -11,6 +11,7 @@ import { normalizeApplicationReference } from '../utils/applicationRef';
 import { normalizeOfferReference } from '../utils/offerRef';
 import { isUuid } from '../utils/isUuid';
 import { readAgentAgreementPdf, resolveAgentAgreementPdfPath } from './agent-agreement.service';
+import { currencyCodeForCountry } from '../utils/universityCatalogImport';
 
 const CHECKLIST_TYPES: { key: string; label: string }[] = [
   { key: 'passport_id', label: 'Passport / ID' },
@@ -1099,28 +1100,100 @@ export type AgentCommissionCalculatorUniversity = {
   slabLabel: string | null;
   slabDetails: string | null;
   parsedSlab: Record<string, unknown> | null;
+  /** Destination country for currency display (GBP/AUD/…). */
+  country?: string | null;
   /** True if this university appears on at least one of the agent's applications */
   inPipeline?: boolean;
+};
+
+const formatPartnerRatesSnippet = (
+  rates: Record<string, unknown> | null,
+  rawFormat: string,
+  country?: string | null,
+): string | null => {
+  if (!rates) return rawFormat || null;
+  const currencyMatch = rawFormat
+    .toUpperCase()
+    .match(/\b(USD|AUD|CAD|NZD|GBP|EUR|CHF|SGD|INR|AED|HKD|JPY|MYR|KRW|CNY)\b/);
+  let currency: string | null =
+    currencyMatch?.[1] ||
+    (/£/.test(rawFormat) ? 'GBP' : /€/.test(rawFormat) ? 'EUR' : null);
+
+  if (!currency && country?.trim()) {
+    const mapped = currencyCodeForCountry(country);
+    // currencyCodeForCountry falls back to USD for unknowns — only trust it for mapped destinations.
+    if (mapped === 'USD') {
+      currency = /united\s*states|\busa\b|\bus\b|\bamerica\b/i.test(country) ? 'USD' : null;
+    } else {
+      currency = mapped;
+    }
+  }
+
+  // Bare "$" only implies USD when destination is USA (or no country + no other hint).
+  if (!currency && /US\$/i.test(rawFormat)) currency = 'USD';
+  if (
+    !currency &&
+    /\$/.test(rawFormat) &&
+    (!country || /united\s*states|\busa\b/i.test(country))
+  ) {
+    currency = 'USD';
+  }
+
+  const parts = ['Offer', 'Deposit', 'Visa', 'Enrolled']
+    .map(k => {
+      const n = Number(rates[k]);
+      if (!Number.isFinite(n)) return null;
+      const amount = Math.round(n).toLocaleString('en-US');
+      if (currency === 'USD') return `${k}: $${amount}`;
+      if (currency === 'GBP') return `${k}: £${amount}`;
+      if (currency === 'EUR') return `${k}: €${amount}`;
+      if (currency) return `${k}: ${currency} ${amount}`;
+      return `${k}: ${amount}`;
+    })
+    .filter(Boolean);
+  if (parts.length) return parts.join(' · ');
+  return rawFormat || null;
+};
+
+const buildPartnerSlabLabel = (
+  name: string,
+  pct: number | null,
+  parsed: Record<string, unknown> | null,
+  country?: string | null,
+): string => {
+  if (typeof parsed?.label === 'string' && parsed.label.trim()) return parsed.label;
+  const rates =
+    parsed?.rates && typeof parsed.rates === 'object'
+      ? (parsed.rates as Record<string, unknown>)
+      : null;
+  const rawFormat = typeof parsed?.rawFormat === 'string' ? parsed.rawFormat.trim() : '';
+  if (pct != null && Number.isFinite(pct) && pct > 0) {
+    return `${name} — ${pct}% partner rate`;
+  }
+  const snippet = formatPartnerRatesSnippet(rates, rawFormat, country);
+  if (snippet) return `${name} — ${snippet}`;
+  return `${name} — partner rate`;
 };
 
 const calculatorEntryFromCommissionRow = (
   row: InstanceType<typeof db.Commission>,
   opts?: { inPipeline?: boolean },
 ): AgentCommissionCalculatorUniversity => {
-  const u = (row as any).university as { id?: number; name?: string } | undefined;
+  const u = (row as any).university as { id?: number; name?: string; country?: string } | undefined;
   const name = u?.name || `University ${row.universityId}`;
+  const country = u?.country ?? null;
   const parsed = parseSlabDetailsJson(row.slabDetails ?? undefined);
   const pct = Number(row.percentage);
-  const slabLabel =
-    typeof parsed?.label === 'string' ? parsed.label : `${name} — ${pct}% partner rate`;
+  const commissionPercent = pct != null && !Number.isNaN(pct) ? pct : null;
   return {
     universityId: row.universityId,
     universityName: name,
-    commissionPercent: pct != null && !Number.isNaN(pct) ? pct : null,
+    commissionPercent,
     commissionId: row.id,
-    slabLabel,
+    slabLabel: buildPartnerSlabLabel(name, commissionPercent, parsed, country),
     slabDetails: row.slabDetails ?? null,
     parsedSlab: parsed,
+    country,
     ...(opts?.inPipeline ? { inPipeline: true } : { inPipeline: false }),
   };
 };
@@ -1146,12 +1219,16 @@ const buildCommissionCalculatorPayload = async (
   apps: InstanceType<typeof db.Application>[],
 ): Promise<AgentCommissionCalculatorUniversity[]> => {
   const byId = new Map<number, string>();
+  const byCountry = new Map<number, string>();
   const unresolvedNames = new Set<string>();
 
   for (const a of apps) {
-    const cuni = (a as any).course?.university as { id?: number; name?: string } | undefined;
+    const cuni = (a as any).course?.university as
+      | { id?: number; name?: string; country?: string }
+      | undefined;
     if (cuni?.id != null) {
       byId.set(Number(cuni.id), String(cuni.name || `University ${cuni.id}`));
+      if (cuni.country?.trim()) byCountry.set(Number(cuni.id), cuni.country.trim());
     } else if (a.universityName?.trim()) {
       unresolvedNames.add(a.universityName.trim());
     }
@@ -1162,7 +1239,7 @@ const buildCommissionCalculatorPayload = async (
     const nameList = [...unresolvedNames];
     const candidates = await db.University.findAll({
       where: { [Op.or]: nameList.map(n => ({ name: { [Op.iLike]: n } })) },
-      attributes: ['id', 'name'],
+      attributes: ['id', 'name', 'country'],
     });
     for (const n of nameList) {
       const match =
@@ -1172,6 +1249,7 @@ const buildCommissionCalculatorPayload = async (
         );
       if (match) {
         byId.set(match.id, match.name);
+        if (match.country?.trim()) byCountry.set(match.id, match.country.trim());
         freeTextMatched.add(n);
       }
     }
@@ -1199,18 +1277,25 @@ const buildCommissionCalculatorPayload = async (
       const comm = latestCommissionByUni.get(uid);
       const parsed = comm ? parseSlabDetailsJson(comm.slabDetails ?? undefined) : null;
       const pct = comm != null ? Number(comm.percentage) : null;
+      const commissionPercent = pct != null && !Number.isNaN(pct) ? pct : null;
+      const uniName = byId.get(uid) || `University ${uid}`;
+      const uniFromComm = comm
+        ? ((comm as any).university as { country?: string } | undefined)
+        : undefined;
+      const country =
+        byCountry.get(uid) ??
+        (uniFromComm?.country?.trim() || null);
       const slabLabel =
-        comm != null
-          ? (typeof parsed?.label === 'string' ? parsed.label : `${byId.get(uid)} — ${pct}% partner rate`)
-          : null;
+        comm != null ? buildPartnerSlabLabel(uniName, commissionPercent, parsed, country) : null;
       return {
         universityId: uid,
-        universityName: byId.get(uid) || `University ${uid}`,
-        commissionPercent: pct != null && !Number.isNaN(pct) ? pct : null,
+        universityName: uniName,
+        commissionPercent,
         commissionId: comm?.id ?? null,
         slabLabel,
         slabDetails: comm?.slabDetails ?? null,
         parsedSlab: parsed,
+        country,
         inPipeline: true,
       };
     })
@@ -1324,6 +1409,7 @@ export const getAgentCommission = async (agentProfileId: number) => {
       studentName: (a as any).studentProfile?.user?.name ?? null,
       university: (a as any).course?.university?.name ?? a.universityName ?? null,
       universityId: (a as any).course?.university?.id ?? null,
+      country: (a as any).course?.university?.country ?? a.country ?? null,
       status: a.status,
       slabSource: a.commissionSlab ?? 'Default rate card',
       amount: a.commissionAmount ?? null,
