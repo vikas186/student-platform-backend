@@ -388,19 +388,33 @@ export const createStudentDocument = async (
   const { isDigilockerImportableType } = await import(
     '../src/modules/document-verification/document-types'
   );
-  const { isDigilockerConfigured, isDigilockerDocumentsImportEnabled } = await import(
-    '../src/modules/digilocker/digilocker.config'
-  );
+  const {
+    isDigilockerConfigured,
+    isDigilockerDocumentsImportEnabled,
+    hasDigilockerDocumentScope,
+  } = await import('../src/modules/digilocker/digilocker.config');
   if (
     !manualUploadAllowed &&
     isDigilockerConfigured() &&
     isDigilockerDocumentsImportEnabled() &&
     isDigilockerImportableType(normalizedType)
   ) {
-    throw new AppError(
-      `${DOCUMENT_TYPE_LABELS[normalizedType] || normalizedType} must be imported from DigiLocker. Connect your DigiLocker account and import the document — manual upload is not allowed unless an admin enables it for this application.`,
-      400,
-    );
+    // Only block manual academics when DigiLocker can actually import certificates.
+    // AVS/KYC-only partner apps (scopes like avs_parent) must fall back to file upload.
+    let digilockerCanImportCertificates = true;
+    if (opts.userId) {
+      const connection = await db.DigiLockerConnection.findByPk(opts.userId);
+      const scopes = (connection?.getDataValue('scopes') as string | null) ?? null;
+      if (scopes && !hasDigilockerDocumentScope(scopes)) {
+        digilockerCanImportCertificates = false;
+      }
+    }
+    if (digilockerCanImportCertificates) {
+      throw new AppError(
+        `${DOCUMENT_TYPE_LABELS[normalizedType] || normalizedType} must be imported from DigiLocker. Connect your DigiLocker account and import the document — manual upload is not allowed unless an admin enables it for this application.`,
+        400,
+      );
+    }
   }
 
   const fileUrl = file.path.replace(/\\/g, '/');

@@ -35,8 +35,24 @@ export const isDigilockerDocumentsImportEnabled = (): boolean => {
   return digilockerConfig().scope.includes('files.issueddocs');
 };
 
-export const hasDigilockerDocumentScope = (scopes: string | null | undefined): boolean =>
-  Boolean(scopes?.includes('files.issueddocs'));
+/** True when token/partner scopes include DigiLocker issued-document access. */
+export const hasDigilockerDocumentScope = (scopes: string | null | undefined): boolean => {
+  if (!scopes?.trim()) return false;
+  const normalized = scopes.toLowerCase().replace(/,/g, ' ');
+  return (
+    normalized.includes('files.issueddocs') ||
+    normalized.includes('files issueddocs') ||
+    /\bissueddocs\b/.test(normalized)
+  );
+};
+
+/** True when DigiLocker only granted age/KYC verification (no certificates). */
+export const isDigilockerAvsOnlyGrantedScope = (scopes: string | null | undefined): boolean => {
+  if (!scopes?.trim()) return false;
+  if (hasDigilockerDocumentScope(scopes)) return false;
+  const normalized = scopes.toLowerCase();
+  return /\bavs(_parent)?\b/.test(normalized) || /\bkyc\b/.test(normalized);
+};
 
 export const isDigilockerConfigured = (): boolean => {
   const c = digilockerConfig();

@@ -11,6 +11,7 @@ import {
   assertDigilockerDocumentsImportEnabled,
   digilockerConfig,
   hasDigilockerDocumentScope,
+  isDigilockerAvsOnlyGrantedScope,
   isDigilockerConfigured,
   isDigilockerDocumentsImportEnabled,
 } from './digilocker.config';
@@ -215,10 +216,11 @@ export const disconnectDigilocker = async (userId: string): Promise<void> => {
 const mapDigilockerApiError = (err: any, action: string): AppError => {
   const status = err.response?.status as number | undefined;
   const errorCode = String(err.response?.data?.error ?? '').toLowerCase();
+  // Use 422 (not 403) so the student UI does not treat DigiLocker partner limits as app "Access denied".
   if (status === 403 || errorCode === 'insufficient_scope') {
     return new AppError(
-      'DigiLocker denied access to issued documents. Your partner app may only have AVS scope (avs / avs_parent). Request files.issueddocs from the DigiLocker Partner Portal, or upload documents manually.',
-      403,
+      'DigiLocker denied access to issued documents. Your partner app may only have KYC/AVS scope (e.g. avs_parent). Request files.issueddocs from the DigiLocker Partner Portal, or upload documents manually.',
+      422,
     );
   }
   if (status === 401) {
@@ -240,8 +242,10 @@ export const listDigilockerIssuedDocuments = async (userId: string): Promise<Dig
   const grantedScopes = (row?.getDataValue('scopes') as string | null) ?? null;
   if (grantedScopes && !hasDigilockerDocumentScope(grantedScopes)) {
     throw new AppError(
-      'DigiLocker is connected without certificate import permission. Your partner credentials only support AVS verification. Upload academic documents manually, or upgrade the DigiLocker partner app to include files.issueddocs.',
-      403,
+      isDigilockerAvsOnlyGrantedScope(grantedScopes)
+        ? 'DigiLocker is connected for identity verification only (KYC/AVS). Certificate import needs files.issueddocs from the DigiLocker Partner Portal — upload marksheets manually for now.'
+        : 'DigiLocker is connected without certificate import permission. Upload academic documents manually, or reconnect after files.issueddocs is enabled on the partner app.',
+      422,
     );
   }
 
