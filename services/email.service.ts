@@ -9,6 +9,7 @@ import {
   appointmentReminderTemplate,
   appointmentRescheduledTemplate,
   applicationStatusTemplate,
+  universityNewApplicationTemplate,
   agentEmailVerificationTemplate,
   agentAgreementReminderTemplate,
   agentPartnershipAgreementTemplate,
@@ -190,6 +191,9 @@ export const buildStudentPortalUrl = (): string => `${emailConfig().frontendUrl}
 
 export const buildApplicationUrl = (applicationId: string): string =>
   `${emailConfig().frontendUrl}/student/applications/${encodeURIComponent(applicationId)}`;
+
+export const buildUniversityReviewUrl = (applicationId: string): string =>
+  `${emailConfig().frontendUrl}/university/review?applicationId=${encodeURIComponent(applicationId)}`;
 
 export const buildCounsellingUrl = (): string => `${emailConfig().frontendUrl}/student/counselling`;
 
@@ -400,6 +404,28 @@ export const sendApplicationStatusEmail = async (params: {
     params.statusLabel,
     params.statusKey,
     buildApplicationUrl(params.applicationId),
+  );
+  await sendMail({ to: params.to, subject: tpl.subject, html: tpl.html, text: tpl.text });
+};
+
+export const sendUniversityNewApplicationEmail = async (params: {
+  to: string;
+  name: string;
+  applicationNumber: string;
+  studentName: string;
+  programName: string;
+  universityName: string;
+  applicationId: string;
+}): Promise<void> => {
+  const cfg = emailConfig();
+  const tpl = universityNewApplicationTemplate(
+    cfg,
+    params.name,
+    params.applicationNumber,
+    params.studentName,
+    params.programName,
+    params.universityName,
+    buildUniversityReviewUrl(params.applicationId),
   );
   await sendMail({ to: params.to, subject: tpl.subject, html: tpl.html, text: tpl.text });
 };

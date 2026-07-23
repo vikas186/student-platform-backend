@@ -23,6 +23,9 @@ const applicationBodyJoiSchema = {
     programName: Joi.string().trim().max(300).allow('', null),
     notes: Joi.string().trim().max(8000).allow('', null),
     country: Joi.string().trim().max(120).allow('', null),
+    courseId: Joi.alternatives()
+      .try(Joi.number().integer().positive(), Joi.string().pattern(/^\d+$/))
+      .allow(null, ''),
   }),
 };
 

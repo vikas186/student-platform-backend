@@ -312,6 +312,16 @@ export const getApplicationForUniversity = async (userId: string, idOrRef: strin
   if (!app) {
     throw new AppError('Application not found', 404);
   }
+
+  // First university open of a newly submitted application → under review.
+  if (app.status === 'submitted') {
+    const previousStatus = app.status;
+    app.status = 'under_review';
+    await app.save();
+    const { notifyApplicationStatusChange } = await import('./application-email.service');
+    notifyApplicationStatusChange(app.id, previousStatus, 'under_review');
+  }
+
   const plain = app.get({ plain: true }) as Record<string, unknown>;
   return {
     ...plain,

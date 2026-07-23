@@ -334,11 +334,13 @@ export const appointmentRescheduledTemplate = (
 const STATUS_COPY: Record<string, { headline: string; detail: string }> = {
   submitted: {
     headline: 'Application submitted',
-    detail: 'Your application has been submitted and is awaiting review by our admissions team.',
+    detail:
+      'Your application has been submitted to the university partner for review. You will be notified when they update the decision.',
   },
   under_review: {
     headline: 'Application under review',
-    detail: 'Your application is now being reviewed. We will notify you when there is an update.',
+    detail:
+      'Your application is now under review by the university partner. We will notify you when there is an update.',
   },
   approved: {
     headline: 'Application approved',
@@ -415,6 +417,34 @@ export const applicationStatusTemplate = (
     subject: `${copy.headline} — ${applicationNumber}`,
     html: layout(cfg, copy.headline, body),
     text: `Hi ${name},\n\n${copy.detail}\n\n${applicationNumber} — ${universityName} — ${programName}\nStatus: ${statusLabel}\n\n${applicationUrl}`,
+  };
+};
+
+export const universityNewApplicationTemplate = (
+  cfg: EmailConfig,
+  name: string,
+  applicationNumber: string,
+  studentName: string,
+  programName: string,
+  universityName: string,
+  reviewUrl: string,
+) => {
+  const body = `
+    <p style="margin:0 0 12px;font-size:15px;line-height:1.6;color:#3d4f72;">Hi ${name},</p>
+    <p style="margin:0 0 12px;font-size:15px;line-height:1.6;color:#3d4f72;">
+      A new application has been submitted for <strong>${universityName}</strong> and is ready for your review and decision.
+    </p>
+    <table style="margin:16px 0;width:100%;border-collapse:collapse;font-size:14px;background:#f8f6f1;border-radius:12px;">
+      <tr><td style="padding:10px 14px;color:#6b7a9a;">Reference</td><td style="padding:10px 14px;font-weight:600;">${applicationNumber}</td></tr>
+      <tr><td style="padding:10px 14px;color:#6b7a9a;">Student</td><td style="padding:10px 14px;font-weight:600;">${studentName}</td></tr>
+      <tr><td style="padding:10px 14px;color:#6b7a9a;">Program</td><td style="padding:10px 14px;font-weight:600;">${programName}</td></tr>
+    </table>
+    ${button(reviewUrl, 'Review application')}
+  `;
+  return {
+    subject: `New application ${applicationNumber} awaiting review — ${cfg.brandName}`,
+    html: layout(cfg, 'New application to review', body),
+    text: `Hi ${name},\n\nA new application (${applicationNumber}) for ${studentName} — ${programName} at ${universityName} is awaiting your review.\n\n${reviewUrl}`,
   };
 };
 

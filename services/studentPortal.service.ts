@@ -202,7 +202,13 @@ export const listStudentApplications = async (
 
 export const createStudentApplication = async (
   studentProfileId: number,
-  body: { universityName?: string | null; programName?: string | null; notes?: string | null; country?: string | null },
+  body: {
+    universityName?: string | null;
+    programName?: string | null;
+    notes?: string | null;
+    country?: string | null;
+    courseId?: number | null;
+  },
 ) => {
   const count = await db.Application.count({ where: { studentId: studentProfileId } });
   if (count >= 3) {
@@ -212,16 +218,37 @@ export const createStudentApplication = async (
   const sp = await db.StudentProfile.findByPk(studentProfileId);
   const linkedAgentId = sp?.agentProfileId ?? null;
   const uniName = body.universityName?.trim() || null;
-  const uniCountry = await resolveCountryFromUniversityName(uniName);
-  const fallbackCountry = body.country?.trim() || null;
+  const progName = body.programName?.trim() || null;
+  const requestedCourseId =
+    body.courseId != null && String(body.courseId).trim() !== ''
+      ? Number(body.courseId)
+      : null;
+  const courseId =
+    requestedCourseId != null && Number.isFinite(requestedCourseId) && requestedCourseId > 0
+      ? requestedCourseId
+      : null;
+
+  const { applyCatalogLinkToApplication } = await import('../utils/linkApplicationCatalog');
+  const draft = {
+    courseId,
+    universityName: uniName,
+    programName: progName,
+    country: body.country?.trim() || null,
+  };
+  await applyCatalogLinkToApplication(draft);
+
+  if (!draft.country && uniName) {
+    draft.country = await resolveCountryFromUniversityName(uniName);
+  }
+
   return db.Application.create({
     studentId: studentProfileId,
     agentId: linkedAgentId,
-    courseId: null,
-    universityName: uniName,
-    programName: body.programName?.trim() || null,
+    courseId: draft.courseId,
+    universityName: draft.universityName,
+    programName: draft.programName,
     notes: body.notes?.trim() || null,
-    country: uniCountry ?? fallbackCountry,
+    country: draft.country,
     status: 'draft',
   });
 };
@@ -246,7 +273,13 @@ export const getStudentApplication = async (studentProfileId: number, idOrRef: s
 export const updateStudentApplication = async (
   studentProfileId: number,
   idOrRef: string,
-  body: { universityName?: string | null; programName?: string | null; notes?: string | null; country?: string | null },
+  body: {
+    universityName?: string | null;
+    programName?: string | null;
+    notes?: string | null;
+    country?: string | null;
+    courseId?: number | null;
+  },
 ) => {
   const app = await getStudentApplication(studentProfileId, idOrRef);
   if (app.getDataValue('status') !== 'draft') {
@@ -256,11 +289,23 @@ export const updateStudentApplication = async (
   if (body.programName !== undefined) app.programName = body.programName?.trim() || null;
   if (body.notes !== undefined) app.notes = body.notes?.trim() || null;
   if (body.country !== undefined) app.country = body.country?.trim() || null;
+  if (body.courseId !== undefined) {
+    if (body.courseId === null || body.courseId === ('' as unknown as number)) {
+      app.courseId = null;
+    } else {
+      const n = Number(body.courseId);
+      if (Number.isNaN(n) || n < 1) throw new AppError('Invalid courseId', 400);
+      app.courseId = n;
+    }
+  }
+
+  const { applyCatalogLinkToApplication } = await import('../utils/linkApplicationCatalog');
+  await applyCatalogLinkToApplication(app);
 
   // If university is set/changed and matches an admin university, the country must follow it
   // (avoids the frontend leaking targetCountries[0] / stale defaults like "Canada" into a
   // submission for a non-Canadian university).
-  if (app.universityName) {
+  if (app.universityName && !app.country) {
     const uniCountry = await resolveCountryFromUniversityName(app.universityName);
     if (uniCountry) {
       app.country = uniCountry;
@@ -303,12 +348,15 @@ export const submitStudentApplication = async (studentProfileId: number, idOrRef
   // re-checks at submit time were blocking drafts that already had imported or
   // manually uploaded files (session expiry / DigiLocker API errors).
 
-  // Final guard at submit time: pin country to the university's country if the
-  // university is in the admin catalog. Stops accidental "Canada"-style defaults
-  // from the form ever being persisted on a submitted application.
-  const uniCountry = await resolveCountryFromUniversityName(app.universityName);
-  if (uniCountry) {
-    app.country = uniCountry;
+  // Final guard at submit time: pin country + courseId to the catalog university/program
+  // so the partner portal can see and decide on this application.
+  const { applyCatalogLinkToApplication } = await import('../utils/linkApplicationCatalog');
+  await applyCatalogLinkToApplication(app);
+  if (!app.country) {
+    const uniCountry = await resolveCountryFromUniversityName(app.universityName);
+    if (uniCountry) {
+      app.country = uniCountry;
+    }
   }
 
   const previousStatus = app.status;

@@ -558,6 +558,12 @@ export const createAgentApplication = async (
       { transaction },
     );
 
+    const { applyCatalogLinkToApplication } = await import('../utils/linkApplicationCatalog');
+    await applyCatalogLinkToApplication(application);
+    if (application.changed()) {
+      await application.save({ transaction });
+    }
+
     return {
       application,
       ...(temporaryPassword ? { temporaryPassword } : {}),
@@ -626,6 +632,11 @@ export const updateAgentApplication = async (
   }
 
   await app.save();
+  const { applyCatalogLinkToApplication } = await import('../utils/linkApplicationCatalog');
+  await applyCatalogLinkToApplication(app);
+  if (app.changed()) {
+    await app.save();
+  }
   return getApplicationForAgent(agentProfileId, app.id);
 };
 
@@ -647,6 +658,10 @@ export const submitAgentApplication = async (agentProfileId: number, idOrRef: st
   }
 
   await db.Document.findAll({ where: { applicationId: app.id } });
+
+  const { applyCatalogLinkToApplication } = await import('../utils/linkApplicationCatalog');
+  await applyCatalogLinkToApplication(app);
+
   // Student completes DigiLocker verification and submits from the student portal.
   const previousStatus = app.status;
   app.status = 'submitted';
