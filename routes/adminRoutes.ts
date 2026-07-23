@@ -19,6 +19,7 @@ import {
   adminVerificationsListQueryJoiSchema,
   adminUserDocumentStatusParamsJoiSchema,
 } from '../src/modules/document-verification/document-verification.validation';
+import { getDigilockerPartnerDiagnosticsHandler } from '../src/modules/digilocker/digilocker.controller';
 import {
   listAdminNoticesHandler,
   syncNoticesAiHandler,
@@ -159,6 +160,11 @@ adminRouter.use(jwtAuthMiddleware(['admin']));
 
 adminRouter
   .get('/dashboard', requirePermission('applications', 'view'), getDashboard)
+  .get(
+    '/digilocker/diagnostics',
+    requirePermission('applications', 'view'),
+    getDigilockerPartnerDiagnosticsHandler,
+  )
   .get('/roles', requirePermission('roles_permissions', 'view'), getRolesMetadata)
   .get('/permissions', requirePermission('roles_permissions', 'view'), getPermissionsMatrix)
   .put(

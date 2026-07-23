@@ -136,6 +136,17 @@ export const handleDigilockerOAuthCallback = async (code: string, state: string)
     connectedAt: new Date(),
   });
 
+  console.info('[DigiLocker] OAuth connected', {
+    userId,
+    applicationId,
+    grantedScopes: tokens.scope ?? null,
+    expiresIn: tokens.expires_in ?? null,
+    hasRefresh: Boolean(tokens.refresh_token),
+    hasIdToken: Boolean(tokens.id_token),
+    documentsImportEnabled: isDigilockerDocumentsImportEnabled(),
+    canImportCertificates: hasDigilockerDocumentScope(tokens.scope ?? null),
+  });
+
   return { userId, applicationId };
 };
 
@@ -174,6 +185,9 @@ const getValidAccessToken = async (userId: string): Promise<string> => {
     accessTokenEnc: encryptToken(data.access_token),
     refreshTokenEnc: data.refresh_token ? encryptToken(data.refresh_token) : refreshEnc,
     accessTokenExpiresAt: nextExpires,
+    ...(typeof data.scope === 'string' && data.scope.trim()
+      ? { scopes: data.scope.trim() }
+      : {}),
   });
 
   return data.access_token as string;
@@ -192,20 +206,65 @@ export const getDigilockerConnectionStatus = async (userId: string) => {
       grantedScopes: null,
       documentsImportEnabled,
       documentsAccessGranted: null,
+      partnerApprovalRequired: documentsImportEnabled,
     };
   }
+  const scopes = (row.getDataValue('scopes') as string | null) ?? null;
+  const documentsAccessGranted = (() => {
+    if (!documentsImportEnabled) return false;
+    return scopes ? hasDigilockerDocumentScope(scopes) : null;
+  })();
   return {
     configured,
     connected: true,
     digilockerName: (row.getDataValue('digilockerName') as string | null) ?? null,
     connectedAt: row.getDataValue('connectedAt')?.toISOString?.() ?? null,
-    grantedScopes: (row.getDataValue('scopes') as string | null) ?? null,
+    grantedScopes: scopes,
     documentsImportEnabled,
-    documentsAccessGranted: (() => {
-      if (!documentsImportEnabled) return false;
-      const scopes = row.getDataValue('scopes') as string | null;
-      return scopes ? hasDigilockerDocumentScope(scopes) : null;
-    })(),
+    documentsAccessGranted,
+    partnerApprovalRequired:
+      documentsImportEnabled &&
+      Boolean(scopes) &&
+      !hasDigilockerDocumentScope(scopes) &&
+      isDigilockerAvsOnlyGrantedScope(scopes),
+  };
+};
+
+/** Redacted diagnostics for DigiLocker partner support (no tokens/secrets). */
+export const getDigilockerPartnerDiagnostics = async () => {
+  const cfg = digilockerConfig();
+  const rows = await db.DigiLockerConnection.findAll({
+    attributes: ['userId', 'scopes', 'connectedAt', 'accessTokenExpiresAt', 'digilockerName'],
+    order: [['connectedAt', 'DESC']],
+    limit: 20,
+  });
+  return {
+    clientId: cfg.clientId,
+    redirectUri: cfg.redirectUri,
+    authorizeScopeRequested: cfg.scope,
+    documentsImportEnabled: isDigilockerDocumentsImportEnabled(),
+    endpoints: {
+      authorize: cfg.authUrl,
+      token: cfg.tokenUrl,
+      listIssued: `${cfg.apiBase}/2/files/issued`,
+      downloadFile: `${cfg.apiBase}/1/file/uri`,
+    },
+    requestedDocumentTypes: [
+      { doctype: 'SSCER', description: 'Class 10 / Secondary School Certificate', useCase: 'Verify Class 10 academics for overseas university applications' },
+      { doctype: 'HSCER', description: 'Class 12 / Higher Secondary Certificate', useCase: 'Verify Class 12 academics for overseas university applications' },
+      { doctype: 'DGCER', description: 'Degree / graduation certificate', useCase: 'Verify undergraduate/graduate qualification for admissions' },
+      { doctype: 'INCER', description: 'Income certificate', useCase: 'Financial / sponsorship supporting document for admissions and visa file' },
+    ],
+    recentConnections: rows.map(r => ({
+      userId: r.getDataValue('userId'),
+      scopes: r.getDataValue('scopes'),
+      digilockerName: r.getDataValue('digilockerName'),
+      connectedAt: r.getDataValue('connectedAt'),
+      accessTokenExpiresAt: r.getDataValue('accessTokenExpiresAt'),
+      canImportCertificates: hasDigilockerDocumentScope(r.getDataValue('scopes') as string | null),
+    })),
+    note:
+      'Certificate import requires DigiLocker Partner Portal to unlock Openid + Issued Documents (files.issueddocs) for this client. AVS-only tokens cannot call GET /2/files/issued.',
   };
 };
 
@@ -287,14 +346,21 @@ export const listDigilockerIssuedDocuments = async (userId: string): Promise<Dig
 export const mapDigilockerDocType = (doctype: string, description: string): string => {
   const code = doctype.trim().toUpperCase();
   const desc = description.toLowerCase();
-  if (code === 'HSCER' || desc.includes('12th') || desc.includes('class xii')) return '12th_marksheet';
-  if (code === 'SSCER' || desc.includes('10th') || desc.includes('class x')) return '10th_marksheet';
-  if (code === 'DGCER' || desc.includes('degree')) return 'degree_certificate';
-  if (desc.includes('transcript')) return 'transcript';
+  if (code === 'HSCER' || desc.includes('12th') || desc.includes('class xii') || desc.includes('higher secondary')) {
+    return '12th_marksheet';
+  }
+  if (code === 'SSCER' || desc.includes('10th') || desc.includes('class x') || desc.includes('secondary school')) {
+    return '10th_marksheet';
+  }
+  if (code === 'DGCER' || desc.includes('degree') || desc.includes('graduation')) return 'degree_certificate';
+  if (code === 'INCER' || desc.includes('income certificate')) return 'itr';
+  if (desc.includes('transcript') || (desc.includes('marksheet') && desc.includes('university'))) {
+    return 'transcript';
+  }
   if (desc.includes('diploma')) return 'diploma';
   if (desc.includes('passport')) return 'passport';
   if (desc.includes('bank')) return 'bank_statement';
-  if (desc.includes('income tax') || desc.includes('itr')) return 'itr';
+  if (desc.includes('income tax') || desc.includes('itr') || desc.includes('form 16')) return 'itr';
   return 'general';
 };
 

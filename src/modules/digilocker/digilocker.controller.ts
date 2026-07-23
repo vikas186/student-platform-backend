@@ -11,8 +11,16 @@ import {
   importAllDigilockerDocumentsForStudent,
   listDigilockerIssuedDocuments,
   mapDigilockerOAuthError,
+  getDigilockerPartnerDiagnostics,
 } from './digilocker.service';
 import { isDigilockerConfigured } from './digilocker.config';
+
+export const getDigilockerPartnerDiagnosticsHandler = catchAsyncError(
+  async (_req: Request, res: Response) => {
+    const data = await getDigilockerPartnerDiagnostics();
+    res.json({ success: true, data });
+  },
+);
 
 const getStudentProfileId = async (req: Request): Promise<number> => {
   const userId = (req.user as { id?: string })?.id;
