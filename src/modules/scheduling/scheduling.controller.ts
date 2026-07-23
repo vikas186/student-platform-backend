@@ -11,6 +11,7 @@ import {
   listAvailableSlotsForStudent,
   listStudentAppointments,
   patchAdminAppointmentStatus,
+  allocateAppointmentToAdmin,
   rescheduleAppointment,
 } from './appointment.service';
 import {
@@ -173,9 +174,9 @@ export const deleteUnavailabilityHandler = catchAsyncError(async (req: Request, 
 });
 
 export const listAdminAppointmentsHandler = catchAsyncError(async (req: Request, res: Response) => {
-  adminUser(req);
+  const viewerId = adminUser(req);
   const q = req.query as { status?: AppointmentStatus; type?: AppointmentType; from?: string; to?: string };
-  const data = await listAdminAppointments({
+  const data = await listAdminAppointments(viewerId, {
     status: q.status,
     type: q.type,
     from: q.from ? new Date(q.from) : undefined,
@@ -189,13 +190,47 @@ export const listAdminAppointmentsHandler = catchAsyncError(async (req: Request,
 });
 
 export const patchAdminAppointmentStatusHandler = catchAsyncError(async (req: Request, res: Response) => {
-  adminUser(req);
+  const viewerId = adminUser(req);
   const { appointmentId } = req.params as { appointmentId: string };
   const { status } = req.body as { status: AppointmentStatus };
-  const data = await patchAdminAppointmentStatus(appointmentId, status);
+  const data = await patchAdminAppointmentStatus(viewerId, appointmentId, status);
   res.status(constant.msgCode.successCode).json({
     success: true,
     message: 'Appointment updated',
+    data,
+  });
+});
+
+export const allocateAdminAppointmentHandler = catchAsyncError(async (req: Request, res: Response) => {
+  const viewerId = adminUser(req);
+  const { appointmentId } = req.params as { appointmentId: string };
+  const { hostAdminUserId } = req.body as { hostAdminUserId: string };
+  const data = await allocateAppointmentToAdmin(viewerId, appointmentId, hostAdminUserId);
+  res.status(constant.msgCode.successCode).json({
+    success: true,
+    message: 'Appointment allocated',
+    data,
+  });
+});
+
+export const listAllocatableAdminsHandler = catchAsyncError(async (req: Request, res: Response) => {
+  const viewerId = adminUser(req);
+  const { listAllocatableSubAdmins } = await import('../../../utils/adminContext');
+  const data = await listAllocatableSubAdmins(viewerId);
+  res.status(constant.msgCode.successCode).json({
+    success: true,
+    message: 'Allocatable admins',
+    data,
+  });
+});
+
+export const getAdminSchedulingContextHandler = catchAsyncError(async (req: Request, res: Response) => {
+  const viewerId = adminUser(req);
+  const { resolveAdminContext } = await import('../../../utils/adminContext');
+  const data = await resolveAdminContext(viewerId);
+  res.status(constant.msgCode.successCode).json({
+    success: true,
+    message: 'Admin scheduling context',
     data,
   });
 });

@@ -42,6 +42,16 @@ const createAdminUserJoiSchema = {
       then: Joi.number().integer().positive().required(),
       otherwise: Joi.forbidden(),
     }),
+    isPrimaryAdmin: Joi.when('role', {
+      is: 'admin',
+      then: Joi.boolean().optional(),
+      otherwise: Joi.forbidden(),
+    }),
+    parentAdminUserId: Joi.when('role', {
+      is: 'admin',
+      then: Joi.string().uuid().optional().allow(null, ''),
+      otherwise: Joi.forbidden(),
+    }),
   }),
 };
 

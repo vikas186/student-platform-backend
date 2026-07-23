@@ -57,6 +57,15 @@ export const patchAppointmentStatusJoiSchema = {
   }),
 };
 
+export const allocateAppointmentJoiSchema = {
+  params: Joi.object({
+    appointmentId: Joi.string().uuid().required(),
+  }),
+  body: Joi.object({
+    hostAdminUserId: Joi.string().uuid().required(),
+  }),
+};
+
 export const listSlotsJoiSchema = {
   query: Joi.object({
     type: Joi.string()

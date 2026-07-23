@@ -71,6 +71,7 @@ const toSummary = (
   counsellor: host?.counsellorEmail ?? host?.counsellorName ?? null,
   title: host?.counsellorTitle ?? null,
   durationMinutes: schedulingConfig().slotMinutes,
+  hostAdminUserId: row.hostAdminUserId ?? null,
 });
 
 const notifyUser = async (userId: string, message: string, type: string) => {
@@ -458,13 +459,22 @@ export const rescheduleAppointment = async (
   return toSummary(row.get({ plain: true }) as AppointmentRow, hostDetails);
 };
 
-export const listAdminAppointments = async (query: {
-  status?: AppointmentStatus;
-  type?: AppointmentType;
-  from?: Date;
-  to?: Date;
-}) => {
+export const listAdminAppointments = async (
+  viewerUserId: string,
+  query: {
+    status?: AppointmentStatus;
+    type?: AppointmentType;
+    from?: Date;
+    to?: Date;
+  },
+) => {
+  const { resolveAdminContext } = await import('../../../utils/adminContext');
+  const ctx = await resolveAdminContext(viewerUserId);
+
   const where: Record<string, unknown> = {};
+  if (!ctx.isPrimaryAdmin) {
+    where.hostAdminUserId = viewerUserId;
+  }
   if (query.status) where.status = query.status;
   if (query.type) where.type = query.type;
   if (query.from || query.to) {
@@ -476,7 +486,10 @@ export const listAdminAppointments = async (query: {
 
   const rows = await db.Appointment.findAll({
     where,
-    include: [{ model: db.User, as: 'studentUser', attributes: ['id', 'name', 'email'] }],
+    include: [
+      { model: db.User, as: 'studentUser', attributes: ['id', 'name', 'email'] },
+      { model: db.User, as: 'hostAdmin', attributes: ['id', 'name', 'email'] },
+    ],
     order: [['startsAt', 'DESC']],
     limit: 100,
   });
@@ -484,22 +497,38 @@ export const listAdminAppointments = async (query: {
   return rows.map(r => {
     const plain = r.get({ plain: true }) as AppointmentRow & {
       studentUser?: { id: string; name: string; email: string };
+      hostAdmin?: { id: string; name: string; email: string };
       studentProfileId: number;
     };
+    const hostDetails = {
+      counsellorName: plain.hostAdmin?.name || '',
+      counsellorEmail: plain.hostAdmin?.email || '',
+      counsellorTitle: 'Counsellor',
+    };
     return {
-      ...toSummary(plain),
+      ...toSummary(plain, hostDetails),
       studentProfileId: plain.studentProfileId,
       student: plain.studentUser ?? null,
+      studentName: plain.studentUser?.name ?? null,
+      studentId: plain.studentUser?.id ?? null,
+      hostAdmin: plain.hostAdmin ?? null,
     };
   });
 };
 
 export const patchAdminAppointmentStatus = async (
+  viewerUserId: string,
   appointmentId: string,
   status: AppointmentStatus,
 ) => {
+  const { resolveAdminContext } = await import('../../../utils/adminContext');
+  const ctx = await resolveAdminContext(viewerUserId);
+
   const row = await db.Appointment.findByPk(appointmentId);
   if (!row) throw new AppError('Appointment not found', 404);
+  if (!ctx.isPrimaryAdmin && row.hostAdminUserId !== viewerUserId) {
+    throw new AppError('You can only update appointments allocated to you', 403);
+  }
 
   if (status === 'cancelled' && row.status === 'scheduled' && row.googleEventId) {
     await deleteCalendarEvent(row.hostAdminUserId, row.googleEventId);
@@ -522,4 +551,158 @@ export const patchAdminAppointmentStatus = async (
   await row.save();
   const hostDetails = await getHostAdminDetails(row.hostAdminUserId);
   return toSummary(row.get({ plain: true }) as AppointmentRow, hostDetails);
+};
+
+/**
+ * Primary admin allocates a booked session to a sub-admin (or another counsellor).
+ * Moves the Google Calendar event onto the assignee's calendar (blocking that slot)
+ * and scopes the student's applications to that counsellor.
+ */
+export const allocateAppointmentToAdmin = async (
+  actorUserId: string,
+  appointmentId: string,
+  assigneeAdminUserId: string,
+) => {
+  const { assertPrimaryAdmin } = await import('../../../utils/adminContext');
+  await assertPrimaryAdmin(actorUserId);
+
+  const row = await db.Appointment.findByPk(appointmentId);
+  if (!row) throw new AppError('Appointment not found', 404);
+  if (row.status !== 'scheduled') {
+    throw new AppError('Only scheduled appointments can be allocated', 400);
+  }
+
+  const assignee = await db.User.findByPk(assigneeAdminUserId);
+  if (!assignee || assignee.role !== 'admin' || !assignee.status) {
+    throw new AppError('Assignee must be an active admin account', 400);
+  }
+
+  const previousHostId = row.hostAdminUserId;
+  if (previousHostId === assigneeAdminUserId) {
+    const hostDetails = await getHostAdminDetails(previousHostId);
+    return toSummary(row.get({ plain: true }) as AppointmentRow, hostDetails);
+  }
+
+  const googleConnected = await isAnyGoogleCalendarConnected();
+  const assigneeConn = await db.GoogleCalendarConnection.findByPk(assigneeAdminUserId);
+  if (!assigneeConn) {
+    throw new AppError(
+      'Assignee must connect Google Calendar before receiving allocated sessions',
+      400,
+    );
+  }
+
+  const conflict = await db.Appointment.findOne({
+    where: {
+      hostAdminUserId: assigneeAdminUserId,
+      status: 'scheduled',
+      id: { [Op.ne]: appointmentId },
+      startsAt: { [Op.lt]: row.endsAt },
+      endsAt: { [Op.gt]: row.startsAt },
+    },
+  });
+  if (conflict) {
+    throw new AppError('Assignee already has a session overlapping this time', 409);
+  }
+
+  // Skip weekly-availability window check — primary allocation may place onto any free calendar slot.
+  // Google free/busy still blocks if the assignee's calendar is busy.
+  try {
+    const { queryFreeBusy } = await import('./google-calendar.service');
+    const busy = await queryFreeBusy(assigneeAdminUserId, row.startsAt, row.endsAt);
+    const overlaps = busy.some(b => b.start < row.endsAt && b.end > row.startsAt);
+    if (overlaps) {
+      throw new AppError('Assignee Google Calendar is busy at this time', 409);
+    }
+  } catch (err) {
+    if (err instanceof AppError) throw err;
+    console.warn(
+      '[scheduling] freebusy check skipped:',
+      err instanceof Error ? err.message : err,
+    );
+  }
+
+  const student = await db.User.findByPk(row.studentUserId);
+  if (!student) throw new AppError('Student not found', 404);
+
+  if (row.googleEventId) {
+    try {
+      await deleteCalendarEvent(previousHostId, row.googleEventId);
+    } catch (err) {
+      console.warn(
+        '[scheduling] failed to remove event from previous host:',
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+
+  let eventId: string | null = row.googleEventId;
+  let meetLink: string | null = row.meetLink;
+  try {
+    const created = await createCalendarEvent({
+      adminUserId: assigneeAdminUserId,
+      studentName: student.name,
+      studentEmail: student.email,
+      adminEmail: assignee.email,
+      type: row.type,
+      startsAt: row.startsAt,
+      endsAt: row.endsAt,
+      timezone: row.timezone,
+    });
+    eventId = created.eventId;
+    meetLink = created.meetLink;
+  } catch (err) {
+    if (googleConnected) {
+      throw new AppError(
+        `Could not create calendar event on assignee calendar: ${err instanceof Error ? err.message : String(err)}`,
+        502,
+      );
+    }
+  }
+
+  row.hostAdminUserId = assigneeAdminUserId;
+  row.googleEventId = eventId;
+  row.meetLink = meetLink;
+  await row.save();
+
+  const profile = await db.StudentProfile.findByPk(row.studentProfileId);
+  if (profile) {
+    profile.assignedCounsellorUserId = assigneeAdminUserId;
+    await profile.save();
+  }
+
+  const label = row.type === 'counselling' ? 'Counselling' : 'Mock interview';
+  const when = formatAppointmentWhen(row.startsAt, row.timezone);
+  await notifyUser(
+    assigneeAdminUserId,
+    `${label} allocated to you with ${student.name} for ${when}.`,
+    'scheduling_allocated',
+  );
+  if (previousHostId !== actorUserId) {
+    await notifyUser(
+      previousHostId,
+      `${label} with ${student.name} (${when}) was reallocated to another counsellor.`,
+      'scheduling_reallocated',
+    );
+  }
+
+  dispatchEmail(
+    () =>
+      sendAppointmentConfirmationEmail({
+        to: assignee.email,
+        name: assignee.name,
+        sessionLabel: `${label} with ${student.name} (allocated to you)`,
+        whenLabel: when,
+        meetLink,
+      }),
+    'appointment allocated (assignee)',
+  );
+
+  const hostDetails = await getHostAdminDetails(assigneeAdminUserId);
+  return {
+    ...toSummary(row.get({ plain: true }) as AppointmentRow, hostDetails),
+    studentName: student.name,
+    studentId: student.id,
+    hostAdmin: { id: assignee.id, name: assignee.name, email: assignee.email },
+  };
 };

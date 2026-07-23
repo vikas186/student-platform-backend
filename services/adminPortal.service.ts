@@ -59,7 +59,7 @@ const applicationWhereByIdOrRef = (idOrRef: string) => {
   return { applicationNumber: ref };
 };
 
-export const getApplicationForAdmin = async (idOrRef: string) => {
+export const getApplicationForAdmin = async (idOrRef: string, viewerUserId?: string) => {
   const app = await db.Application.findOne({
     where: applicationWhereByIdOrRef(idOrRef),
     include: [
@@ -94,6 +94,21 @@ export const getApplicationForAdmin = async (idOrRef: string) => {
   if (!app) {
     throw new AppError('Application not found', 404);
   }
+
+  if (viewerUserId) {
+    const { resolveAdminContext } = await import('../utils/adminContext');
+    const ctx = await resolveAdminContext(viewerUserId);
+    if (!ctx.isPrimaryAdmin) {
+      const plainCheck = app.get({ plain: true }) as {
+        studentProfile?: { assignedCounsellorUserId?: string | null };
+      };
+      const assigned = plainCheck.studentProfile?.assignedCounsellorUserId;
+      if (assigned !== viewerUserId) {
+        throw new AppError('Application not found', 404);
+      }
+    }
+  }
+
   const plain = app.get ? app.get({ plain: true }) : app;
   return {
     ...plain,
@@ -114,15 +129,27 @@ export const setApplicationManualUploadForAdmin = async (
   return getApplicationForAdmin(app.id);
 };
 
-export const listApplicationsForAdmin = async (query: {
-  search?: string;
-  status?: string;
-  page?: string | number;
-  limit?: string | number;
-}) => {
+export const listApplicationsForAdmin = async (
+  query: {
+    search?: string;
+    status?: string;
+    page?: string | number;
+    limit?: string | number;
+  },
+  viewerUserId?: string,
+) => {
   const page = Math.max(1, Number(query.page) || 1);
   const limit = Math.min(100, Math.max(1, Number(query.limit) || 20));
   const offset = (page - 1) * limit;
+
+  let scopeToCounsellorId: string | null = null;
+  if (viewerUserId) {
+    const { resolveAdminContext } = await import('../utils/adminContext');
+    const ctx = await resolveAdminContext(viewerUserId);
+    if (!ctx.isPrimaryAdmin) {
+      scopeToCounsellorId = viewerUserId;
+    }
+  }
 
   const andParts: object[] = [];
 
@@ -178,7 +205,10 @@ export const listApplicationsForAdmin = async (query: {
       {
         model: db.StudentProfile,
         as: 'studentProfile',
-        required: false,
+        required: Boolean(scopeToCounsellorId),
+        where: scopeToCounsellorId
+          ? { assignedCounsellorUserId: scopeToCounsellorId }
+          : undefined,
         include: [{ model: db.User, as: 'user', attributes: ['id', 'name', 'email', 'phone'] }],
       },
       {
@@ -1616,9 +1646,12 @@ type CreateAdminUserBody = {
   universityId?: number;
   /** When role=agent, attach as staff under this owner agency profile id. */
   parentAgentProfileId?: number | null;
+  /** When role=admin: create as sub-admin counsellor under the acting primary. */
+  isPrimaryAdmin?: boolean;
+  parentAdminUserId?: string | null;
 };
 
-export const createUserForAdmin = async (body: CreateAdminUserBody) => {
+export const createUserForAdmin = async (body: CreateAdminUserBody, actorUserId?: string) => {
   const email = String(body.email).trim().toLowerCase();
   if (await db.User.findOne({ where: { email } })) {
     throw new AppError('Email already taken', 400);
@@ -1650,6 +1683,25 @@ export const createUserForAdmin = async (body: CreateAdminUserBody) => {
     return user!.toSafeObject();
   }
 
+  let isPrimaryAdmin = true;
+  let parentAdminUserId: string | null = null;
+  if (role === 'admin') {
+    const wantSubAdmin = body.isPrimaryAdmin === false;
+    if (wantSubAdmin) {
+      if (!actorUserId) {
+        throw new AppError('Primary admin session required to create a sub-admin', 400);
+      }
+      const { assertPrimaryAdmin } = await import('../utils/adminContext');
+      await assertPrimaryAdmin(actorUserId);
+      isPrimaryAdmin = false;
+      parentAdminUserId = body.parentAdminUserId?.trim() || actorUserId;
+      const parent = await db.User.findByPk(parentAdminUserId);
+      if (!parent || parent.role !== 'admin') {
+        throw new AppError('parentAdminUserId must be an admin', 400);
+      }
+    }
+  }
+
   const user = await db.User.create({
     name: String(body.fullName).trim(),
     email,
@@ -1657,6 +1709,9 @@ export const createUserForAdmin = async (body: CreateAdminUserBody) => {
     role,
     phone: body.phone?.trim() || null,
     status: true,
+    emailVerified: role === 'admin',
+    isPrimaryAdmin: role === 'admin' ? isPrimaryAdmin : true,
+    parentAdminUserId: role === 'admin' ? parentAdminUserId : null,
   });
 
   if (role === 'student') {

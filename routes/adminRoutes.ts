@@ -99,12 +99,16 @@ import {
   createUnavailabilityHandler,
   deleteUnavailabilityHandler,
   patchAdminAppointmentStatusHandler,
+  allocateAdminAppointmentHandler,
+  listAllocatableAdminsHandler,
+  getAdminSchedulingContextHandler,
   putAvailabilityHandler,
 } from '../src/modules/scheduling/scheduling.controller';
 import {
   googleCallbackJoiSchema,
   listAdminAppointmentsJoiSchema,
   patchAppointmentStatusJoiSchema,
+  allocateAppointmentJoiSchema,
   setAvailabilityJoiSchema,
 } from '../src/modules/scheduling/scheduling.validation';
 import {
@@ -365,6 +369,22 @@ adminRouter
     requirePermission('users', 'view'),
     validateMiddleware(listAdminAppointmentsJoiSchema as any),
     listAdminAppointmentsHandler,
+  )
+  .get(
+    '/scheduling/allocatable-admins',
+    requirePermission('users', 'view'),
+    listAllocatableAdminsHandler,
+  )
+  .get(
+    '/scheduling/context',
+    requirePermission('users', 'view'),
+    getAdminSchedulingContextHandler,
+  )
+  .patch(
+    '/scheduling/appointments/:appointmentId/allocate',
+    requirePermission('users', 'edit'),
+    validateMiddleware(allocateAppointmentJoiSchema as any),
+    allocateAdminAppointmentHandler,
   )
   .patch(
     '/scheduling/appointments/:appointmentId/status',

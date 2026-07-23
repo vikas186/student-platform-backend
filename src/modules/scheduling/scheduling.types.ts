@@ -22,6 +22,7 @@ export type AppointmentSummary = {
   counsellor?: string | null;
   title?: string | null;
   durationMinutes?: number;
+  hostAdminUserId?: string | null;
 };
 
 export type SchedulingFlowResponse = {

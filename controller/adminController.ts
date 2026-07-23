@@ -26,7 +26,8 @@ export const listUsers = catchAsyncError(async (req: Request, res: Response) => 
 });
 
 export const createUser = catchAsyncError(async (req: Request, res: Response) => {
-  const user = await adminPortal.createUserForAdmin(req.body);
+  const actor = req.user as { id?: string };
+  const user = await adminPortal.createUserForAdmin(req.body, actor.id);
   res.status(201).json({
     success: true,
     message: 'User created',
@@ -54,7 +55,8 @@ export const deleteUser = catchAsyncError(async (req: Request, res: Response) =>
 });
 
 export const listApplications = catchAsyncError(async (req: Request, res: Response) => {
-  const result = await adminPortal.listApplicationsForAdmin(req.query as any);
+  const actor = req.user as { id?: string };
+  const result = await adminPortal.listApplicationsForAdmin(req.query as any, actor.id);
   res.status(constant.msgCode.successCode).json({
     success: true,
     message: 'Applications fetched',
@@ -63,7 +65,8 @@ export const listApplications = catchAsyncError(async (req: Request, res: Respon
 });
 
 export const getApplication = catchAsyncError(async (req: Request, res: Response) => {
-  const app = await adminPortal.getApplicationForAdmin(req.params.applicationId);
+  const actor = req.user as { id?: string };
+  const app = await adminPortal.getApplicationForAdmin(req.params.applicationId, actor.id);
   res.status(constant.msgCode.successCode).json({
     success: true,
     data: { application: app },

@@ -22,6 +22,10 @@ export default (sequelize: Sequelize) => {
     declare phone: string | null;
     declare status: boolean;
     declare emailVerified: boolean;
+    /** When role=admin: primary can allocate counselling to sub-admins. Default true. */
+    declare isPrimaryAdmin: boolean;
+    /** When role=admin and not primary: links to the primary admin user. */
+    declare parentAdminUserId: string | null;
     declare readonly createdAt: Date;
     declare readonly updatedAt: Date;
 
@@ -47,6 +51,8 @@ export default (sequelize: Sequelize) => {
       User.hasMany(models.CounsellorAvailability, { foreignKey: 'adminUserId', as: 'counsellorAvailability', onDelete: 'CASCADE' });
       User.hasMany(models.CounsellorAvailabilityDate, { foreignKey: 'adminUserId', as: 'counsellorAvailabilityDates', onDelete: 'CASCADE' });
       User.hasMany(models.VerificationSession, { foreignKey: 'userId', as: 'verificationSessions', onDelete: 'CASCADE' });
+      User.belongsTo(models.User, { foreignKey: 'parentAdminUserId', as: 'parentAdmin', onDelete: 'SET NULL' });
+      User.hasMany(models.User, { foreignKey: 'parentAdminUserId', as: 'subAdmins', onDelete: 'SET NULL' });
     }
 
     async login(password: string): Promise<boolean> {
@@ -104,6 +110,19 @@ export default (sequelize: Sequelize) => {
         type: DataTypes.BOOLEAN,
         defaultValue: false,
         allowNull: false,
+      },
+      isPrimaryAdmin: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: true,
+        field: 'is_primary_admin',
+      },
+      parentAdminUserId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'parent_admin_user_id',
+        references: { model: 'users', key: 'id' },
+        onDelete: 'SET NULL',
       },
     },
     {
