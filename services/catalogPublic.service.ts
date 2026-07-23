@@ -122,8 +122,33 @@ const parseCountriesQuery = (query: PublicUniversitiesQuery): string[] => {
     .filter(Boolean);
   const single = query.country?.trim();
   if (single) fromList.push(single);
-  return [...new Set(fromList)].slice(0, 40);
+  // Allow wide multi-select (featured + leftovers + Rest of the World).
+  return [...new Set(fromList)].slice(0, 80);
 };
+
+/**
+ * Keep institutions that already have selectable programmes (catalog courses or fee matrices).
+ * Applied before LIMIT so multi-country pages are not emptied by post-filter of A→Z shells.
+ */
+const hasSelectableProgrammesLiteral = () =>
+  db.sequelize.literal(`(
+    EXISTS (
+      SELECT 1
+      FROM courses AS c
+      INNER JOIN universities AS sib ON sib.id = c.university_id
+      WHERE LOWER(BTRIM(sib.name)) = LOWER(BTRIM("University".name))
+        AND sib.status = true
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM universities AS sib2
+      WHERE LOWER(BTRIM(sib2.name)) = LOWER(BTRIM("University".name))
+        AND sib2.status = true
+        AND sib2.program_fee_ranges IS NOT NULL
+        AND jsonb_typeof(sib2.program_fee_ranges) = 'object'
+        AND sib2.program_fee_ranges <> '{}'::jsonb
+    )
+  )`);
 
 /** Distinct destination countries from active catalog universities (for apply forms). */
 export const listPublicCatalogCountries = async () => {
@@ -204,12 +229,16 @@ export const listPublicUniversitiesWithPrograms = async (query: PublicUniversiti
       [Op.or]: [{ name: { [Op.iLike]: term } }, { country: { [Op.iLike]: term } }],
     });
   }
+  // Prefer / require programme-bearing institutions before pagination (fixes empty multi-country pages).
+  andClauses.push(hasSelectableProgrammesLiteral());
   if (andClauses.length > 0) {
     (where as Record<symbol, unknown>)[Op.and] = andClauses;
   }
 
   // One row per institution name (catalog imports sometimes created one row per program).
   // Do not ORDER BY a correlated MIN() subquery here — Postgres rejects it and 500s the catalog API.
+  // Over-fetch when the page might still shrink after programme hydration / dedupe.
+  const fetchLimit = Math.min(500, Math.max(limit * 3, limit));
   const distinctNameRows = (await db.University.findAll({
     attributes: [
       [db.sequelize.fn('MIN', db.sequelize.col('id')), 'id'],
@@ -218,7 +247,7 @@ export const listPublicUniversitiesWithPrograms = async (query: PublicUniversiti
     where,
     group: [db.sequelize.fn('LOWER', db.sequelize.fn('TRIM', db.sequelize.col('name')))],
     order: [[db.sequelize.fn('MIN', db.sequelize.col('name')), 'ASC']],
-    limit,
+    limit: fetchLimit,
     offset,
     raw: true,
   })) as Array<{ id: number; name: string }>;
@@ -446,7 +475,8 @@ export const listPublicUniversitiesWithPrograms = async (query: PublicUniversiti
       const pc = (b.programsCount ?? 0) - (a.programsCount ?? 0);
       if (pc !== 0) return pc;
       return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
-    });
+    })
+    .slice(0, limit);
 
   return {
     universities: deduped,
