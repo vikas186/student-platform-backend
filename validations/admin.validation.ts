@@ -184,6 +184,7 @@ const createUniversityJoiSchema = {
     name: Joi.string().trim().min(1).max(300).required(),
     country: Joi.string().trim().min(1).max(120).required(),
     status: Joi.boolean().optional(),
+    admissionsEmail: Joi.string().trim().email().max(320).optional().allow(null, ''),
   }),
 };
 
@@ -198,6 +199,7 @@ const patchUniversityJoiSchema = {
     agreementDispatchedAt: Joi.alternatives().try(Joi.date(), Joi.string().isoDate()).optional().allow(null),
     countersignedVerifiedAt: Joi.alternatives().try(Joi.date(), Joi.string().isoDate()).optional().allow(null),
     flywirePaymentDestination: Joi.string().trim().max(120).optional().allow(null, ''),
+    admissionsEmail: Joi.string().trim().email().max(320).optional().allow(null, ''),
     programFeeRanges: Joi.object({
       ugBusinessUsdYear: programFeeRangeValue.optional(),
       ugStemUsdYear: programFeeRangeValue.optional(),

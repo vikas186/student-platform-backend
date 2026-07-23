@@ -119,6 +119,25 @@ export const patchApplicationManualUpload = catchAsyncError(async (req: Request,
   });
 });
 
+export const sendApplicationToUniversity = catchAsyncError(async (req: Request, res: Response) => {
+  const actor = req.user as { id?: string };
+  const app = await adminPortal.sendApplicationToUniversityForAdmin(
+    req.params.applicationId,
+    actor.id,
+  );
+  const meta =
+    app && typeof app === 'object' && 'metadata' in app && app.metadata && typeof app.metadata === 'object'
+      ? (app.metadata as Record<string, unknown>)
+      : {};
+  const sentTo =
+    typeof meta.admissionsEmailSentTo === 'string' ? meta.admissionsEmailSentTo : 'admissions team';
+  res.status(constant.msgCode.successCode).json({
+    success: true,
+    message: `Application pack sent to ${sentTo}`,
+    data: { application: app },
+  });
+});
+
 export const listUniversitiesAdmin = catchAsyncError(async (req: Request, res: Response) => {
   const result = await adminPortal.listUniversitiesForAdmin(req.query as Record<string, unknown>);
   res.status(constant.msgCode.successCode).json({

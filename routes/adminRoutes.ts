@@ -36,6 +36,7 @@ import {
   patchApplicationStatus,
   patchApplicationStatusUi,
   patchApplicationManualUpload,
+  sendApplicationToUniversity,
   getApplicationStatusOptions,
   listUniversitiesAdmin,
   importUniversityCatalog,
@@ -237,6 +238,11 @@ adminRouter
     requirePermission('applications', 'approve'),
     validateMiddleware(patchApplicationManualUploadJoiSchema),
     patchApplicationManualUpload,
+  )
+  .post(
+    '/applications/:applicationId/send-to-university',
+    requirePermission('applications', 'approve'),
+    sendApplicationToUniversity,
   )
   .delete('/applications/:applicationId', requirePermission('applications', 'edit'), deleteApplication)
   .get('/deadlines', requirePermission('deadlines', 'view'), validateMiddleware(listDeadlinesQueryJoiSchema), listDeadlines)

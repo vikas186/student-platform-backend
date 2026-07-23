@@ -10,6 +10,7 @@ import {
   appointmentRescheduledTemplate,
   applicationStatusTemplate,
   universityNewApplicationTemplate,
+  admissionsApplicationPackTemplate,
   agentEmailVerificationTemplate,
   agentAgreementReminderTemplate,
   agentPartnershipAgreementTemplate,
@@ -428,6 +429,45 @@ export const sendUniversityNewApplicationEmail = async (params: {
     buildUniversityReviewUrl(params.applicationId),
   );
   await sendMail({ to: params.to, subject: tpl.subject, html: tpl.html, text: tpl.text });
+};
+
+export const sendApplicationPackToAdmissionsEmail = async (params: {
+  to: string;
+  applicationNumber: string;
+  universityName: string;
+  programName: string;
+  studentName: string;
+  studentEmail: string;
+  studentPhone: string;
+  country: string;
+  notes: string;
+  documentNames: string[];
+  skippedDocumentNames: string[];
+  attachments: { filename: string; content: Buffer }[];
+}): Promise<void> => {
+  const cfg = emailConfig();
+  const tpl = admissionsApplicationPackTemplate(cfg, {
+    applicationNumber: params.applicationNumber,
+    universityName: params.universityName,
+    programName: params.programName,
+    studentName: params.studentName,
+    studentEmail: params.studentEmail,
+    studentPhone: params.studentPhone,
+    country: params.country,
+    notes: params.notes,
+    documentNames: params.documentNames,
+    skippedDocumentNames: params.skippedDocumentNames,
+  });
+  await sendMail({
+    to: params.to,
+    subject: tpl.subject,
+    html: tpl.html,
+    text: tpl.text,
+    attachments: params.attachments.map(a => ({
+      filename: a.filename,
+      content: a.content,
+    })),
+  });
 };
 
 export const sendAppointmentReminderEmail = async (params: {

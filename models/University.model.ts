@@ -15,6 +15,8 @@ export default (sequelize: Sequelize) => {
     declare programFeeRanges: Record<string, unknown> | null;
     /** Flywire PayEx portal subdomain / payment_destination override for this university. */
     declare flywirePaymentDestination: string | null;
+    /** Admissions team inbox — used when admin forwards an approved application pack by email. */
+    declare admissionsEmail: string | null;
     declare readonly createdAt: Date;
     declare readonly updatedAt: Date;
 
@@ -66,6 +68,11 @@ export default (sequelize: Sequelize) => {
         type: DataTypes.STRING(120),
         allowNull: true,
         field: 'flywire_payment_destination',
+      },
+      admissionsEmail: {
+        type: DataTypes.STRING(320),
+        allowNull: true,
+        field: 'admissions_email',
       },
     },
     {

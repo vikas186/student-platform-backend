@@ -448,6 +448,68 @@ export const universityNewApplicationTemplate = (
   };
 };
 
+export const admissionsApplicationPackTemplate = (
+  cfg: EmailConfig,
+  params: {
+    applicationNumber: string;
+    universityName: string;
+    programName: string;
+    studentName: string;
+    studentEmail: string;
+    studentPhone: string;
+    country: string;
+    notes: string;
+    documentNames: string[];
+    skippedDocumentNames: string[];
+  },
+) => {
+  const docsList =
+    params.documentNames.length > 0
+      ? `<ul style="margin:8px 0 0;padding-left:18px;font-size:14px;color:#3d4f72;">${params.documentNames
+          .map(n => `<li>${n}</li>`)
+          .join('')}</ul>`
+      : `<p style="margin:8px 0 0;font-size:14px;color:#6b7a9a;">No documents could be attached.</p>`;
+  const skippedBlock =
+    params.skippedDocumentNames.length > 0
+      ? `<p style="margin:12px 0 0;font-size:13px;color:#6b7a9a;">Not attached: ${params.skippedDocumentNames.join(
+          '; ',
+        )}. Please contact ${cfg.brandName} if you need these files.</p>`
+      : '';
+  const notesBlock = params.notes
+    ? `<p style="margin:16px 0 0;font-size:14px;line-height:1.6;color:#3d4f72;"><strong>Counsellor notes:</strong><br/>${params.notes.replace(
+        /\n/g,
+        '<br/>',
+      )}</p>`
+    : '';
+  const body = `
+    <p style="margin:0 0 12px;font-size:15px;line-height:1.6;color:#3d4f72;">Hello Admissions Team,</p>
+    <p style="margin:0 0 12px;font-size:15px;line-height:1.6;color:#3d4f72;">
+      ${cfg.brandName} has reviewed and approved the following student application for
+      <strong>${params.universityName}</strong>. Supporting documents are attached to this email.
+    </p>
+    <table style="margin:16px 0;width:100%;border-collapse:collapse;font-size:14px;background:#f8f6f1;border-radius:12px;">
+      <tr><td style="padding:10px 14px;color:#6b7a9a;">Reference</td><td style="padding:10px 14px;font-weight:600;">${params.applicationNumber}</td></tr>
+      <tr><td style="padding:10px 14px;color:#6b7a9a;">Student</td><td style="padding:10px 14px;font-weight:600;">${params.studentName}</td></tr>
+      <tr><td style="padding:10px 14px;color:#6b7a9a;">Email</td><td style="padding:10px 14px;font-weight:600;">${params.studentEmail || '—'}</td></tr>
+      <tr><td style="padding:10px 14px;color:#6b7a9a;">Phone</td><td style="padding:10px 14px;font-weight:600;">${params.studentPhone || '—'}</td></tr>
+      <tr><td style="padding:10px 14px;color:#6b7a9a;">Program</td><td style="padding:10px 14px;font-weight:600;">${params.programName}</td></tr>
+      <tr><td style="padding:10px 14px;color:#6b7a9a;">Country of study</td><td style="padding:10px 14px;font-weight:600;">${params.country || '—'}</td></tr>
+    </table>
+    <p style="margin:0;font-size:14px;font-weight:600;color:#1a2b5e;">Attachments</p>
+    ${docsList}
+    ${skippedBlock}
+    ${notesBlock}
+    <p style="margin:20px 0 0;font-size:14px;line-height:1.6;color:#3d4f72;">
+      Please reply to this email (or contact ${cfg.brandName}) with your admissions decision.
+    </p>
+  `;
+  return {
+    subject: `Student application ${params.applicationNumber} — ${params.studentName} — ${params.programName}`,
+    html: layout(cfg, 'Approved application for admissions review', body),
+    text: `Hello Admissions Team,\n\n${cfg.brandName} has approved application ${params.applicationNumber} for ${params.studentName} (${params.studentEmail}) — ${params.programName} at ${params.universityName}.\n\nDocuments attached: ${params.documentNames.join(', ') || 'none'}\n${params.skippedDocumentNames.length ? `Not attached: ${params.skippedDocumentNames.join('; ')}\n` : ''}${params.notes ? `\nNotes:\n${params.notes}\n` : ''}\nPlease reply with your admissions decision.`,
+  };
+};
+
 export const appointmentReminderTemplate = (
   cfg: EmailConfig,
   name: string,

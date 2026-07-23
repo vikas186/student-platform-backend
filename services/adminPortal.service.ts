@@ -14,9 +14,11 @@ import {
   normalizeApplicationStatusInput,
 } from '../utils/adminUiStatus';
 import { applicationScopeForUniversity } from '../utils/universityApplicationScope';
+import { resolveCatalogLink } from '../utils/linkApplicationCatalog';
 import { parseSimpleCsvLines } from '../utils/spreadsheetParse';
 import { findMasterUniversityDuplicate } from '../src/modules/scrape/utils/similarity.util';
 import { looksLikeProgramAsCountry } from './catalogPublic.service';
+import { sendApplicationPackToAdmissionsEmail } from './email.service';
 import {
   catalogImportAiEnabled,
   normalizeFeeMatrixImportRows,
@@ -110,9 +112,42 @@ export const getApplicationForAdmin = async (idOrRef: string, viewerUserId?: str
   }
 
   const plain = app.get ? app.get({ plain: true }) : app;
+  const courseUni = (plain as { course?: { university?: { admissionsEmail?: string | null } } })
+    .course?.university;
+  let admissionsEmail =
+    typeof courseUni?.admissionsEmail === 'string' && courseUni.admissionsEmail.trim()
+      ? courseUni.admissionsEmail.trim()
+      : null;
+  if (!admissionsEmail) {
+    try {
+      const link = await resolveCatalogLink({
+        courseId: plain.courseId ?? null,
+        universityName: plain.universityName ?? null,
+        programName: plain.programName ?? null,
+      });
+      if (link.universityId) {
+        const uni = await db.University.findByPk(link.universityId, {
+          attributes: ['admissionsEmail'],
+        });
+        const email = (uni as { admissionsEmail?: string | null } | null)?.admissionsEmail;
+        if (typeof email === 'string' && email.trim()) admissionsEmail = email.trim();
+      }
+    } catch {
+      /* keep null */
+    }
+  }
+  const meta =
+    plain.metadata && typeof plain.metadata === 'object' && !Array.isArray(plain.metadata)
+      ? (plain.metadata as Record<string, unknown>)
+      : {};
   return {
     ...plain,
     statusLabel: backendApplicationStatusToUi(plain.status),
+    admissionsEmail,
+    admissionsEmailSentAt:
+      typeof meta.admissionsEmailSentAt === 'string' ? meta.admissionsEmailSentAt : null,
+    admissionsEmailSentTo:
+      typeof meta.admissionsEmailSentTo === 'string' ? meta.admissionsEmailSentTo : null,
   };
 };
 
@@ -127,6 +162,161 @@ export const setApplicationManualUploadForAdmin = async (
   app.manualUploadAllowed = Boolean(allowed);
   await app.save();
   return getApplicationForAdmin(app.id);
+};
+
+/** Brevo / SMTP transactional attachment budget (leave headroom under ~10MB provider caps). */
+const ADMISSIONS_PACK_MAX_BYTES = 9 * 1024 * 1024;
+
+const resolveDocumentAbsolutePath = (fileUrl: string): string => {
+  const cleaned = String(fileUrl || '')
+    .trim()
+    .replace(/^\/+/, '')
+    .replace(/\\/g, '/');
+  if (!cleaned) return '';
+  if (path.isAbsolute(fileUrl)) return fileUrl;
+  return path.join(process.cwd(), cleaned);
+};
+
+/**
+ * After admin/counsellor approval: email the application summary + document files
+ * to the catalog university's admissions team inbox.
+ */
+export const sendApplicationToUniversityForAdmin = async (
+  idOrRef: string,
+  viewerUserId?: string,
+) => {
+  const detail = await getApplicationForAdmin(idOrRef, viewerUserId);
+  const status = String(detail.status ?? '');
+  if (status !== 'approved') {
+    throw new AppError(
+      'Approve the application first, then send it to the university admissions team.',
+      400,
+    );
+  }
+
+  const courseUni = (detail as { course?: { university?: { id?: number; admissionsEmail?: string | null; name?: string } } })
+    .course?.university;
+  let universityId = courseUni?.id != null ? Number(courseUni.id) : null;
+  let admissionsEmail =
+    typeof courseUni?.admissionsEmail === 'string' ? courseUni.admissionsEmail.trim() : '';
+  let universityName =
+    (typeof courseUni?.name === 'string' && courseUni.name.trim()) ||
+    (typeof detail.universityName === 'string' && detail.universityName.trim()) ||
+    'University';
+
+  if (!admissionsEmail || !universityId) {
+    const link = await resolveCatalogLink({
+      courseId: detail.courseId != null ? Number(detail.courseId) : null,
+      universityName: typeof detail.universityName === 'string' ? detail.universityName : null,
+      programName: typeof detail.programName === 'string' ? detail.programName : null,
+    });
+    if (link.universityId) {
+      universityId = link.universityId;
+      const uni = await db.University.findByPk(link.universityId);
+      if (uni) {
+        universityName = uni.name;
+        admissionsEmail = String((uni as { admissionsEmail?: string | null }).admissionsEmail ?? '').trim();
+      }
+    }
+  }
+
+  if (!admissionsEmail) {
+    throw new AppError(
+      `No admissions team email is set for ${universityName}. Add it under Admin → Universities → Edit.`,
+      400,
+    );
+  }
+
+  const studentProfile = detail.studentProfile as
+    | { user?: { name?: string; email?: string; phone?: string | null } }
+    | undefined;
+  const studentName = studentProfile?.user?.name?.trim() || 'Student';
+  const studentEmail = studentProfile?.user?.email?.trim() || '';
+  const studentPhone =
+    studentProfile?.user?.phone != null ? String(studentProfile.user.phone).trim() : '';
+
+  const docs = Array.isArray(detail.documents) ? detail.documents : [];
+  const attachments: { filename: string; content: Buffer }[] = [];
+  const attachedNames: string[] = [];
+  const skipped: string[] = [];
+  let totalBytes = 0;
+  const usedNames = new Set<string>();
+
+  for (const raw of docs) {
+    const doc = raw as {
+      originalFileName?: string | null;
+      fileUrl?: string | null;
+      type?: string | null;
+    };
+    const baseName = String(doc.originalFileName || 'document').trim() || 'document';
+    const abs = resolveDocumentAbsolutePath(String(doc.fileUrl || ''));
+    if (!abs || !fs.existsSync(abs)) {
+      skipped.push(`${baseName} (file missing)`);
+      continue;
+    }
+    let content: Buffer;
+    try {
+      content = fs.readFileSync(abs);
+    } catch {
+      skipped.push(`${baseName} (unreadable)`);
+      continue;
+    }
+    if (totalBytes + content.length > ADMISSIONS_PACK_MAX_BYTES) {
+      skipped.push(`${baseName} (over email size limit)`);
+      continue;
+    }
+    let filename = baseName;
+    if (usedNames.has(filename.toLowerCase())) {
+      const ext = path.extname(baseName);
+      const stem = path.basename(baseName, ext);
+      filename = `${stem}-${attachedNames.length + 1}${ext}`;
+    }
+    usedNames.add(filename.toLowerCase());
+    attachments.push({ filename, content });
+    attachedNames.push(filename);
+    totalBytes += content.length;
+  }
+
+  const applicationNumber =
+    String(detail.applicationNumber ?? '').trim() || String(detail.id ?? '').slice(0, 8);
+  const programName =
+    (typeof detail.programName === 'string' && detail.programName.trim()) || 'Program';
+  const notes = typeof detail.notes === 'string' ? detail.notes.trim() : '';
+  const country = typeof detail.country === 'string' ? detail.country.trim() : '';
+
+  await sendApplicationPackToAdmissionsEmail({
+    to: admissionsEmail,
+    applicationNumber,
+    universityName,
+    programName,
+    studentName,
+    studentEmail,
+    studentPhone,
+    country,
+    notes,
+    documentNames: attachedNames,
+    skippedDocumentNames: skipped,
+    attachments,
+  });
+
+  const app = await db.Application.findByPk(String(detail.id));
+  if (app) {
+    const prev =
+      app.metadata && typeof app.metadata === 'object' && !Array.isArray(app.metadata)
+        ? { ...(app.metadata as Record<string, unknown>) }
+        : {};
+    app.metadata = {
+      ...prev,
+      admissionsEmailSentAt: new Date().toISOString(),
+      admissionsEmailSentTo: admissionsEmail,
+      admissionsEmailAttachmentCount: attachedNames.length,
+      admissionsEmailSkippedCount: skipped.length,
+      admissionsUniversityId: universityId,
+    };
+    await app.save();
+  }
+
+  return getApplicationForAdmin(String(detail.id), viewerUserId);
 };
 
 export const listApplicationsForAdmin = async (
@@ -812,6 +1002,8 @@ export const importUniversityCatalogFileForAdmin = async (file: Express.Multer.F
           rates: work.parsed.rates,
           source: 'catalog-import',
           rawFormat: work.parsed.commission ? work.parsed.commission.trim() : '',
+          country: uni.country ?? null,
+          currency: uni.country ? currencyCodeForCountry(uni.country) : null,
         });
         if (commission) {
           await commission.update({
@@ -1557,6 +1749,8 @@ export const createCommissionSlabRichForAdmin = async (body: {
   const slabDetails = JSON.stringify({
     partnerCommissionPercent: Number(body.partnerCommissionPercent),
     rates: body.rates ?? {},
+    country: uni.country ?? country,
+    currency: currencyCodeForCountry(uni.country || country),
     source: 'admin-ui',
   });
   return db.Commission.create({
@@ -2548,13 +2742,25 @@ export const deleteSubscriptionPlanForAdmin = async (id: number) => {
   await row.destroy();
 };
 
-export const createUniversityForAdmin = async (body: { name: string; country: string; status?: boolean }) => {
+export const createUniversityForAdmin = async (body: {
+  name: string;
+  country: string;
+  status?: boolean;
+  admissionsEmail?: string | null;
+}) => {
   const name = body.name.trim();
   const country = body.country.trim();
+  const admissionsEmail =
+    body.admissionsEmail === null || body.admissionsEmail === undefined || body.admissionsEmail === ''
+      ? null
+      : String(body.admissionsEmail).trim().toLowerCase().slice(0, 320);
   const existing = await findMasterUniversityDuplicate(name, country);
   if (existing) {
-    if (body.status !== undefined) {
-      await existing.update({ status: body.status !== false });
+    const patch: { status?: boolean; admissionsEmail?: string | null } = {};
+    if (body.status !== undefined) patch.status = body.status !== false;
+    if (body.admissionsEmail !== undefined) patch.admissionsEmail = admissionsEmail;
+    if (Object.keys(patch).length) {
+      await existing.update(patch);
     }
     return existing;
   }
@@ -2562,6 +2768,7 @@ export const createUniversityForAdmin = async (body: { name: string; country: st
     name,
     country,
     status: body.status !== false,
+    admissionsEmail,
   });
 };
 
@@ -2613,6 +2820,7 @@ export const updateUniversityForAdmin = async (
     agreementDispatchedAt: string | Date | null;
     countersignedVerifiedAt: string | Date | null;
     flywirePaymentDestination: string | null;
+    admissionsEmail: string | null;
     programFeeRanges: Record<string, unknown> | null;
   }>,
 ) => {
@@ -2648,6 +2856,11 @@ export const updateUniversityForAdmin = async (
     const v = body.flywirePaymentDestination;
     (row as any).flywirePaymentDestination =
       v === null || v === '' ? null : String(v).trim().slice(0, 120);
+  }
+  if (body.admissionsEmail !== undefined) {
+    const v = body.admissionsEmail;
+    (row as any).admissionsEmail =
+      v === null || v === '' ? null : String(v).trim().toLowerCase().slice(0, 320);
   }
   if (body.programFeeRanges !== undefined) {
     (row as any).programFeeRanges = normalizeProgramFeeRanges(
