@@ -354,6 +354,12 @@ export const mapDigilockerDocType = (doctype: string, description: string): stri
   }
   if (code === 'DGCER' || desc.includes('degree') || desc.includes('graduation')) return 'degree_certificate';
   if (code === 'INCER' || desc.includes('income certificate')) return 'itr';
+  if (code === 'PANCR' || desc.includes('pan verification') || desc === 'pan card' || desc.includes('permanent account')) {
+    return 'general';
+  }
+  if (code === 'DRVLC' || desc.includes('driving license') || desc.includes('driving licence')) {
+    return 'general';
+  }
   if (desc.includes('transcript') || (desc.includes('marksheet') && desc.includes('university'))) {
     return 'transcript';
   }
@@ -379,26 +385,34 @@ export const downloadDigilockerFile = async (
 ): Promise<{ buffer: Buffer; mime: string; fileName: string }> => {
   const token = await getValidAccessToken(userId);
   const cfg = digilockerConfig();
+  // DigiLocker Get File From URI expects the document URI in the path
+  // (`/1/file/{uri}`), not `?uri=` — query form returns insufficient_scope.
+  const fileUrl = `${cfg.apiBase}/1/file/${encodeURIComponent(uri)}`;
   try {
-    const { data, headers } = await axios.get(`${cfg.apiBase}/1/file/uri`, {
-      headers: { Authorization: `Bearer ${token}` },
-      params: { uri },
+    const { data, headers } = await axios.get(fileUrl, {
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/pdf,application/xml,image/*,*/*' },
       responseType: 'arraybuffer',
       timeout: 60_000,
     });
     const buffer = Buffer.from(data);
     verifyHmac(buffer, headers.hmac as string | undefined);
     const mime = String(headers['content-type'] ?? 'application/pdf');
-    const ext = mime.includes('pdf') ? '.pdf' : mime.includes('png') ? '.png' : '.jpg';
+    const ext = mime.includes('pdf')
+      ? '.pdf'
+      : mime.includes('png')
+        ? '.png'
+        : mime.includes('xml')
+          ? '.xml'
+          : '.jpg';
     const safeUri = uri.replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 48);
     return { buffer, mime, fileName: `digilocker-${safeUri}${ext}` };
   } catch (err: any) {
     console.error('DigiLocker Download File Error details:', {
-      url: `${cfg.apiBase}/1/file/uri`,
+      url: fileUrl,
       uri,
       status: err.response?.status,
       statusText: err.response?.statusText,
-      data: err.response?.data ? String(err.response.data) : undefined,
+      data: err.response?.data ? String(err.response.data).slice(0, 300) : undefined,
       message: err.message,
     });
     throw mapDigilockerApiError(err, 'file download');
@@ -463,11 +477,7 @@ export const importAllDigilockerDocumentsForStudent = async (input: {
 
   for (const meta of issued) {
     const documentType = mapDigilockerDocType(meta.doctype, meta.description || meta.name);
-    if (documentType === 'general') {
-      skipped.push({ uri: meta.uri, reason: 'Unrecognized document type' });
-      continue;
-    }
-    if (existingTypes.has(documentType)) {
+    if (documentType !== 'general' && existingTypes.has(documentType)) {
       skipped.push({ uri: meta.uri, reason: `Already imported as ${documentType}` });
       continue;
     }
